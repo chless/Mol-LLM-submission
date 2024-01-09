@@ -1,6 +1,8 @@
 defaults:
   - _self_
   - task: pt
+  - model: biot5_base
+  - data: mol2text
 
 # Experiment args
 mode: 'pt'
