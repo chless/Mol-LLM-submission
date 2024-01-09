@@ -1,0 +1,8 @@
+total_steps: 50000
+warmip_steps: 1000
+name: adamw
+lr_scheduler: cosine
+base_lr: 1e3
+batch_size: 48
+grad_acc: 12
+test_bsz_multi: 1
