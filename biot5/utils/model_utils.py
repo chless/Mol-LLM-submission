@@ -383,7 +383,10 @@ def get_dataloaders(tokenizer, config, args):
         dataloaders = {}
 
         for split in ['train', 'validation', 'test']:
-            batch_size = args.optim.batch_size // args.optim.grad_acc
+            # separate batch size for train and eval, 
+            # because in eval we can use bigger batch size without gradient calculation
+            batch_size = args.optim.train_batch_size if split == 'train' else args.optim.eval_batch_size
+            batch_size = batch_size // args.optim.grad_acc
 
             if split in ['validation', 'test']:
                 batch_size *= args.optim.test_bsz_multi
