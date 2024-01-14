@@ -49,11 +49,10 @@ checkpoint:
   every_steps: 5000
 
 logging:
-  neptune: false
-  neptune_creds:
-    project:
-    api_token:
-    tags:
+  neptune: true
+  neptune_creds: 
+    project: chanhui-lee/text-mol
+    tags: ''
   every_steps: 1
   grad_l2: true
   weights_l2: true
