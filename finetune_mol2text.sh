@@ -1,8 +1,8 @@
 [ -z "${task}" ] && task=mol2text
 [ -z "${model}" ] && model="biot5_base"
-[ -z "${log_path}" ] && log_path="path_to_your_log"
+[ -z "${log_path}" ] && log_path="logs"
 [ -z "${n_node}" ] && n_node=1
-[ -z "${n_gpu_per_node}" ] && n_gpu_per_node=4
+[ -z "${n_gpu_per_node}" ] && n_gpu_per_node=1
 
 cd biot5
 
@@ -13,7 +13,7 @@ torchrun --nnodes=${n_node} --nproc_per_node=${n_gpu_per_node} main.py \
     task=${task} \
     model=${model} \
     data=${task} \
-    optim=${finetuning} \
+    optim=finetuning \
     molecule_dict=dict/selfies_dict.txt \
     hydra.run.dir=${log_path} \
     seed=42 \

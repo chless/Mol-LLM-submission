@@ -3,6 +3,7 @@ defaults:
   - task: pt
   - model: biot5_base
   - data: mol2text
+  - optim: finetuning
 
 # Experiment args
 mode: 'pt'
@@ -53,7 +54,7 @@ logging:
     project:
     api_token:
     tags:
-  every_steps: 100
+  every_steps: 1
   grad_l2: true
   weights_l2: true
 

@@ -11,8 +11,8 @@ fine-tuning:
 	torchrun --nnodes=${n_node} --nproc_per_node=${n_gpu_per_node} main.py \
 		mode=ft \
 		task=${task} \
-		model=${model} \
 		data=${task} \
+		model=${model} \
 		optim=${finetuning} \
 		molecule_dict=dict/selfies_dict.txt \
 		hydra.run.dir=${log_path} \
