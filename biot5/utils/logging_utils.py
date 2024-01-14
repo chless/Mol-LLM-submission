@@ -56,9 +56,11 @@ class Logger:
 
     def setup_neptune(self, args):
         if args.logging.neptune:
+            neptune_api_token = os.environ.get("NEPTUNE_API_TOKEN")
+            
             neptune_logger = neptune.init_run(
                 project=args.logging.neptune_creds.project,
-                api_token=args.logging.neptune_creds.api_token,
+                api_token=neptune_api_token,
                 tags=[str(item) for item in args.logging.neptune_creds.tags.split(",")],
             )
         else:
