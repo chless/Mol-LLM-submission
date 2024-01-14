@@ -1,14 +1,17 @@
+get-data:
+	git clone https://huggingface.co/datasets/QizhiPei/BioT5_finetune_dataset biot5/data
 
 
 fine-tuning:
 	task=$(task)
 	data=$(task)
+	model=biot5_base
+	log_path=logs
 	n_node=1
 	n_gpu_per_node=4
-	log_path=logs
-	model=biot5_base
+	devices=1,2,3,4,5
 
-	torchrun --nnodes=${n_node} --nproc_per_node=${n_gpu_per_node} main.py \
+	CUDA_VISIBLE_DEVICES=$(devices) torchrun --nnodes=${n_node} --nproc_per_node=${n_gpu_per_node} main.py \
 		mode=ft \
 		task=${task} \
 		data=${task} \
