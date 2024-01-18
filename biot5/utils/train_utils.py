@@ -188,8 +188,12 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
                 try: 
                     predictions[i] = sf.decoder(predictions[i])
                 except:
-                    predictions[i] = sf.decoder(filter_selfies(predictions[i]))
-                    selfies_invalid += 1
+                    try:
+                        predictions[i] = sf.decoder(filter_selfies(predictions[i]))
+                        selfies_invalid += 1
+                    except:
+                        # if model predict not selfies decoderable, then evaluate without selfies decoding
+                        selfies_invalid += 1
             references = [sf.decoder(ref_i) for ref_i in references]
             references = [(references[i], inputs[i]) for i in range(len(references))]
         elif args.test_task == 'dti' or args.test_task == 'peer' or args.test_task == 'molnet':
