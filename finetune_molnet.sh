@@ -1,6 +1,6 @@
-[ -z "${task}" ] && task=mol2text
+[ -z "${task}" ] && task=molnet_hiv
 [ -z "${model}" ] && model="biot5_base"
-[ -z "${log_path}" ] && log_path="logs/molnet"
+[ -z "${log_path}" ] && log_path="logs/molnet_hiv_0121"
 [ -z "${n_node}" ] && n_node=1
 [ -z "${n_gpu_per_node}" ] && n_gpu_per_node=6
 [ -z "${devices}" ] && devices=0,1,2,3,4,5

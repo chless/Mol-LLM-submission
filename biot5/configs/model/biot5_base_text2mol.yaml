@@ -1,0 +1,5 @@
+name: 'QizhiPei/biot5-base-text2mol'
+checkpoint_path: ''
+dropout: 0.0
+random_init: false
+compile: false # Pytorch 2.0
