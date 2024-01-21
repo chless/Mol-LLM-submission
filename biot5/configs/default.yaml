@@ -3,7 +3,7 @@ defaults:
   - task: pt
   - model: biot5_base
   - data: mol2text
-  - optim: finetuning
+  - optim: finetuning_a100_80gb
 
 # Experiment args
 mode: 'pt'
