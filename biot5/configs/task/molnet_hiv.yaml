@@ -30,11 +30,11 @@ optim:
   test_bsz_multi: 1
 
 eval:
-  every_steps: 1000
+  every_steps: 50
   steps: 100000 # whole test set
 
 pred:
-  every_steps: 1000
+  every_steps: 150
 
 checkpoint:
   every_steps: 2000
