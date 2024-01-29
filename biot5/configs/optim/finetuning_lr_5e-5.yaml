@@ -1,12 +1,12 @@
 name: adamw
 base_lr: 5e-5
-train_batch_size: 128
-eval_batch_size: 128
+train_batch_size: 348
+eval_batch_size: 612
 epochs: -1
 total_steps: 50000
 warmup_steps: 1000
 lr_scheduler: cosine
 weight_decay: 0.0
 grad_clip: 0.0
-grad_acc: 8
+grad_acc: 12
 test_bsz_multi: 1
