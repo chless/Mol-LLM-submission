@@ -76,8 +76,8 @@ def get_unique_instructions(data):
         instructions.append(data[i]['instruction'])
     return set(instructions)
 
-data_dir = '/home/chanhui-lee/text-mol/biot5/data/tasks/Molecule-oriented_Instructions'
-save_dir = '/home/chanhui-lee/text-mol/biot5/data/tasks'
+data_dir = 'biot5/data/tasks/Molecule-oriented_Instructions'
+save_dir = 'biot5/data/tasks'
 
 files = ['forward_reaction_prediction.json', 'reagent_prediction.json', 'retrosynthesis.json']
 
