@@ -266,6 +266,20 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
             args=args,
             prefix=f"{prefix}/",
         )
+    elif args.test_task in ['forward_reaction_prediction', 'reagent_prediction', 'retrosynthesis']:
+        logger.log_stats(
+            stats={
+                "bleu": eval_metric["bleu"],
+                "exact_match": eval_metric["exact_match"],
+                "levenshtein": eval_metric["levenshtein"],
+                "validity": eval_metric["validity"],
+                "invalid selfies num": selfies_invalid,
+                "time": time.time() - args.last_log,
+            },
+            step=args.current_train_step,
+            args=args,
+            prefix=f"{prefix}/",
+        )
     else:
         raise NotImplementedError
 

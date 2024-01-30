@@ -1,6 +1,15 @@
 get-data:
 	git clone https://huggingface.co/datasets/QizhiPei/BioT5_finetune_dataset biot5/data
 
+get-rxn-data:
+	rm -rf Mol-Instructions
+	git lfs install
+	git clone https://huggingface.co/datasets/zjunlp/Mol-Instructions
+	unzip Mol-Instructions/data/Molecule-oriented_Instructions.zip -d biot5/data/tasks
+	# remove the zip file
+	rm -rf Mol-Instructions
+	python biot5/reaction_prediction_preprocess.py
+
 
 fine-tuning:
 	task=$(task)

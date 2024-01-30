@@ -3,6 +3,7 @@ from omegaconf import open_dict
 import hydra
 import torch
 import time
+import os
 
 from utils import (
     setup_basics,
@@ -20,6 +21,9 @@ from utils import (
 
 @hydra.main(config_path="configs", config_name="default", version_base='1.1')
 def main(args):
+    if hasattr(args, 'debug_gpu'):
+        os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.debug_gpu)
     accelerator = Accelerator(cpu=args.device == "cpu")
     logger = setup_basics(accelerator, args)
     config = get_config(args)
