@@ -1,7 +1,7 @@
 name: adamw
-base_lr: 1e-5
-train_batch_size: 348
-eval_batch_size: 612
+base_lr: 5e-5
+train_batch_size: 804
+eval_batch_size: 1440
 epochs: -1
 total_steps: 50000
 warmup_steps: 1000

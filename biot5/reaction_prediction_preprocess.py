@@ -14,7 +14,7 @@ def split_train_valid_test_instances(data):
         else:
             raise ValueError('Invalid split value')
         
-    valid_len = int(len(train) * 0.2)
+    valid_len = int(len(train) * 0.1)
     valid = train[-valid_len:]
     
     return train, valid, test
@@ -98,7 +98,7 @@ for file in iter_bar:
 
     # save train, valid, test json data
     train_path = os.path.join(save_dir, file.replace('.json', '_train.json'))
-    valid_path = os.path.join(save_dir, file.replace('.json', '_valid.json'))
+    valid_path = os.path.join(save_dir, file.replace('.json', '_validation.json'))
     test_path = os.path.join(save_dir, file.replace('.json', '_test.json'))
 
     with open(train_path, 'w') as f:

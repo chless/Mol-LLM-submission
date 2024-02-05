@@ -402,7 +402,7 @@ def get_dataloaders(tokenizer, config, args):
                 dataset[split],
                 shuffle=shuffle,
                 collate_fn=data_collator,
-                batch_size=batch_size,
+                batch_size=batch_size, 
                 num_workers=args.data.num_workers,
                 pin_memory=True,
                 drop_last=False,
