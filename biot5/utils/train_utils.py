@@ -25,7 +25,7 @@ def maybe_save_checkpoint(accelerator, args):
 def maybe_eval_predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='test'):
     if (
         args.current_train_step > args.optim.total_steps
-        or args.current_train_step % args.pred.every_steps == 0
+        or (args.current_train_step % args.pred.every_steps == 0) and (args.current_train_step // args.pred.every_steps > 1) 
     ):
         model.eval()
 
@@ -143,6 +143,8 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
         metric = evaluate.load(os.path.join(__file__.split('biot5/utils')[0], 'biot5/metrics/save_only_metrics'))
     elif args.test_task == 'dti' or args.test_task == 'peer' or args.test_task == 'molnet':
         metric = evaluate.load(os.path.join(__file__.split('biot5/utils')[0], 'biot5/metrics/dti_metrics'))
+    elif args.test_task in ['forward_reaction_prediction', 'reagent_prediction', 'retrosynthesis']:
+        metric = evaluate.load(os.path.join(__file__.split('biot5/utils')[0], 'biot5/metrics/save_only_metrics'))
     else:
         raise NotImplementedError
     
@@ -182,7 +184,7 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
         if args.test_task == 'mol2text':
             inputs = [sf.decoder(input_i.split('- Input: ')[-1].split(' Output:')[0]) for input_i in inputs]
             references = [(references[i], inputs[i]) for i in range(len(references))]
-        elif args.test_task == 'text2mol':
+        elif args.test_task in ['text2mol', 'forward_reaction_prediction', 'reagent_prediction', 'retrosynthesis']:
             inputs = [input_i.split('- Input: ')[-1].split(' Output:')[0] for input_i in inputs]
             for i in range(len(predictions)):
                 try: 
