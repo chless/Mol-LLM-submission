@@ -6,8 +6,14 @@ from datasets.iterable_dataset import IterableDataset
 from transformers import (
     AutoTokenizer,
     T5ForConditionalGeneration,
+    T5Model,
     AutoConfig,
 )
+from typing import Optional, Tuple
+import tqdm
+
+from transformers.modeling_outputs import BaseModelOutput
+from transformers.utils import ModelOutput
 
 from .copied_utils import (
     compute_input_and_target_lengths,
@@ -21,6 +27,8 @@ from .custom_utils import (
 )
 import os
 import itertools
+import json
+
 class MixedDataset(IterableDataset):
     def __init__(self, dataset_text, dataset_molecule, dataset_protein, dataset_incontext, dataset_mol_text, dataset_pro_text):
         self.dataset_text = dataset_text
@@ -94,6 +102,11 @@ def get_model(args, config, tokenizer, logger):
             config,
         )
         model.resize_token_embeddings(len(tokenizer))
+    elif 'regression' in args.test_task:
+        model = T5ForRegression.from_pretrained(
+            args.model.name,
+            config=config,
+        )
     else:
         model = T5ForConditionalGeneration.from_pretrained(
             args.model.name,
@@ -102,7 +115,116 @@ def get_model(args, config, tokenizer, logger):
 
     return model
 
+class T5ForRegression(T5Model):
+    def __init__(self, config):
+        super().__init__(config)
+        self.linear = torch.nn.Linear(config.d_model, 1)
 
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        decoder_head_mask: Optional[torch.FloatTensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels_float: Optional[torch.FloatTensor] = None,
+        **kwargs
+    ):
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+        if head_mask is not None and decoder_head_mask is None:
+            if self.config.num_layers == self.config.num_decoder_layers:
+                decoder_head_mask = head_mask
+
+        # Encode if needed (training, first prediction pass)
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
+        hidden_states = encoder_outputs[0]
+
+        predictions = self.linear(hidden_states[:, 0, :])
+
+        outputs = ModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_outputs.hidden_states if return_dict else None,
+            attentions=encoder_outputs.attentions if return_dict else None,
+        )
+        outputs['predictions'] = predictions
+        if labels_float is not None:
+            outputs['loss'] = torch.nn.functional.mse_loss(predictions, labels_float) 
+        return outputs
+    
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        decoder_head_mask: Optional[torch.FloatTensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels_float: Optional[torch.FloatTensor] = None,
+        **kwargs
+    ):
+        outputs = self.forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            labels=labels,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            labels_float=labels_float,
+            **kwargs,
+        )
+        return outputs
+    
 def get_config(args):
     config = AutoConfig.from_pretrained(
         args.model.name,
@@ -318,7 +440,7 @@ def get_data_collator(tokenizer, config, args):
             padding="longest",
             max_source_length=args.data.max_seq_len,
             max_target_length=args.data.max_target_len,
-            label_pad_token_id=-100,
+            label_pad_token_id=0,
             pad_to_multiple_of=8,
             add_task_name=args.data.add_task_name,
             add_task_definition=args.data.add_task_definition,

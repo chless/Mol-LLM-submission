@@ -1,9 +1,9 @@
-[ -z "${task}" ] && task=retrosynthesis
+[ -z "${task}" ] && task=property_regression
 [ -z "${model}" ] && model="biot5_base"
-[ -z "${log_path}" ] && log_path="logs/retrosynthesis_0205_5e-5"
+[ -z "${log_path}" ] && log_path="logs/property_regression_0221_5e-5"
 [ -z "${n_node}" ] && n_node=1
 [ -z "${n_gpu_per_node}" ] && n_gpu_per_node=4
-[ -z "${devices}" ] && devices="0,1,2,3"
+[ -z "${devices}" ] && devices="4,5,6,7"
 
 export TOKENIZERS_PARALLELISM=false
 

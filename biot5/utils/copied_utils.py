@@ -594,7 +594,12 @@ class DataCollatorForNI:
 
         if "output" in batch[0]["Instance"] and batch[0]["Instance"]["output"]:
             # Randomly select one reference if multiple are provided.
-            labels = [random.choice(ex["Instance"]["output"]) for ex in batch]
+            # TODO: figure out why regression labels comes as list especially, and fix it.
+            for ex in batch:
+                if isinstance(ex["Instance"]["output"], list):
+                    ex["Instance"]["output"] = ''.join(ex["Instance"]["output"])           
+            #labels = [random.choice(ex["Instance"]["output"]) for ex in batch]
+            labels = [ex["Instance"]["output"] for ex in batch]
             if self.text_only:
                 model_inputs["labels"] = labels
             else:

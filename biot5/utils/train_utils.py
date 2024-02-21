@@ -7,6 +7,7 @@ from tqdm import tqdm
 import os
 import selfies as sf
 import re
+import ast
 
 def filter_selfies(s):
     pattern = r'(\[[^\]]+\]\.?)'
@@ -64,7 +65,7 @@ def maybe_logging(averager, args, model, optimizer, logger):
 def maybe_grad_clip_and_grad_calc(accelerator, model, args):
     if args.logging.grad_l2:
         grad_l2 = (
-            sum(p.grad.detach().data.norm(2).item() ** 2 for p in model.parameters()) ** 0.5
+            sum(p.grad.detach().data.norm(2).item() ** 2 for p in model.parameters() if p.grad is not None) ** 0.5
         )
     else:
         grad_l2 = None
@@ -145,6 +146,8 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
         metric = evaluate.load(os.path.join(__file__.split('biot5/utils')[0], 'biot5/metrics/dti_metrics'))
     elif args.test_task in ['forward_reaction_prediction', 'reagent_prediction', 'retrosynthesis']:
         metric = evaluate.load(os.path.join(__file__.split('biot5/utils')[0], 'biot5/metrics/save_only_metrics'))
+    elif args.test_task in ['property_regression']:
+        metric = evaluate.load(os.path.join(__file__.split('biot5/utils')[0], 'biot5/metrics/regression_metrics'))
     else:
         raise NotImplementedError
     
@@ -171,6 +174,16 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
                 output_scores=True,
             )
             predictions, scores = generation_results.sequences, generation_results.scores
+        elif args.test_task in ['property_regression']:
+            batch['labels_float'] = convert_label_ids_to_float(batch.labels, tokenizer)
+            predictions = model.generate(
+                input_ids=batch['input_ids'],
+                attention_mask=batch['attention_mask'],
+                max_length=args.data.max_target_len,
+                generation_config=model.generation_config,
+            )
+            predictions = predictions['predictions']
+            predictions = [str(pred.item()) for pred in predictions]
         else:
             predictions = model.generate(
                 input_ids=batch['input_ids'],
@@ -178,38 +191,45 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
                 max_length=args.data.max_target_len,
                 generation_config=model.generation_config,
             )
-        predictions = decode(predictions)
-        references = decode(batch["labels"])
-        inputs = decode(batch["input_ids"])
-        if args.test_task == 'mol2text':
-            inputs = [sf.decoder(input_i.split('- Input: ')[-1].split(' Output:')[0]) for input_i in inputs]
-            references = [(references[i], inputs[i]) for i in range(len(references))]
-        elif args.test_task in ['text2mol', 'forward_reaction_prediction', 'reagent_prediction', 'retrosynthesis']:
-            inputs = [input_i.split('- Input: ')[-1].split(' Output:')[0] for input_i in inputs]
-            for i in range(len(predictions)):
-                try: 
-                    predictions[i] = sf.decoder(predictions[i])
-                except:
-                    try:
-                        predictions[i] = sf.decoder(filter_selfies(predictions[i]))
-                        selfies_invalid += 1
-                    except:
-                        # if model predict not selfies decoderable, then evaluate without selfies decoding
-                        selfies_invalid += 1
-            references = [sf.decoder(ref_i) for ref_i in references]
-            references = [(references[i], inputs[i]) for i in range(len(references))]
-        elif args.test_task == 'dti' or args.test_task == 'peer' or args.test_task == 'molnet':
-            # No: 465, Yes: 2163
-            predictions = [(scores[0][i][2163] / (scores[0][i][2163] + scores[0][i][465])).item() for i in range(len(predictions))]
-        else:
-            raise NotImplementedError
 
-        # If we are in a multiprocess environment, the last batch has duplicates
-        if step == len(dataloader) - 1:
-            predictions = predictions[: len(dataloader.dataset) - samples_seen]
-            references = references[: len(dataloader.dataset) - samples_seen]
+        if 'regression' in args.test_task:
+            references = decode(batch["labels"])
+            inputs = decode(batch["input_ids"])
+            inputs = [input_i.split('- Input: ')[-1].split(' Output:')[0] for input_i in inputs]
+            references = [(references[i], inputs[i]) for i in range(len(references))]
         else:
-            samples_seen += len(references)
+            predictions = decode(predictions)
+            references = decode(batch["labels"])
+            inputs = decode(batch["input_ids"])
+            if args.test_task == 'mol2text':
+                inputs = [sf.decoder(input_i.split('- Input: ')[-1].split(' Output:')[0]) for input_i in inputs]
+                references = [(references[i], inputs[i]) for i in range(len(references))]
+            elif args.test_task in ['text2mol', 'forward_reaction_prediction', 'reagent_prediction', 'retrosynthesis']:
+                inputs = [input_i.split('- Input: ')[-1].split(' Output:')[0] for input_i in inputs]
+                for i in range(len(predictions)):
+                    try: 
+                        predictions[i] = sf.decoder(predictions[i])
+                    except:
+                        try:
+                            predictions[i] = sf.decoder(filter_selfies(predictions[i]))
+                            selfies_invalid += 1
+                        except:
+                            # if model predict not selfies decoderable, then evaluate without selfies decoding
+                            selfies_invalid += 1
+                references = [sf.decoder(ref_i) for ref_i in references]
+                references = [(references[i], inputs[i]) for i in range(len(references))]
+            elif args.test_task == 'dti' or args.test_task == 'peer' or args.test_task == 'molnet':
+                # No: 465, Yes: 2163
+                predictions = [(scores[0][i][2163] / (scores[0][i][2163] + scores[0][i][465])).item() for i in range(len(predictions))]
+            else:
+                raise NotImplementedError
+
+            # If we are in a multiprocess environment, the last batch has duplicates
+            if step == len(dataloader) - 1:
+                predictions = predictions[: len(dataloader.dataset) - samples_seen]
+                references = references[: len(dataloader.dataset) - samples_seen]
+            else:
+                samples_seen += len(references)
 
         metric.add_batch(
             predictions=predictions,
@@ -282,8 +302,28 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
             args=args,
             prefix=f"{prefix}/",
         )
+    elif args.test_task in ['property_regression']:
+        logger.log_stats(
+            stats={
+                "MSE": eval_metric["MSE"],
+                "MAE": eval_metric["MAE"],
+                "time": time.time() - args.last_log,
+            },
+            step=args.current_train_step,
+            args=args,
+            prefix=f"{prefix}/",
+        )
     else:
         raise NotImplementedError
+    
+def convert_label_ids_to_float(labels_id, tokenizer):
+    labels_str = tokenizer.batch_decode(labels_id, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+    labels = [ast.literal_eval(label) for label in labels_str]
+    labels = torch.tensor(labels).float()
+    labels = labels.to(labels_id.device)
+    labels = labels.view(-1, 1)
+    return labels
+    
 
 
 def train(model, train_dataloader, validation_dataloader, test_dataloader, accelerator, lr_scheduler,
@@ -301,7 +341,10 @@ def train(model, train_dataloader, validation_dataloader, test_dataloader, accel
 
         for batch_id, batch in enumerate(train_dataloader, start=1):
             if args.current_train_step > args.optim.total_steps:
-                break
+                break 
+
+            if 'regression' in args.test_task:
+                batch['labels_float'] = convert_label_ids_to_float(batch.labels, tokenizer)
 
             loss, stats = forward(model, batch)
             accelerator.backward(loss / args.optim.grad_acc)
