@@ -23,7 +23,7 @@ from utils import (
 def main(args):
     if hasattr(args, 'debug_gpu'):
         os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.debug_gpu)
+        torch.cuda.set_device(args.debug_gpu)
     accelerator = Accelerator(cpu=args.device == "cpu")
     logger = setup_basics(accelerator, args)
     config = get_config(args)
