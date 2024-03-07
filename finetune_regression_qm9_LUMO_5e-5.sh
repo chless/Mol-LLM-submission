@@ -1,0 +1,18 @@
+[ -z "${task}" ] && task=property_regression_qm9_LUMO
+[ -z "${model}" ] && model="biot5_base"
+[ -z "${log_path}" ] && log_path="logs/property_regression_qm9_LUMO_0227_5e-5"
+[ -z "${n_node}" ] && n_node=1
+[ -z "${n_gpu_per_node}" ] && n_gpu_per_node=1
+[ -z "${devices}" ] && devices="3"
+
+export TOKENIZERS_PARALLELISM=false
+
+CUDA_VISIBLE_DEVICES=${devices}  torchrun --nnodes=${n_node} --nproc_per_node=${n_gpu_per_node} --master_port=25511 biot5/main.py \
+    mode=ft \
+    task=${task} \
+    data=${task} \
+    model=${model} \
+    optim=finetuning_lr_5e-5_retrosynthesis \
+    hydra.run.dir=${log_path} \
+    logging.every_steps=10 \
+    pred.every_steps=10 eval.every_steps=10 \

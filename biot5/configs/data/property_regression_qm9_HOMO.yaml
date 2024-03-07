@@ -1,0 +1,6 @@
+exec_file_path: biot5/utils/ni_dataset.py
+data_dir: biot5/data/splits/property_regression/qm9_HOMO
+task_dir: biot5/data/tasks
+max_num_instances_per_task: 1000000
+max_num_instances_per_eval_task: 1000000
+max_target_len: 16
