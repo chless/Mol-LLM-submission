@@ -2,6 +2,32 @@ import json
 import os
 import tqdm
 
+def classify_property_by_instruciton(data):
+    unique_instructions = []
+    for i in range(len(data)):
+        unique_instructions.append(data[i]['instruction'])
+
+    unique_instructions = set(unique_instructions)
+
+    instruction_by_property = {
+        'HOMO': [],
+        'LUMO': [],
+        'HOMO-LUMO-gap': [],
+        'etc': []
+    }
+
+    for inst in unique_instructions:
+        if 'gap' in inst or 'difference' in inst or 'separation' in inst:
+            instruction_by_property['HOMO-LUMO-gap'].append(inst)
+        elif 'HOMO' in inst:
+            instruction_by_property['HOMO'].append(inst)
+        elif 'LUMO' in inst:
+            instruction_by_property['LUMO'].append(inst)
+        else:
+            instruction_by_property['etc'].append(inst)
+
+    return instruction_by_property
+
 
 def split_train_valid_test_instances(data):
     train = []
@@ -93,7 +119,7 @@ def get_unique_instructions(data):
 data_dir = 'biot5/data/tasks/Molecule-oriented_Instructions'
 save_dir = 'biot5/data/tasks'
 
-files = ['property_regression.json', 'forward_reaction_prediction.json', 'reagent_prediction.json', 'retrosynthesis.json']
+files = ['property_regression_qm9.json', 'forward_reaction_prediction.json', 'reagent_prediction.json', 'retrosynthesis.json']
 
 iter_bar = tqdm.tqdm(files)
 for file in iter_bar:
@@ -104,22 +130,48 @@ for file in iter_bar:
     with open(data_path, 'r') as f:
         data = json.load(f)
 
-    train, valid, test = split_train_valid_test_instances(data)
+    if file == 'property_regression.json':
+        instruction_by_property = classify_property_by_instruciton(data)
+        for prop, instructions in instruction_by_property.items():
+            prop_data = []
+            for i in range(len(data)):
+                if data[i]['instruction'] in instruction_by_property[prop]:
+                    prop_data.append(data[i])
+                    
+            train, valid, test = split_train_valid_test_instances(prop_data)
 
-    train = preprocess_data_split(train)
-    valid = preprocess_data_split(valid)
-    test = preprocess_data_split(test)
+            train = preprocess_data_split(train)
+            valid = preprocess_data_split(valid)
+            test = preprocess_data_split(test)
 
-    # save train, valid, test json data
-    train_path = os.path.join(save_dir, file.replace('.json', '_train.json'))
-    valid_path = os.path.join(save_dir, file.replace('.json', '_validation.json'))
-    test_path = os.path.join(save_dir, file.replace('.json', '_test.json'))
+            # save train, valid, test json data
+            train_path = os.path.join(save_dir, file.replace('.json', '_{}_train.json'.format(prop)))
+            valid_path = os.path.join(save_dir, file.replace('.json', '_{}_validation.json'.format(prop)))
+            test_path = os.path.join(save_dir, file.replace('.json', '_{}_test.json'.format(prop)))
 
-    with open(train_path, 'w') as f:
-        json.dump(train, f, indent=2)
-    with open(valid_path, 'w') as f:
-        json.dump(valid, f, indent=2)
-    with open(test_path, 'w') as f:
-        json.dump(test, f, indent=2)
+            with open(train_path, 'w') as f:
+                json.dump(train, f, indent=2)
+            with open(valid_path, 'w') as f:
+                json.dump(valid, f, indent=2)
+            with open(test_path, 'w') as f:
+                json.dump(test, f, indent=2)
+    else:
+        train, valid, test = split_train_valid_test_instances(data)
+
+        train = preprocess_data_split(train)
+        valid = preprocess_data_split(valid)
+        test = preprocess_data_split(test)
+
+        # save train, valid, test json data
+        train_path = os.path.join(save_dir, file.replace('.json', '_train.json'))
+        valid_path = os.path.join(save_dir, file.replace('.json', '_validation.json'))
+        test_path = os.path.join(save_dir, file.replace('.json', '_test.json'))
+
+        with open(train_path, 'w') as f:
+            json.dump(train, f, indent=2)
+        with open(valid_path, 'w') as f:
+            json.dump(valid, f, indent=2)
+        with open(test_path, 'w') as f:
+            json.dump(test, f, indent=2)
 
 a = 17
