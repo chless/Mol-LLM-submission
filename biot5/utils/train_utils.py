@@ -146,7 +146,7 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
         metric = evaluate.load(os.path.join(__file__.split('biot5/utils')[0], 'biot5/metrics/dti_metrics'))
     elif args.test_task in ['forward_reaction_prediction', 'reagent_prediction', 'retrosynthesis']:
         metric = evaluate.load(os.path.join(__file__.split('biot5/utils')[0], 'biot5/metrics/save_only_metrics'))
-    elif args.test_task in ['property_regression']:
+    elif 'regression' in args.test_task:
         metric = evaluate.load(os.path.join(__file__.split('biot5/utils')[0], 'biot5/metrics/regression_metrics'))
     else:
         raise NotImplementedError
@@ -174,7 +174,7 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
                 output_scores=True,
             )
             predictions, scores = generation_results.sequences, generation_results.scores
-        elif args.test_task in ['property_regression']:
+        elif 'regression' in args.test_task:
             batch['labels_float'] = convert_label_ids_to_float(batch.labels, tokenizer)
             predictions = model.generate(
                 input_ids=batch['input_ids'],
@@ -302,7 +302,7 @@ def predict(model, dataloader, logger, args, tokenizer, accelerator, prefix='tes
             args=args,
             prefix=f"{prefix}/",
         )
-    elif args.test_task in ['property_regression']:
+    elif 'regression' in args.test_task:
         logger.log_stats(
             stats={
                 "MSE": eval_metric["MSE"],
