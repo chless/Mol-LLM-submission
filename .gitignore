@@ -140,4 +140,7 @@ biot5/convert_to_hf.py
 example_usage*
 data_bk
 
-biot5/path_to_your_log
+Biot5/biot5/path_to_your_log
+
+*.png
+*.jpg
