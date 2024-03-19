@@ -144,3 +144,15 @@ Biot5/biot5/path_to_your_log
 
 *.png
 *.jpg
+
+
+
+MolCA/kvplm_pretrained
+MolCA/__pycache__
+MolCA/test*
+MolCA/log*
+*.sh.e*
+*.sh.o*
+.d*
+MolCA/llms
+MolCA/Text2graph
