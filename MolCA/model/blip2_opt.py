@@ -131,6 +131,14 @@ class Blip2OPT(Blip2Base):
         self.args = args
 
         self.graph_encoder, self.ln_graph = self.init_graph_encoder(gin_num_layers, gin_hidden_dim, gin_drop_ratio)
+        if args.graph_embedding_mse_logging:
+            self.graph_encoder_frozen, self.ln_graph_frozen = self.init_graph_encoder(gin_num_layers, gin_hidden_dim, gin_drop_ratio)
+            for name, param in self.graph_encoder_frozen.named_parameters():
+                param.requires_grad = False
+            self.graph_encoder_frozen = self.graph_encoder_frozen.eval()
+            self.graph_encoder_frozen.train = disabled_train
+            logging.info("copied the original graph encoder, with frozen parameters")
+
         self.tune_gnn = tune_gnn
         if not tune_gnn:
             for name, param in self.graph_encoder.named_parameters():
@@ -141,6 +149,7 @@ class Blip2OPT(Blip2Base):
         
         self.num_query_token = num_query_token
         self.Qformer, self.query_tokens = self.init_Qformer(bert_name, num_query_token, self.graph_encoder.num_features, cross_attention_freq)
+
         ### remove the unused parameters
         self.Qformer.cls = None
         self.Qformer.bert.embeddings.word_embeddings = None
@@ -277,7 +286,20 @@ class Blip2OPT(Blip2Base):
             labels=targets,
         )
         loss = outputs.loss
-        return {"loss": loss}
+        results = {"ce_loss": loss}
+
+        if self.args.graph_embedding_mse_logging:
+            graph_embeds_frozen, graph_masks_frozen = self.graph_encoder_frozen(graphs)
+            graph_embeds_frozen = graph_embeds_frozen.detach()
+            graph_embeds_frozen = self.ln_graph_frozen(graph_embeds_frozen, graph_masks_frozen)
+            loss_mse = F.mse_loss(graph_embeds_frozen, graph_embeds)
+            results.update({"mse_loss": loss_mse})
+
+            if self.args.graph_embedding_mse_backprop:
+                loss = loss + loss_mse
+
+        results.update({"loss": loss})
+        return results
 
     def forward_reaction(self, batch):
         reaction_tokens, notes_tokens, graphs = batch

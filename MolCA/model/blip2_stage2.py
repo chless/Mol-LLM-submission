@@ -95,6 +95,9 @@ class Blip2Stage2(pl.LightningModule):
         load_ignore_unexpected(self.blip2opt.Qformer, qformer_dict)
         self.blip2opt.graph_encoder.load_state_dict(graph_encoder_dict)
         self.blip2opt.ln_graph.load_state_dict(ln_graph_dict)
+        if self.args.graph_embedding_mse_logging:
+            self.blip2opt.graph_encoder_frozen.load_state_dict(graph_encoder_dict)
+            self.blip2opt.ln_graph_frozen.load_state_dict(ln_graph_dict)   
         self.blip2opt.query_tokens.data.copy_(qs_weight)
         return self
     
@@ -153,7 +156,7 @@ class Blip2Stage2(pl.LightningModule):
             self.log("rouge_2", rouge_2, sync_dist=False)
             self.log("rouge_l", rouge_l, sync_dist=False)
             self.log("meteor_score", meteor_score, sync_dist=False)
-
+        
     def save_predictions(self, predictions, targets):
         assert len(predictions) == len(targets)
         with open(os.path.join(self.logger.log_dir, 'predictions.txt'), 'w', encoding='utf8') as f:
@@ -201,7 +204,8 @@ class Blip2Stage2(pl.LightningModule):
             batch_size = text_tokens.input_ids.shape[0]
             loss = self.blip2opt(batch)
             ###============== Overall Loss ===================###
-            self.log("val molecule loss", float(loss['loss']), batch_size=batch_size, sync_dist=True)
+            for key, loss_item in loss.items():
+                self.log(f"val/{key}", float(loss_item), batch_size=batch_size, sync_dist=True)
             return loss['loss']
         elif dataloader_idx == 1:
             if (self.current_epoch+1) % self.caption_eval_epoch != 0:
@@ -265,7 +269,6 @@ class Blip2Stage2(pl.LightningModule):
             self.log("rouge_2", rouge_2, sync_dist=False)
             self.log("rouge_l", rouge_l, sync_dist=False)
             self.log("meteor_score", meteor_score, sync_dist=False)
-        
 
     def training_step(self, batch, batch_idx):
         if self.scheduler:
@@ -287,10 +290,11 @@ class Blip2Stage2(pl.LightningModule):
             batch_size = batch[-1].input_ids.size(0)
             ###============== Overall Loss ===================###
             loss = self.blip2opt(batch)
-            self.log("molecule loss", float(loss['loss']), batch_size=batch_size, sync_dist=True)
             self.log("lr", self.trainer.optimizers[0].param_groups[0]['lr'], batch_size=batch_size, sync_dist=True)
+            for key, loss_item in loss.items():
+                self.log(key, float(loss_item), batch_size=batch_size, sync_dist=True)
             return loss['loss']
-
+        
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group("GINSimclr")

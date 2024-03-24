@@ -11,6 +11,9 @@ from data_provider.iupac_dm import IupacDM
 from data_provider.stage2_chebi_dm import Stage2CheBIDM
 from model.blip2_stage2 import Blip2Stage2
 
+import neptune
+from pytorch_lightning.loggers import NeptuneLogger
+
 # torch.set_default_dtype(torch.float16)
 
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
@@ -67,8 +70,8 @@ def main(args):
     
     callbacks = []
     ## fixme save only used parameters
-    # callbacks.append(plc.ModelCheckpoint(dirpath="all_checkpoints/"+args.filename+"/", every_n_epochs=10, save_top_k=-1))
-    callbacks.append(plc.ModelCheckpoint(dirpath="all_checkpoints/"+args.filename+"/", 
+    # callbacks.append(plc.ModelCheckpoint(dirpath="MolCA/all_checkpoints/"+args.filename+"/", every_n_epochs=10, save_top_k=-1))
+    callbacks.append(plc.ModelCheckpoint(dirpath="MolCA/all_checkpoints/"+args.filename+"/", 
                                          filename='{epoch:02d}', 
                                          every_n_epochs=args.save_every_n_epochs, 
                                          save_last=True, 
@@ -83,15 +86,19 @@ def main(args):
             strategy = MyDDPStrategy(find_unused_parameters=True, start_method='spawn')
     else:
         strategy = 'auto'
-        args.devices = eval(args.devices)
-    logger = CSVLogger(save_dir=f'./all_checkpoints/{args.filename}/')
-    # trainer = Trainer.from_argparse_args(args,
-    #                                      callbacks=callbacks,
-    #                                      strategy=strategy,
-    #                                      logger=logger,
-    #                                     #  limit_train_batches=100,
-    #                                      )
-    trainer = Trainer(accelerator=args.accelerator, devices=args.devices, precision=args.precision, max_epochs=args.max_epochs, check_val_every_n_epoch=args.check_val_every_n_epoch, callbacks=callbacks, strategy=strategy, logger=logger)
+        args.devices = [eval(args.devices)]
+    # logger setting
+    logger = CSVLogger(save_dir=f'./MolCA/all_checkpoints/{args.filename}/')
+    neptune_logger = NeptuneLogger(
+        api_key=os.environ.get('NEPTUNE_API_TOKEN'),
+        project="chanhui-lee/text-mol",
+    )
+
+    trainer = Trainer(
+        accelerator=args.accelerator, devices=args.devices, precision=args.precision, 
+        max_epochs=args.max_epochs, check_val_every_n_epoch=args.check_val_every_n_epoch, 
+        callbacks=callbacks, strategy=strategy, logger=[logger, neptune_logger],
+        )
     if args.mode in {'pretrain', 'ft'}:
         trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
     elif args.mode == 'eval':
@@ -118,6 +125,9 @@ def get_args():
     parser.add_argument('--max_epochs', type=int, default=10)
     parser.add_argument('--accumulate_grad_batches', type=int, default=1)
     parser.add_argument('--check_val_every_n_epoch', type=int, default=1)
+    parser.add_argument('--graph_embedding_mse_logging', action='store_true', default=False)
+    parser.add_argument('--graph_embedding_mse_backprop', action='store_true', default=False)
+    parser.add_argument('--graph_reconstruction', action='store_true', default=False)
     args = parser.parse_args()
 
     print("=========================================")

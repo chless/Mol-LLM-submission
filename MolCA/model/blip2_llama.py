@@ -15,14 +15,11 @@ from lavis.models.blip2_models.blip2 import (
     disabled_train,
 )
 from model.blip2 import Blip2Base
-from transformers import LlamaTokenizer
-from model.modeling_llama import LlamaForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-
- 
 llama_model_list = [
-    "decapoda-research/llama-13b-hf",
     "decapoda-research/llama-7b-hf",
+    "decapoda-research/llama-13b-hf",
 ]
 
 def mask_by_len(input, lens, fill_value=0):
@@ -83,13 +80,13 @@ class Blip2Llama(Blip2Base):
             layer.intermediate = None
 
         ## initialize opt model
-        self.llm_tokenizer = LlamaTokenizer.from_pretrained(llm_model, use_fast=False, padding_side='right')
+        self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model, use_fast=False, padding_side='right')
         self.llm_tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         self.llm_tokenizer.add_special_tokens({'bos_token': '</s>'})
         self.llm_tokenizer.add_special_tokens({'eos_token': '</s>'})
         self.llm_tokenizer.add_special_tokens({'unk_token': '</s>'})
-        self.llm_model = LlamaForCausalLM.from_pretrained(llm_model, torch_dtype=torch.bfloat16)
-        # self.llm_model = LlamaForCausalLM.from_pretrained(llm_model)
+        self.llm_model = AutoModelForCausalLM.from_pretrained(llm_model, torch_dtype=torch.bfloat16)
+        # self.llm_model = AutoModelForCausalLM.from_pretrained(llm_model)
         self.llm_model.resize_token_embeddings(len(self.llm_tokenizer))
         
         self.lora_tuning = lora_tuning

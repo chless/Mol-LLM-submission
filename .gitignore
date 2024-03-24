@@ -1,3 +1,4 @@
+###BioT5
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -146,7 +147,7 @@ Biot5/biot5/path_to_your_log
 *.jpg
 
 
-
+###MolCA
 MolCA/kvplm_pretrained
 MolCA/__pycache__
 MolCA/test*
@@ -156,3 +157,6 @@ MolCA/log*
 .d*
 MolCA/llms
 MolCA/Text2graph
+MolCA/all_checkpoints
+*.ckpt
+.neptune
