@@ -10,6 +10,9 @@ from model.blip2_stage1 import Blip2Stage1
 from data_provider.stage1_dm import Stage1DM
 from data_provider.stage1_kvplm_dm import Stage1KVPLMDM
 
+import neptune
+from pytorch_lightning.loggers import NeptuneLogger
+
 
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 ## for pyg bug
@@ -54,16 +57,15 @@ def main(args):
         args.devices = eval(args.devices)
         print(args.devices)
     logger = CSVLogger(save_dir=f'./MolCA/all_checkpoints/{args.filename}/')
-    # trainer = Trainer.from_argparse_args(args,
-    #                                      callbacks=callbacks,
-    #                                      strategy=strategy,
-    #                                      logger=logger,
-    #                                     #  limit_train_batches=100,
-    #                                      )
+    neptune_logger = NeptuneLogger(
+        api_key=os.environ.get('NEPTUNE_API_TOKEN'),
+        project="chanhui-lee/text-mol",
+    )
+
     trainer = Trainer(
         accelerator=args.accelerator, devices=args.devices, precision=args.precision, 
         max_epochs=args.max_epochs, check_val_every_n_epoch=args.check_val_every_n_epoch, 
-        callbacks=callbacks, strategy=strategy, logger=logger)
+        callbacks=callbacks, strategy=strategy, logger=[logger, neptune_logger])
     if args.mode == 'train':
         trainer.fit(model, datamodule=dm)
     elif args.mode == 'eval':

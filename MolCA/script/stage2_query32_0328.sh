@@ -1,0 +1,6 @@
+{
+export TOKENIZERS_PARALLELISM=false;
+
+python stage2.py --root 'data/PubChem324kV2' --devices '6,7' --filename "stage2_query32" --opt_model 'facebook/galactica-1.3b' --max_epochs 10 --mode pretrain --prompt '[START_I_SMILES]{}[END_I_SMILES].' --tune_gnn --llm_tune freeze --inference_batch_size 4 --caption_eval_epoch 10 --filtered_cid_path data/PubChem324k/filtered_pretrain_cids.txt
+exit
+}

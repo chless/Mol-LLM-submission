@@ -1,7 +1,8 @@
+gpus=$1
 
 python3 MolCA/stage2.py \
 --root 'MolCA/data/PubChem324kV2/' \
---devices '2,3,4,5,6,7' \
+--devices $gpus \
 --filename "stage2_graph_embedding_mse_logging" \
 --opt_model 'facebook/galactica-1.3b' \
 --max_epochs 10 \

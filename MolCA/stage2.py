@@ -9,7 +9,9 @@ from pytorch_lightning.loggers import CSVLogger
 from data_provider.stage2_dm import Stage2DM
 from data_provider.iupac_dm import IupacDM
 from data_provider.stage2_chebi_dm import Stage2CheBIDM
+from data_provider.stage2_regression_dm import Stage2RegressionDM
 from model.blip2_stage2 import Blip2Stage2
+from model.blip2_regression import Blip2Regression
 
 import neptune
 from pytorch_lightning.loggers import NeptuneLogger
@@ -36,20 +38,28 @@ class MyDDPStrategy(strategies.DDPStrategy):
 def main(args):
     pl.seed_everything(args.seed)
     # model
+    if args.task is None:
+        model = Blip2Stage2
+    elif  args.task == 'regression':
+        model = Blip2Regression
+    else:
+        raise NotImplementedError()
+
+    # decide model initialization
     if args.init_checkpoint:
-        model = Blip2Stage2.load_from_checkpoint(args.init_checkpoint, strict=False, args=args)
+        model = model.load_from_checkpoint(args.init_checkpoint, strict=False, args=args)
         print(f"loaded init checkpoint from {args.init_checkpoint}")
     elif args.stage2_path:
-        model = Blip2Stage2(args)
+        model = model(args)
         ckpt = torch.load(args.stage2_path, map_location='cpu')
         model.load_state_dict(ckpt['state_dict'], strict=False)
         print(f"loaded stage2 model from {args.stage2_path}")
     elif args.stage1_path:
-        model = Blip2Stage2(args)
+        model = model(args)
         model.load_from_stage1_checkpoint(args.stage1_path)
         print(f"loaded stage1 model from {args.stage1_path}")
     else:
-        model = Blip2Stage2(args)
+        model = model(args)
 
     print('total params:', sum(p.numel() for p in model.parameters()))
 
@@ -60,11 +70,15 @@ def main(args):
     else:
         raise NotImplementedError
     # data
-    if args.iupac_prediction:
+    if args.task == 'iupac_prediction':
         dm = IupacDM(args.mode, args.num_workers, args.batch_size, args.root, args.text_max_len, tokenizer, args)
     else:
         if args.root.lower().find('chebi') >= 0:
             dm = Stage2CheBIDM(args.mode, args.num_workers, args.batch_size, args.root, args.text_max_len, tokenizer, args)
+        elif args.root.lower().find('qm9') >= 0:
+            dm = Stage2RegressionDM(
+                args.mode, args.num_workers, args.batch_size, args.root, args.text_max_len, tokenizer, args
+            )
         else:
             dm = Stage2DM(args.mode, args.num_workers, args.batch_size, args.root, args.text_max_len, tokenizer, args)
     
@@ -94,16 +108,29 @@ def main(args):
         project="chanhui-lee/text-mol",
     )
 
-    trainer = Trainer(
-        accelerator=args.accelerator, devices=args.devices, precision=args.precision, 
-        max_epochs=args.max_epochs, check_val_every_n_epoch=args.check_val_every_n_epoch, 
-        callbacks=callbacks, strategy=strategy, logger=[logger, neptune_logger],
-        )
+    trainer_args = {
+        'accelerator': args.accelerator,
+        'devices': args.devices,
+        'precision': args.precision,
+        'check_val_every_n_epoch': args.check_val_every_n_epoch,
+        'callbacks': callbacks,
+        'strategy': strategy,
+        'logger': [logger, neptune_logger],
+    }
+    if args.max_steps > 0:
+        trainer_args['max_steps'] = args.max_steps
+    else:
+        trainer_args['max_epochs'] = args.max_epochs
+    trainer = Trainer(**trainer_args)
     if args.mode in {'pretrain', 'ft'}:
         trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
+        output = trainer.test(model, datamodule=dm)
+        a = 17
     elif args.mode == 'eval':
         trainer.fit_loop.epoch_progress.current.completed = args.caption_eval_epoch - 1
         trainer.validate(model, datamodule=dm)
+    elif args.mode == 'test':
+        output = trainer.test(model, datamodule=dm)
     else:
         raise NotImplementedError()
 
@@ -122,12 +149,15 @@ def get_args():
     parser.add_argument('--accelerator', type=str, default='gpu')
     parser.add_argument('--devices', type=str, default='0,1,2,3')
     parser.add_argument('--precision', type=str, default='bf16-mixed')
-    parser.add_argument('--max_epochs', type=int, default=10)
+    parser.add_argument('--max_epochs', default=10)
+    parser.add_argument('--max_steps', type=int, default=-1)
     parser.add_argument('--accumulate_grad_batches', type=int, default=1)
     parser.add_argument('--check_val_every_n_epoch', type=int, default=1)
     parser.add_argument('--graph_embedding_mse_logging', action='store_true', default=False)
     parser.add_argument('--graph_embedding_mse_backprop', action='store_true', default=False)
     parser.add_argument('--graph_reconstruction', action='store_true', default=False)
+    parser.add_argument('--task', type=str, default=None)
+    parser.add_argument('--val_check_interval', type=float, default=0.1)
     args = parser.parse_args()
 
     print("=========================================")
