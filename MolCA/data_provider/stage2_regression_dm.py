@@ -40,6 +40,49 @@ def _insert_split_marker(m: re.Match):
     return f"{start_token}{sequence}{SPLIT_MARKER}{end_token}"
 
 
+INSTRUCTIONS = {
+    "HOMO": [
+        'I would like to know the highest occupied molecular orbital (HOMO) energy of this molecule, could you please provide it?',
+        'Please provide the HOMO energy value for this molecule.',
+        'I am interested in the HOMO energy of this molecule, could you tell me what it is?',
+        'What is the highest occupied molecular orbital (HOMO) energy of this molecule?',
+        'Could you give me the HOMO energy value of this molecule?',
+        'What is the HOMO energy of this molecule?',
+        'Please provide the highest occupied molecular orbital (HOMO) energy value for this molecule.',
+        'Please provide me with the HOMO energy value of this molecule.',
+        'What is the HOMO level of energy for this molecule?',
+        'I would like to know the HOMO energy of this molecule, could you please provide it?',
+        'Can you tell me the value of the HOMO energy for this molecule?',
+        'Please provide the highest occupied molecular orbital (HOMO) energy of this molecule.',
+    ],
+    "LUMO": [
+        'Please provide me with the LUMO energy value of this molecule.',
+        'I am interested in the LUMO energy of this molecule, could you tell me what it is?',
+        'I would like to know the lowest unoccupied molecular orbital (LUMO) energy of this molecule, could you please provide it?',
+        'What is the LUMO energy of this molecule?',
+        'What is the LUMO level of energy for this molecule?',
+        'I would like to know the LUMO energy of this molecule, could you please provide it?',
+        'What is the lowest unoccupied molecular orbital (LUMO) energy of this molecule?',
+        'Could you give me the LUMO energy value of this molecule?',
+        'Please provide the lowest unoccupied molecular orbital (LUMO) energy value for this molecule.',
+        'Please provide the lowest unoccupied molecular orbital (LUMO) energy of this molecule.',
+        'Can you tell me the value of the LUMO energy for this molecule?',
+        'Please provide the LUMO energy value for this molecule.',
+    ],
+    "HOMO-LUMO-gap": [
+        'Please provide the gap between HOMO and LUMO of this molecule.',
+        'I would like to know the HOMO-LUMO gap of this molecule, can you provide it?',
+        'Please give me the HOMO-LUMO gap energy for this molecule.',
+        'Can you give me the energy difference between the HOMO and LUMO orbitals of this molecule?',
+        'Please provide the energy separation between the highest occupied and lowest unoccupied molecular orbitals (HOMO-LUMO gap) of this molecule.',
+        'I need to know the HOMO-LUMO gap energy of this molecule, could you please provide it?',
+        'What is the energy separation between the HOMO and LUMO of this molecule?',
+        'Could you tell me the energy difference between HOMO and LUMO for this molecule?',
+        'What is the HOMO-LUMO gap of this molecule?',
+    ]
+}
+
+
 def smiles_handler(text, mol_ph, is_gal=True):
     smiles_list = []
     for match in CUSTOM_SEQ_RE.finditer(text):
@@ -234,15 +277,59 @@ class Stage2RegressionDM(LightningDataModule):
         self.is_gal = args.opt_model.find('galactica') >= 0
 
     def get_external_data(self, root):
-        if root == 'qm9':
+        if 'qm9' in root:
             from datasets import load_dataset
 
             dataset = load_dataset("zjunlp/Mol-Instructions", "Molecule-oriented Instructions")
             # property prediction used by mol-instructions dataset is qm9
             qm9_dataset = dataset['property_prediction']
+            instructions = INSTRUCTIONS
+            if 'homo_lumo_gap' in root:
+                target_instruction = instructions['HOMO-LUMO-gap']
+                qm9_dataset = qm9_dataset.filter(lambda x: x['instruction'] in target_instruction)
+                print('QM9 HOMO-LUMO-gap data preprared')
+                print('example of instruction', target_instruction[0])
+            elif 'homo' in root:
+                target_instruction = instructions['HOMO']
+                qm9_dataset = qm9_dataset.filter(lambda x: x['instruction'] in target_instruction)
+                print('QM9 HOMO data preprared')
+                print('example of instruction', target_instruction[0])
+            elif 'lumo' in root:
+                target_instruction = instructions['LUMO']
+                qm9_dataset = qm9_dataset.filter(lambda x: x['instruction'] in target_instruction)
+                print('QM9 LUMO data preprared')
+                print('example of instruction', target_instruction[0])
+            else:
+                raise ValueError
         else:
             raise NotImplementedError
         return qm9_dataset
+    
+    def classify_property_by_instruciton(self, data):
+        unique_instructions = []
+        for i in range(len(data)):
+            unique_instructions.append(data[i]['instruction'])
+
+        unique_instructions = set(unique_instructions)
+
+        instruction_by_property = {
+            'HOMO': [],
+            'LUMO': [],
+            'HOMO-LUMO-gap': [],
+            'etc': []
+        }
+
+        for inst in unique_instructions:
+            if 'gap' in inst or 'difference' in inst or 'separation' in inst:
+                instruction_by_property['HOMO-LUMO-gap'].append(inst)
+            elif 'HOMO' in inst:
+                instruction_by_property['HOMO'].append(inst)
+            elif 'LUMO' in inst:
+                instruction_by_property['LUMO'].append(inst)
+            else:
+                instruction_by_property['etc'].append(inst)
+
+        return instruction_by_property
         
     
     def init_tokenizer(self, tokenizer):

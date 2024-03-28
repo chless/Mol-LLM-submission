@@ -1,7 +1,7 @@
 import os
 from typing import Any, Dict
 import torch
-from model.blip2_opt_regression import Blip2OPT_Regression
+from model.blip2_opt_regression import Blip2OPT_Regression, Blip2OPT_Regression2
 from model.blip2_llama import Blip2Llama
 from model.blip2_t5 import Blip2T5
 import pytorch_lightning as pl
@@ -75,7 +75,10 @@ class Blip2Regression(pl.LightningModule):
         self.reaction_weight = args.reaction_weight
         self.llm_tune = args.llm_tune
         if args.opt_model.find('galactica') >= 0:
-            self.blip2opt = Blip2OPT_Regression(args.bert_name, args.gin_num_layers, args.gin_hidden_dim, args.drop_ratio, args.tune_gnn, args.num_query_token, args.cross_attention_freq, args.llm_tune, args.peft_dir, args.opt_model, args.prompt, args)
+            if args.task == 'regression':
+                self.blip2opt = Blip2OPT_Regression(args.bert_name, args.gin_num_layers, args.gin_hidden_dim, args.drop_ratio, args.tune_gnn, args.num_query_token, args.cross_attention_freq, args.llm_tune, args.peft_dir, args.opt_model, args.prompt, args)
+            elif args.task == 'regression2':
+                self.blip2opt = Blip2OPT_Regression2(args.bert_name, args.gin_num_layers, args.gin_hidden_dim, args.drop_ratio, args.tune_gnn, args.num_query_token, args.cross_attention_freq, args.llm_tune, args.peft_dir, args.opt_model, args.prompt, args)
         elif args.opt_model.find('llama') >= 0 or args.opt_model.find('vicuna') >= 0:
             self.blip2opt = Blip2Llama(args.bert_name, args.gin_num_layers, args.gin_hidden_dim, args.drop_ratio, args.tune_gnn, args.num_query_token, args.cross_attention_freq, args.llm_tune, args.peft_dir, args.opt_model, args.prompt, args)
         elif args.opt_model.find('t5') >= 0:
@@ -150,24 +153,12 @@ class Blip2Regression(pl.LightningModule):
         list_predictions = self.list_predictions
         list_targets = self.list_targets
         predictions = [i for ii in list_predictions for i in ii]
-        targets = [i for ii in list_targets for i in ii]
+        targets = [eval(i) for ii in list_targets for i in ii]
 
-        all_predictions = [None for _ in range(self.trainer.world_size)]
-        all_targets = [None for _ in range(self.trainer.world_size)]
-        try:
-            dist.all_gather_object(all_predictions, predictions)
-            dist.all_gather_object(all_targets, targets)
-        except RuntimeError:
-            all_predictions = [predictions]
-            all_targets = [targets]
-
-        if self.global_rank == 0:
-            all_predictions = [i for ii in all_predictions for i in ii]
-            all_targets = [i for ii in all_targets for i in ii]
-            ## fixme: I am not sure if the max length is the same as previous experiments
-            regression_losses = self.blip2opt.calculate_regression_loss(all_predictions, all_targets)
-            for key, loss_item in regression_losses.items():
-                self.log(key, float(loss_item), sync_dist=True)
+        ## fixme: I am not sure if the max length is the same as previous experiments
+        regression_losses = self.blip2opt.calculate_regression_loss(torch.tensor(predictions), torch.tensor(targets))
+        for key, loss_item in regression_losses.items():
+            self.log(key, float(loss_item), sync_dist=True)
                 
         
     def save_predictions(self, predictions, targets):
@@ -241,7 +232,7 @@ class Blip2Regression(pl.LightningModule):
             all_targets = [i for ii in all_targets for i in ii]
             self.save_predictions(all_predictions, all_targets)
             ## fixme: I am not sure if the max length is the same as previous experiments
-            regression_losses = self.blip2opt.calculate_regression_loss(all_predictions, all_targets)
+            regression_losses = self.blip2opt.calculate_regression_loss(all_predictions, all_targets.input_ids)
             for key, loss_item in regression_losses.items():
                 self.log(key, float(loss_item), sync_dist=True)
 

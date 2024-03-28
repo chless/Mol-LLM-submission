@@ -40,7 +40,7 @@ def main(args):
     # model
     if args.task is None:
         model = Blip2Stage2
-    elif  args.task == 'regression':
+    elif  'regression' in args.task:
         model = Blip2Regression
     else:
         raise NotImplementedError()
@@ -124,8 +124,6 @@ def main(args):
     trainer = Trainer(**trainer_args)
     if args.mode in {'pretrain', 'ft'}:
         trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
-        output = trainer.test(model, datamodule=dm)
-        a = 17
     elif args.mode == 'eval':
         trainer.fit_loop.epoch_progress.current.completed = args.caption_eval_epoch - 1
         trainer.validate(model, datamodule=dm)
@@ -149,7 +147,7 @@ def get_args():
     parser.add_argument('--accelerator', type=str, default='gpu')
     parser.add_argument('--devices', type=str, default='0,1,2,3')
     parser.add_argument('--precision', type=str, default='bf16-mixed')
-    parser.add_argument('--max_epochs', default=10)
+    parser.add_argument('--max_epochs', type=int, default=10)
     parser.add_argument('--max_steps', type=int, default=-1)
     parser.add_argument('--accumulate_grad_batches', type=int, default=1)
     parser.add_argument('--check_val_every_n_epoch', type=int, default=1)

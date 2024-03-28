@@ -176,7 +176,9 @@ class Blip2OPT_Regression(Blip2Base):
     def forward(self, batch):
         graphs, prompt_tokens, text_tokens = batch
         regression_preds = self.predict(batch)
-        regression_losses = self.calculate_regression_loss(regression_preds, text_tokens)
+        numeric_targets = self.opt_tokenizer.batch_decode(text_tokens.input_ids, skip_special_tokens=True)
+        numeric_targets = [float(x) for x in numeric_targets]
+        regression_losses = self.calculate_regression_loss(regression_preds, numeric_targets)
         regression_losses.update({'loss': regression_losses['mse']})
         return regression_losses
     
@@ -198,11 +200,103 @@ class Blip2OPT_Regression(Blip2Base):
         regression_preds = self.regression_head(query_output.last_hidden_state.mean(dim=1))
         return regression_preds
     
-    def calculate_regression_loss(self, preds, text_tokens):
-        numeric_label = self.opt_tokenizer.batch_decode(text_tokens.input_ids, skip_special_tokens=True)
-        numeric_label = [float(x) for x in numeric_label]
-        mse = F.mse_loss(preds.squeeze(-1), torch.tensor(numeric_label, device=text_tokens.input_ids.device))
-        mae = F.l1_loss(preds.squeeze(-1), torch.tensor(numeric_label, device=text_tokens.input_ids.device))
+    def calculate_regression_loss(self, preds, numeric_targets):
+        mse = F.mse_loss(preds.squeeze(-1), torch.tensor(numeric_targets, device=preds.device))
+        mae = F.l1_loss(preds.squeeze(-1), torch.tensor(numeric_targets, device=preds.device))
+        regression_losses = {
+            "mse": mse,
+            "mae": mae,
+        }
+        return regression_losses
+    
+
+class Blip2OPT_Regression2(Blip2Base):
+    """
+    BLIP2 first-stage model with Q-former and ViT.
+    Supported model types:
+        - pretrained: pretrained model with vit-g
+        - pretrain_vitL: pretrained model with vit-large
+        - coco: fintuned model on coco
+    Usage:
+        >>> from lavis.models import load_model
+        >>> model = load_model("blip2", "pretrain")
+    """
+    def __init__(
+        self,
+        bert_name,
+        gin_num_layers,
+        gin_hidden_dim,
+        gin_drop_ratio,
+        tune_gnn=False,
+        num_query_token=32,
+        cross_attention_freq=2,
+        llm_tune='freeze',
+        peft_dir='',
+        opt_model="facebook/galactica-1.3b",
+        prompt="",
+        args=None,
+    ):
+        super().__init__()
+        self.args = args
+
+        self.graph_encoder, self.ln_graph = self.init_graph_encoder(gin_num_layers, gin_hidden_dim, gin_drop_ratio)
+
+        self.tune_gnn = tune_gnn
+        if not tune_gnn:
+            for name, param in self.graph_encoder.named_parameters():
+                param.requires_grad = False
+            self.graph_encoder = self.graph_encoder.eval()
+            self.graph_encoder.train = disabled_train
+            logging.info("freeze graph encoder")
+        
+
+        self.regression_head = nn.Linear(gin_hidden_dim, 1)
+
+
+        ## initialize opt model
+        self.opt_tokenizer = AutoTokenizer.from_pretrained(opt_model, use_fast=False, padding_side='right')
+        self.opt_tokenizer.add_special_tokens({'pad_token': '<pad>'})
+        self.opt_tokenizer.add_tokens('<mol>') # molecule placeholder
+        self.mol_token = '<mol>'
+        self.opt_tokenizer.mol_token_id = self.opt_tokenizer("<mol>", add_special_tokens=False).input_ids[0]
+
+        self.collater = Collater([], [])
+        ## this will cause bug when full fine-tuning the opt model
+
+        ## fixme: this is different from the original BLIP2
+        self.eos_token_id = self.opt_tokenizer(
+            "\n", add_special_tokens=False
+        ).input_ids[0]
+
+        
+        ## fixme: no prompt yet
+        self.prompt = prompt
+        # prompt_tokens = self.opt_tokenizer(self.prompt, return_tensors="pt")
+        # self.prompt_length = prompt_tokens.attention_mask.sum(1)
+    
+    def forward(self, batch):
+        graphs, prompt_tokens, text_tokens = batch
+        regression_preds = self.predict(batch)
+        numeric_targets = self.opt_tokenizer.batch_decode(text_tokens.input_ids, skip_special_tokens=True)
+        numeric_targets = [float(x) for x in numeric_targets]
+        regression_losses = self.calculate_regression_loss(regression_preds, numeric_targets)
+        regression_losses.update({'loss': regression_losses['mse']})
+        return regression_losses
+    
+    def predict(self, batch):
+        # graph, smiles tokens, label token tokenized
+        graphs, prompt_tokens, text_tokens = batch
+        graph_embeds, graph_masks = self.graph_encoder(graphs)
+        if not self.tune_gnn:
+            graph_embeds = graph_embeds.detach()
+        graph_embeds = self.ln_graph(graph_embeds, graph_masks)
+
+        regression_preds = self.regression_head(graph_embeds.mean(dim=1))
+        return regression_preds
+    
+    def calculate_regression_loss(self, preds, numeric_targets):
+        mse = F.mse_loss(preds.squeeze(-1), torch.tensor(numeric_targets, device=preds.device))
+        mae = F.l1_loss(preds.squeeze(-1), torch.tensor(numeric_targets, device=preds.device))
         regression_losses = {
             "mse": mse,
             "mae": mae,
