@@ -260,10 +260,6 @@ class Stage2RegressionDM(LightningDataModule):
         split = train_dataset.train_test_split(test_size=0.1, shuffle=True)
         self.train_data, self.val_data = split['train'], split['test']
 
-        # debug
-        split = train_dataset.train_test_split(test_size=0.99999, shuffle=True)
-        self.test_data, _ = split['train'], split['test']
-
         self.test_data = data.filter(lambda x: 'test' in x['metadata'])
         if 'qm9' in args.root:
             representation = 'selfies'
