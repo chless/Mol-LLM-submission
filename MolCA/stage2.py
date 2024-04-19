@@ -124,6 +124,8 @@ def main(args):
     trainer = Trainer(**trainer_args)
     if args.mode in {'pretrain', 'ft'}:
         trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
+        # test after training
+        output = trainer.test(model, datamodule=dm)
     elif args.mode == 'eval':
         trainer.fit_loop.epoch_progress.current.completed = args.caption_eval_epoch - 1
         trainer.validate(model, datamodule=dm)
@@ -156,6 +158,7 @@ def get_args():
     parser.add_argument('--graph_reconstruction', action='store_true', default=False)
     parser.add_argument('--task', type=str, default=None)
     parser.add_argument('--val_check_interval', type=float, default=0.1)
+    parser.add_argument('--qformer_instruction', action='store_true', default=False)
     args = parser.parse_args()
 
     print("=========================================")

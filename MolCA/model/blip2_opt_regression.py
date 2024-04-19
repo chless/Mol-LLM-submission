@@ -24,6 +24,7 @@ from transformers import OPTForCausalLM
 # from opendelta import LoraModel
 # from opendelta.delta_models.lora import LoraConfig
 # from opendelta.delta_configs
+from model.qformer_instructions import qformer_instrucitons
 
 opt_model_list = [
     "facebook/galactica-125m",
@@ -100,7 +101,7 @@ def smiles_handler(text, mol_ph):
     text = escape_custom_split_sequence(text)
     return text, smiles_list
 
-
+# regression by query embedding
 class Blip2OPT_Regression(Blip2Base):
     """
     BLIP2 first-stage model with Q-former and ViT.
@@ -130,6 +131,8 @@ class Blip2OPT_Regression(Blip2Base):
         super().__init__()
         self.args = args
 
+        self.tokenizer = self.init_tokenizer()
+
         self.graph_encoder, self.ln_graph = self.init_graph_encoder(gin_num_layers, gin_hidden_dim, gin_drop_ratio)
 
         self.tune_gnn = tune_gnn
@@ -142,12 +145,17 @@ class Blip2OPT_Regression(Blip2Base):
         
         self.num_query_token = num_query_token
         self.Qformer, self.query_tokens = self.init_Qformer(bert_name, num_query_token, self.graph_encoder.num_features, cross_attention_freq)
+        self.Qformer.resize_token_embeddings(len(self.tokenizer))
+
         self.regression_head = nn.Linear(self.Qformer.config.hidden_size, 1)
 
         ### remove the unused parameters
         self.Qformer.cls = None
-        self.Qformer.bert.embeddings.word_embeddings = None
-        self.Qformer.bert.embeddings.position_embeddings = None
+        # if inpu instruciton to qformer, need embedding matrix
+        if not self.args.qformer_instruction:
+            self.Qformer.bert.embeddings.word_embeddings = None
+            self.Qformer.bert.embeddings.position_embeddings = None
+
         for layer in self.Qformer.bert.encoder.layer:
             layer.output = None
             layer.intermediate = None
@@ -172,6 +180,10 @@ class Blip2OPT_Regression(Blip2Base):
         self.prompt = prompt
         # prompt_tokens = self.opt_tokenizer(self.prompt, return_tensors="pt")
         # self.prompt_length = prompt_tokens.attention_mask.sum(1)
+
+    def get_instruction_and_attention_mask(self):
+        qformer_instruction = qformer_instrucitons[self.args.data]
+        return qformer_instruction
     
     def forward(self, batch):
         graphs, prompt_tokens, text_tokens = batch
@@ -190,6 +202,16 @@ class Blip2OPT_Regression(Blip2Base):
             graph_embeds = graph_embeds.detach()
         graph_embeds = self.ln_graph(graph_embeds, graph_masks)
         query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
+
+        if self.args.qformer_instruction:
+            qformer_instruction = qformer_instrucitons[self.args.root]
+            qformer_instruction = self.tokenizer(qformer_instruction, return_tensors="pt")
+            qformer_instruction = qformer_instruction.input_ids.to(graph_embeds.device)
+
+            qformer_instruction_embedding = self.Qformer.bert.embeddings(qformer_instruction)
+            qformer_instruction_embedding = qformer_instruction_embedding.expand(graph_embeds.shape[0], -1, -1)
+            query_tokens = torch.cat([qformer_instruction_embedding, query_tokens], dim=1)
+
         query_output = self.Qformer.bert(
             query_embeds=query_tokens,
             encoder_hidden_states=graph_embeds,
@@ -209,7 +231,7 @@ class Blip2OPT_Regression(Blip2Base):
         }
         return regression_losses
     
-
+# regression by graph embedding
 class Blip2OPT_Regression2(Blip2Base):
     """
     BLIP2 first-stage model with Q-former and ViT.
