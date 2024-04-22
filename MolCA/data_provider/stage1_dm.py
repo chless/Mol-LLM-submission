@@ -122,3 +122,37 @@ class Stage1DM(LightningDataModule):
         parser.add_argument('--filtered_cid_path', type=str, default=None)
         return parent_parser
     
+    def check_dataset_stats(self):
+        import tqdm
+        dataset_slits = ['train', 'val']
+        total_stats = dict()
+        for split in dataset_slits:
+            dataset = getattr(self, f'{split}_dataset')
+            dataset_size = len(dataset)
+            split_stats = {
+                'dataset_size': dataset_size,
+                'avg_text_tokens': 0,
+                'avg_smiles_tokens': 0,
+                'avg_node_size': 0,
+                'avg_edge_size': 0,
+            }
+            iter_bar = tqdm.tqdm(range(len(dataset)), desc=f'Checking {split} dataset stats : text {split_stats["avg_text_tokens"]}, smiles {split_stats["avg_smiles_tokens"]}, node {split_stats["avg_node_size"]}, edge {split_stats["avg_edge_size"]}') 
+            for i in iter_bar:
+                text = dataset[i][0].text
+                smiles = dataset[i][0].smiles
+                text_tokens = len(self.tokenizer.encode(text)) if self.tokenizer is not None else 0
+                smiles_tokens = len(self.tokenizer.encode(smiles)) if self.tokenizer is not None else 0
+                node_size = dataset[i][0].x.shape[0]
+                edge_size = dataset[i][0].edge_index.shape[1]
+                split_stats['avg_text_tokens'] = split_stats['avg_text_tokens'] * i / (i + 1) + text_tokens / (i + 1)
+                split_stats['avg_smiles_tokens'] = split_stats['avg_smiles_tokens'] * i / (i + 1) + smiles_tokens / (i + 1)
+                split_stats['avg_node_size'] = split_stats['avg_node_size'] * i / (i + 1) + node_size / (i + 1)
+                split_stats['avg_edge_size'] = split_stats['avg_edge_size'] * i / (i + 1) + edge_size / (i + 1)
+                iter_bar.set_description(f'Checking {split} dataset stats : text {split_stats["avg_text_tokens"]:0.4f}, smiles {split_stats["avg_smiles_tokens"]:0.4f}, node {split_stats["avg_node_size"]:0.4f}, edge {split_stats["avg_edge_size"]:0.4f}')
+            total_stats[split] = split_stats
+        return total_stats
+            
+            
+
+
+    

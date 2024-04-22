@@ -62,10 +62,24 @@ def main(args):
         project="chanhui-lee/text-mol",
     )
 
-    trainer = Trainer(
-        accelerator=args.accelerator, devices=args.devices, precision=args.precision, 
-        max_epochs=args.max_epochs, check_val_every_n_epoch=args.check_val_every_n_epoch, 
-        callbacks=callbacks, strategy=strategy, logger=[logger, neptune_logger])
+
+    trainer_args = {
+        'accelerator': args.accelerator,
+        'devices': args.devices,
+        'precision': args.precision,
+        'max_epochs': args.max_epochs,
+        'check_val_every_n_epoch': args.check_val_every_n_epoch,
+        'callbacks': callbacks,
+        'strategy': strategy,
+        'logger': [logger, neptune_logger]
+    }
+
+    trainer = Trainer(**trainer_args)
+    if args.check_dataset_stats:
+        total_stats = dm.check_dataset_stats()
+        for _logger in trainer.loggers:
+            _logger.log_hyperparams(total_stats)
+
     if args.mode == 'train':
         trainer.fit(model, datamodule=dm)
     elif args.mode == 'eval':
@@ -90,15 +104,13 @@ if __name__ == '__main__':
     parser.add_argument('--precision', type=str, default='bf16-mixed')
     parser.add_argument('--max_epochs', type=int, default=50)
     parser.add_argument('--check_val_every_n_epoch', type=int, default=1)
-    # parser.add_argument('--save_every_n_epochs', type=int, default=1)
-    # parser = Trainer.add_argparse_args(parser)
+
+    # added args
+    parser.add_argument('--check_dataset_stats', action='store_true', default=False)
+
     parser = Blip2Stage1.add_model_specific_args(parser)  # add model args
     parser = Stage1DM.add_model_specific_args(parser)
-    # parser.set_defaults(accelerator='gpu',
-    #                     devices='0,1,2,3',
-    #                     precision='bf16',
-    #                     max_epochs=50,
-    #                     check_val_every_n_epoch=1)
+
     args = parser.parse_args()
     
     print("=========================================")
