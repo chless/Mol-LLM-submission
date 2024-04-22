@@ -153,11 +153,13 @@ def get_args():
     parser.add_argument('--max_steps', type=int, default=-1)
     parser.add_argument('--accumulate_grad_batches', type=int, default=1)
     parser.add_argument('--check_val_every_n_epoch', type=int, default=1)
+    parser.add_argument('--task', type=str, default=None)
+    parser.add_argument('--val_check_interval', type=float, default=0.1)
+
+    # added args
     parser.add_argument('--graph_embedding_mse_logging', action='store_true', default=False)
     parser.add_argument('--graph_embedding_mse_backprop', action='store_true', default=False)
     parser.add_argument('--graph_reconstruction', action='store_true', default=False)
-    parser.add_argument('--task', type=str, default=None)
-    parser.add_argument('--val_check_interval', type=float, default=0.1)
     parser.add_argument('--qformer_instruction', action='store_true', default=False)
     args = parser.parse_args()
 
