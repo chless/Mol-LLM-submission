@@ -12,5 +12,3 @@ python3 MolCA/stage2.py \
 --inference_batch_size 4 \
 --caption_eval_epoch 10 \
 --filtered_cid_path MolCA/data/PubChem324k/filtered_pretrain_cids.txt \
---graph_embedding_mse_logging \
---graph_embedding_mse_backprop
