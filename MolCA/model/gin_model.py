@@ -5,6 +5,7 @@ from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_poo
 import torch.nn.functional as F
 # from torch_scatter import scatter_add
 from torch_geometric.nn.inits import glorot, zeros
+from dataclasses import dataclass
 
 num_atom_type = 120 #including the extra mask tokens
 num_chirality_tag = 3
@@ -309,7 +310,90 @@ class GNN(torch.nn.Module):
             return batch_node, batch_mask
         else:
             return batch_node, batch_mask, h_graph
+        
+def reverse_to_dense_batch(dense_x, mask):
+    """
+    Reverses the to_dense_batch operation to retrieve the original sparse format.
+    
+    Parameters:
+        dense_x (Tensor): The dense batch tensor of shape (batch_size, max_num_nodes, num_features).
+        mask (BoolTensor): The mask indicating valid (True) and padded (False) positions.
 
+    Returns:
+        x (Tensor): The original sparse node feature matrix.
+        batch (Tensor): The original batch vector.
+    """
+    batch_size, max_num_nodes, num_features = dense_x.shape
+    num_nodes = mask.sum(dim=1)  # Number of actual nodes in each graph
+
+    # Initialize a list to hold the node features
+    original_features = []
+    # Initialize a list to hold the batch indices
+    batch_indices = []
+    
+    for i in range(batch_size):
+        # Extract the features of the actual nodes (where mask is True)
+        actual_node_features = dense_x[i, mask[i]]
+        original_features.append(actual_node_features)
+        # Create a batch index for these nodes
+        batch_indices.extend([i] * num_nodes[i].item())
+    
+    # Concatenate all node features and convert batch indices to a tensor
+    x = torch.cat(original_features, dim=0)
+    batch = torch.tensor(batch_indices, dtype=torch.long)
+    
+    return x, batch
+        
+class GNN_Decoder(GNN):
+    def __init__(self, num_layer, emb_dim, JK = "last", drop_ratio = 0, gnn_type = "gin"):
+        super(GNN_Decoder, self).__init__(num_layer, emb_dim, JK, drop_ratio, gnn_type)
+        self.node_feature1_head = torch.nn.Linear(emb_dim, num_atom_type)
+        self.node_feature2_head = torch.nn.Linear(emb_dim, num_chirality_tag)
+
+    def forward(self, *argv):
+        assert len(argv) == 4
+        batch_node, batch_mask, edge_index, edge_attr = argv[0], argv[1], argv[2], argv[3]
+        batch_node = batch_node[:, 1:, :] # remove the first node featuer which is mean-pooled graph feature
+        batch_mask = batch_mask[:, 1:] # remove the first node featuer which is mean-pooled graph feature
+        x, batch = reverse_to_dense_batch(batch_node, batch_mask)
+
+        h_list = [x]
+        for layer in range(self.num_layer):
+            h = self.gnns[layer](h_list[layer], edge_index, edge_attr)
+            h = self.batch_norms[layer](h)
+            #h = F.dropout(F.relu(h), self.drop_ratio, training = self.training)
+            if layer == self.num_layer - 1:
+                #remove relu for the last layer
+                h = F.dropout(h, self.drop_ratio, training = self.training)
+            else:
+                h = F.dropout(F.relu(h), self.drop_ratio, training = self.training)
+            h_list.append(h)
+
+        ### Different implementations of Jk-concat
+        if self.JK == "concat":
+            node_representation = torch.cat(h_list, dim = 1)
+        elif self.JK == "last":
+            node_representation = h_list[-1]
+        elif self.JK == "max":
+            h_list = [h.unsqueeze_(0) for h in h_list]
+            node_representation = torch.max(torch.cat(h_list, dim = 0), dim = 0)[0]
+        elif self.JK == "sum":
+            h_list = [h.unsqueeze_(0) for h in h_list]
+            node_representation = torch.sum(torch.cat(h_list, dim=0), dim=0)[0]
+        
+        node_representation1_logit = self.node_feature1_head(node_representation)
+        node_representation2_logit = self.node_feature2_head(node_representation)
+        node_representation1_prob = F.softmax(node_representation1_logit, dim=-1)
+        node_representation2_prob = F.softmax(node_representation2_logit, dim=-1)
+        return GNNDecoderOutput(
+            atom_type = node_representation1_prob,
+            chirality_tag = node_representation2_prob
+        )
+
+@dataclass
+class GNNDecoderOutput:
+    atom_type: torch.Tensor
+    chirality_tag: torch.Tensor
 
 class GNN_graphpred(torch.nn.Module):
     """
