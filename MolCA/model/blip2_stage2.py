@@ -12,6 +12,7 @@ import torch.distributed as dist
 from peft import LoraConfig, TaskType
 from model.help_funcs import caption_evaluate, AttrDict
 from transformers import Adafactor
+import ast
 
 
 def load_ignore_unexpected(model, state_dict):
@@ -133,16 +134,18 @@ class Blip2Stage2(pl.LightningModule):
                 raise NotImplementedError()
         return optimizer
 
-    def on_test_epoch_end(self, outputs):
-        list_predictions, list_targets = zip(*outputs)
+    def on_test_epoch_end(self):
+        list_predictions = self.list_predictions
+        list_targets = self.list_targets
         predictions = [i for ii in list_predictions for i in ii]
         targets = [i for ii in list_targets for i in ii]
 
         all_predictions = [None for _ in range(self.trainer.world_size)]
         all_targets = [None for _ in range(self.trainer.world_size)]
         
-        dist.all_gather_object(all_predictions, predictions)
-        dist.all_gather_object(all_targets, targets)
+        if len(ast.literal_eval(self.args.devices)) > 1:
+            dist.all_gather_object(all_predictions, predictions)
+            dist.all_gather_object(all_targets, targets)
         if self.global_rank == 0:
             all_predictions = [i for ii in all_predictions for i in ii]
             all_targets = [i for ii in all_targets for i in ii]
@@ -164,6 +167,10 @@ class Blip2Stage2(pl.LightningModule):
                 line = {'prediction': p, 'target': t}
                 f.write(json.dumps(line, ensure_ascii=True) + '\n')
 
+    def on_test_epoch_start(self) -> None:
+        self.list_predictions = []
+        self.list_targets = []
+
     @torch.no_grad()
     def test_step(self, batch, batch_idx):
         graphs, prompt_tokens, texts = batch
@@ -176,7 +183,8 @@ class Blip2Stage2(pl.LightningModule):
             max_length=self.max_len,
             min_length=self.min_len
         )
-        return predictions, texts
+        self.list_predictions.append(predictions)
+        self.list_targets.append(texts)
 
     # @torch.no_grad()
     # def validation_step(self, batch, batch_idx, dataloader_idx=0):
