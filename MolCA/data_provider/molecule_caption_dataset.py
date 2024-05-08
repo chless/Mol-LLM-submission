@@ -1,5 +1,5 @@
 import torch
-from torch_geometric.data import Dataset, InMemoryDataset
+from torch_geometric.data import Dataset, InMemoryDataset, Data
 import os
 
 class MoleculeCaption(Dataset):
@@ -98,9 +98,11 @@ class MoleculeCaption(Dataset):
 
 
 class MoleculeCaptionV2(InMemoryDataset):
-    def __init__(self, path, text_max_len, prompt=None):
+    def __init__(self, path, text_max_len, prompt=None, debug=False):
         super(MoleculeCaptionV2, self).__init__()
         self.data, self.slices = torch.load(path)
+        if debug:
+            self.reduce_dataset_size(100)
 
         self.path = path
         self.text_max_len = text_max_len
@@ -125,6 +127,26 @@ class MoleculeCaptionV2(InMemoryDataset):
         text = data.text.split('\n')[:100]
         text = ' '.join(text) + '\n'
         return data, text, smiles_prompt
+    
+    def reduce_dataset_size(self, new_size):
+        # Check if new size is smaller than the current size
+        current_size = list(self.slices.values())[0].size(0) - 1
+        if new_size >= current_size:
+            print("New size must be smaller than the current dataset size.")
+            return
+        
+        # Adjust data
+        for key in self.slices.keys():
+            self.slices[key] = self.slices[key][:new_size + 1]
+        
+        # Slice the data according to new slices
+        reduced_data = {}
+        for key, item in self.data:
+            start = self.slices[key][0].item()
+            end = self.slices[key][-1].item()
+            reduced_data[key] = item[start:end]
+        
+        self.data = Data(**reduced_data)
     
     def shuffle(self):
         self.perm = torch.randperm(len(self)).tolist()

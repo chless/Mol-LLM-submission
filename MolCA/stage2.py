@@ -161,6 +161,7 @@ def get_args():
     parser.add_argument('--graph_embedding_mse_backprop', action='store_true', default=False)
     parser.add_argument('--graph_reconstruction', action='store_true', default=False)
     parser.add_argument('--qformer_instruction', action='store_true', default=False)
+    parser.add_argument('--debug', action='store_true', default=False)
     args = parser.parse_args()
 
     print("=========================================")
