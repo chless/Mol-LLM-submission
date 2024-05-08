@@ -133,7 +133,7 @@ class Blip2Stage2(pl.LightningModule):
                 raise NotImplementedError()
         return optimizer
 
-    def test_epoch_end(self, outputs):
+    def on_test_epoch_end(self, outputs):
         list_predictions, list_targets = zip(*outputs)
         predictions = [i for ii in list_predictions for i in ii]
         targets = [i for ii in list_targets for i in ii]
