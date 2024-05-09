@@ -91,6 +91,8 @@ def main(args):
                                          save_last=True, 
                                          save_top_k=-1,
                                          save_on_train_epoch_end=True))
+    callbacks.append(SaveLoRAModelCallback(f'MolCA/all_checkpoints/{args.filename}/lora'))
+
     if len(args.devices.split(',')) > 1:
         if args.strategy_name == 'fsdp':
             strategy = strategies.DDPFullyShardedNativeStrategy()
@@ -133,6 +135,24 @@ def main(args):
         output = trainer.test(model, datamodule=dm)
     else:
         raise NotImplementedError()
+    
+class SaveLoRAModelCallback(plc.Callback):
+    def __init__(self, dir_path):
+        """
+        Args:
+            save_path (str): Path where the model and LoRA weights should be saved.
+        """
+        self.dir_path = dir_path
+        if not os.path.exists(self.dir_path):
+            os.makedirs(self.dir_path)
+
+    def on_epoch_end(self, trainer, pl_module):
+        """
+        Called when an epoch ends.
+        """
+        model = pl_module.model  # Assuming the LoRA adapted model is stored in this property
+        model.save_pretrained(self.dir_path)
+        print(f'Peft lora weights saved to {self.dir_path} at epoch {trainer.current_epoch}')
 
 def get_args():
     parser = argparse.ArgumentParser()
