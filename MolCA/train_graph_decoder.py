@@ -6,7 +6,6 @@ import pytorch_lightning as pl
 from pytorch_lightning import Trainer, strategies
 import pytorch_lightning.callbacks as plc
 from pytorch_lightning.loggers import CSVLogger
-from model.graph_reconstruction import Blip2Stage1
 from data_provider.stage1_dm import Stage1DM
 from data_provider.stage1_kvplm_dm import Stage1KVPLMDM
 from torch import optim
@@ -34,10 +33,10 @@ def main(args):
 
     # model
     if args.init_checkpoint:
-        model = Graph_reconstruction.load_from_checkpoint(args.init_checkpoint, device=args.devices, args=args)
+        model = GraphReconstruction.load_from_checkpoint(args.init_checkpoint, device=args.devices, args=args)
         print(f"loading model from {args.init_checkpoint}")
     else:
-        model = Graph_reconstruction(args)
+        model = GraphReconstruction(args)
     
     print('total params:', sum(p.numel() for p in model.parameters()))
 
@@ -102,16 +101,16 @@ def main(args):
 from dataclasses import dataclass
 
 @dataclass
-class Graph_reconstructionOutput:
+class GraphReconstructionOutput:
     atom_type_loss: torch.FloatTensor
     chirality_tag_loss: torch.FloatTensor
     loss: torch.FloatTensor
     atom_type_prob: torch.FloatTensor
     chirality_tag_prob: torch.FloatTensor
 
-class Graph_reconstruction(pl.LightningModule):
+class GraphReconstruction(pl.LightningModule):
     def __init__(self, args):
-        super(Graph_reconstruction, self).__init__()
+        super(GraphReconstruction, self).__init__()
         self.args = args
         # Add your initialization code here
         self.encoder, self.ln_graph = self.init_graph_encoder(args.gin_num_layers, args.gin_hidden_dim, args.drop_ratio)
@@ -157,7 +156,7 @@ class Graph_reconstruction(pl.LightningModule):
         loss_atom = F.cross_entropy(pred.atom_type_prob, graph.x[:, 0])
         loss_chiral = F.cross_entropy(pred.chirality_tag_prob, graph.x[:, 1])
         loss = loss_atom + loss_chiral
-        return Graph_reconstructionOutput(
+        return GraphReconstructionOutput(
             atom_type_loss=loss_atom,
             chirality_tag_loss=loss_chiral,
             loss=loss,
@@ -213,6 +212,39 @@ class Graph_reconstruction(pl.LightningModule):
         else:
             raise NotImplementedError()
         return optimizer
+    
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parser = parent_parser.add_argument_group("GINSimclr")
+        # train mode
+        parser.add_argument('--temperature', type=float, default=0.1, help='the temperature of NT_XentLoss')
+
+        parser.add_argument('--save_every_n_epochs', type=int, default=10)
+        # evaluation
+        parser.add_argument('--rerank_cand_num', type=int, default=128)
+        
+        # GIN
+        parser.add_argument('--gin_hidden_dim', type=int, default=300)
+        parser.add_argument('--gin_num_layers', type=int, default=5)
+        parser.add_argument('--drop_ratio', type=float, default=0.0)
+        parser.add_argument('--tune_gnn', action='store_true', default=False)
+        # Bert
+        parser.add_argument('--bert_hidden_dim', type=int, default=768, help='')
+        parser.add_argument('--bert_name', type=str, default='scibert')
+        parser.add_argument('--projection_dim', type=int, default=256)
+        parser.add_argument('--cross_attention_freq', type=int, default=2)
+        parser.add_argument('--num_query_token', type=int, default=8)
+        # optimization
+        parser.add_argument('--weight_decay', type=float, default=0.05, help='optimizer weight decay')
+        parser.add_argument('--init_lr', type=float, default=1e-4, help='optimizer init learning rate')
+        parser.add_argument('--min_lr', type=float, default=1e-5, help='optimizer min learning rate')
+        parser.add_argument('--warmup_lr', type=float, default=1e-6, help='optimizer warmup learning rate')
+        parser.add_argument('--warmup_steps', type=int, default=1000, help='optimizer warmup steps')
+        parser.add_argument('--lr_decay_rate', type=float, default=0.9, help='optimizer lr decay rate')
+        parser.add_argument('--scheduler', type=str, default='linear_warmup_cosine_lr', help='type of scheduler') # or linear_warmup_step_lr
+        parser.add_argument('--init_checkpoint', type=str, default='')
+        parser.add_argument('--retrieval_eval_epoch', type=int, default=10)
+        return parent_parser
 
 
 class LayerNorm(torch.nn.LayerNorm):
@@ -241,7 +273,7 @@ if __name__ == '__main__':
     # added args
     parser.add_argument('--check_dataset_stats', action='store_true', default=False)
 
-    parser = Blip2Stage1.add_model_specific_args(parser)  # add model args
+    parser = GraphReconstruction.add_model_specific_args(parser)  # add model args
     parser = Stage1DM.add_model_specific_args(parser)
 
     args = parser.parse_args()
