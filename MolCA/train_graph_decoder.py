@@ -19,6 +19,8 @@ from transformers import BertTokenizer
 from model.gin_model import GNN_Decoder
 import torch.nn.functional as F
 
+# TODO: Need massive refactoring...
+
 
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 ## for pyg bug
