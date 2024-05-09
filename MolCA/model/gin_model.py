@@ -1,6 +1,6 @@
 import torch
 from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import add_self_loops, degree, softmax, to_dense_batch
+from torch_geometric.utils import add_self_loops, softmax, to_dense_batch
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool, GlobalAttention, Set2Set
 import torch.nn.functional as F
 # from torch_scatter import scatter_add
@@ -386,14 +386,14 @@ class GNN_Decoder(GNN):
         node_representation1_prob = F.softmax(node_representation1_logit, dim=-1)
         node_representation2_prob = F.softmax(node_representation2_logit, dim=-1)
         return GNNDecoderOutput(
-            atom_type = node_representation1_prob,
-            chirality_tag = node_representation2_prob
+            atom_type_prob = node_representation1_prob,
+            chirality_tag_prob = node_representation2_prob
         )
 
 @dataclass
 class GNNDecoderOutput:
-    atom_type: torch.Tensor
-    chirality_tag: torch.Tensor
+    atom_type_prob: torch.Tensor
+    chirality_tag_prob: torch.Tensor
 
 class GNN_graphpred(torch.nn.Module):
     """
