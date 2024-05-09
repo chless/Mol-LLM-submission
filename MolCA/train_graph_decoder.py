@@ -12,12 +12,12 @@ from data_provider.stage1_kvplm_dm import Stage1KVPLMDM
 from torch import optim
 from lavis.common.optims import LinearWarmupCosineLRScheduler, LinearWarmupStepLRScheduler
 
-import neptune
 from pytorch_lightning.loggers import NeptuneLogger
 #import dataclass
 
 from transformers import BertTokenizer
 from model.gin_model import GNN_Decoder
+import torch.nn.functional as F
 
 
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
@@ -92,6 +92,8 @@ def main(args):
     elif args.mode == 'eval':
         trainer.fit_loop.epoch_progress.current.completed = 49 ## avoid 
         trainer.validate(model, datamodule=dm)
+    elif args.mode == 'test':
+        output = trainer.test(model, datamodule=dm)
     else:
         raise NotImplementedError()
     
@@ -102,6 +104,8 @@ class Graph_reconstructionOutput:
     atom_type_loss: torch.FloatTensor
     chirality_tag_loss: torch.FloatTensor
     loss: torch.FloatTensor
+    atom_type_prob: torch.FloatTensor
+    chirality_tag_prob: torch.FloatTensor
 
 class Graph_reconstruction(pl.LightningModule):
     def __init__(self, args):
@@ -148,14 +152,15 @@ class Graph_reconstruction(pl.LightningModule):
         batch_node, batch_mask = self.encoder(graph)
         pred = self.decoder(batch_node, batch_mask, graph.edge_index, graph.edge_attr)
         # calculate cross entropy loss
-        import torch.nn.functional as F
-        loss_atom = F.cross_entropy(pred.atom_type, graph.x[:, 0])
-        loss_chiral = F.cross_entropy(pred.chirality_tag, graph.x[:, 1])
+        loss_atom = F.cross_entropy(pred.atom_type_prob, graph.x[:, 0])
+        loss_chiral = F.cross_entropy(pred.chirality_tag_prob, graph.x[:, 1])
         loss = loss_atom + loss_chiral
         return Graph_reconstructionOutput(
             atom_type_loss=loss_atom,
             chirality_tag_loss=loss_chiral,
-            loss=loss
+            loss=loss,
+            atom_type_prob=pred.atom_type_prob,
+            chirality_tag_prob=pred.chirality_tag_prob
         )
 
 
@@ -163,28 +168,35 @@ class Graph_reconstruction(pl.LightningModule):
         # Add your training step code here
         self.scheduler.step(self.trainer.current_epoch, self.trainer.global_step)
         batch_size = batch[-1].size(0)
-        loss = self.forward(batch)
-        self.log('train_loss', loss.loss)
-        self.log('train_atom_type_loss', loss.atom_type_loss)
-        self.log('train_chirality_tag_loss', loss.chirality_tag_loss)
+        output = self.forward(batch)
+        self.log('train_loss', output.loss)
+        self.log('train_atom_type_loss', output.atom_type_loss)
+        self.log('train_chirality_tag_loss', output.chirality_tag_loss)
         self.log("lr", self.trainer.optimizers[0].param_groups[0]['lr'], batch_size=batch_size, sync_dist=True)
-        return loss.loss
+        return output.loss
 
     def validation_step(self, batch, batch_idx):
         batch_size = batch[-1].size(0)
-        loss = self.forward(batch)
-        self.log('val_loss', loss.loss, batch_size=batch_size, sync_dist=True)
-        self.log('val_atom_type_loss', loss.atom_type_loss, batch_size=batch_size, sync_dist=True)
-        self.log('val_chirality_tag_loss', loss.chirality_tag_loss, batch_size=batch_size, sync_dist=True)
-        return loss
+        output = self.forward(batch)
+        self.log('val_loss', output.loss, batch_size=batch_size, sync_dist=True)
+        self.log('val_atom_type_loss', output.atom_type_loss, batch_size=batch_size, sync_dist=True)
+        self.log('val_chirality_tag_loss', output.chirality_tag_loss, batch_size=batch_size, sync_dist=True)
+        return output
 
     def test_step(self, batch, batch_idx):
         batch_size = batch[-1].size(0)
-        loss = self.forward(batch)
-        self.log('test_loss', loss.loss, batch_size=batch_size, sync_dist=True)
-        self.log('test_atom_type_loss', loss.atom_type_loss, batch_size=batch_size, sync_dist=True)
-        self.log('test_chirality_tag_loss', loss.chirality_tag_loss, batch_size=batch_size, sync_dist=True)
-        return loss
+        output = self.forward(batch)
+        pred_atom = torch.argmax(output.atom_type_prob, dim=-1)
+        pred_chiral = torch.argmax(output.chirality_tag_prob, dim=-1)
+        true_atom = batch[0].x[:, 0]
+        true_chiral = batch[0].x[:, 1]
+        self.log('test_atom_type_acc', (pred_atom == true_atom).float().mean(), batch_size=batch_size, sync_dist=True)
+        self.log('test_chirality_tag_acc', (pred_chiral == true_chiral).float().mean(), batch_size=batch_size, sync_dist=True)
+        
+        self.log('test_loss', output.loss, batch_size=batch_size, sync_dist=True)
+        self.log('test_atom_type_loss', output.atom_type_loss, batch_size=batch_size, sync_dist=True)
+        self.log('test_chirality_tag_loss', output.chirality_tag_loss, batch_size=batch_size, sync_dist=True)
+        return output
 
     def configure_optimizers(self):
         self.trainer.fit_loop.setup_data()
