@@ -4,12 +4,3 @@ repos:
     hooks:
       - id: black
         language_version: python3
-
-  - repo: https://github.com/pycqa/flake8
-    rev: 3.9.2
-    hooks:
-      - id: flake8
-        additional_dependencies:
-          - flake8-bugbear
-        args:
-          - --max-line-length=120  # Set maximum line length to 79 for Flake8
