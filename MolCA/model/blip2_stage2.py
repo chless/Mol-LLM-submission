@@ -128,6 +128,11 @@ class Blip2Stage2(pl.LightningModule):
         else:
             raise NotImplementedError()
         self.tokenizer = self.blip2opt.init_tokenizer()
+        self.num_devices = (
+            len(ast.literal_eval(args.devices))
+            if not isinstance(args.devices, int)
+            else 1
+        )
         self.save_hyperparameters(args)
 
     def load_from_stage1_checkpoint(self, path):
@@ -210,7 +215,7 @@ class Blip2Stage2(pl.LightningModule):
         all_predictions = [None for _ in range(self.trainer.world_size)]
         all_targets = [None for _ in range(self.trainer.world_size)]
 
-        if len(ast.literal_eval(self.args.devices)) > 1:
+        if self.num_devices > 1:
             dist.all_gather_object(all_predictions, predictions)
             dist.all_gather_object(all_targets, targets)
         if self.global_rank == 0:
@@ -318,7 +323,7 @@ class Blip2Stage2(pl.LightningModule):
 
         all_predictions = [None for _ in range(self.trainer.world_size)]
         all_targets = [None for _ in range(self.trainer.world_size)]
-        if len(ast.literal_eval(self.args.devices)) > 1:
+        if self.num_devices > 1:
             dist.all_gather_object(all_predictions, predictions)
             dist.all_gather_object(all_targets, targets)
 
