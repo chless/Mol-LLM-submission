@@ -1,13 +1,15 @@
-# .pre-commit-config.yaml
 repos:
   - repo: https://github.com/psf/black
-    rev: stable  # Use the specific version of black you want to pin to
+    rev: stable
     hooks:
       - id: black
-        language_version: python3  # Ensure black runs with Python 3
+        language_version: python3
 
   - repo: https://github.com/pycqa/flake8
-    rev: 3.9.2  # Use the specific version of flake8 you want to pin to
+    rev: 3.9.2
     hooks:
       - id: flake8
-        additional_dependencies: [flake8-bugbear]  # Example: to include additional plugin
+        additional_dependencies:
+          - flake8-bugbear
+        args:
+          - --max-line-length=79  # Set maximum line length to 79 for Flake8
