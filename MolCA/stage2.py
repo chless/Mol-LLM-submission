@@ -80,7 +80,8 @@ def main(args):
     # data
     import ast
 
-    num_devices = len(ast.literal_eval(args.devices))
+    devices = ast.literal_eval(args.devices)
+    num_devices = len(devices) if not isinstance(devices, int) else 1
     # adjust intended total batch size is the same regarlless of the number of devices
     args.batch_size = args.batch_size // num_devices
     if args.task == "iupac_prediction":
