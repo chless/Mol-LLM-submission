@@ -13,7 +13,7 @@ from lavis.common.optims import (
 import json
 import torch.distributed as dist
 from peft import LoraConfig, TaskType
-from model.help_funcs import caption_evaluate, AttrDict
+from model.help_funcs import caption_evaluate, AttrDict, classification_evaluate
 from transformers import Adafactor
 import ast
 
@@ -129,9 +129,9 @@ class Blip2Stage2(pl.LightningModule):
             raise NotImplementedError()
         self.tokenizer = self.blip2opt.init_tokenizer()
         self.num_devices = (
-            len(ast.literal_eval(args.devices))
-            if not isinstance(args.devices, int)
-            else 1
+            1
+            if isinstance(ast.literal_eval(args.devices), int)
+            else len(ast.literal_eval(args.devices))
         )
         self.save_hyperparameters(args)
 
