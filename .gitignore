@@ -160,3 +160,5 @@ MolCA/Text2graph
 MolCA/all_checkpoints
 *.ckpt
 .neptune
+
+dataset
