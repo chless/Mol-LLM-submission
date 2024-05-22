@@ -461,6 +461,12 @@ class Blip2Stage2(pl.LightningModule):
         parser.add_argument(
             "--graph_reconstruction", action="store_true", default=False
         )
+        parser.add_argument(
+            "--graph_embedding_mse_logging", action="store_true", default=False
+        )
+        parser.add_argument(
+            "--graph_embedding_mse_backprop", action="store_true", default=False
+        )
         parser.add_argument("--graph_decoder_ckpt", type=str, default=None)
         parser.add_argument("--coeff_recon_loss", type=float, default=0.2)
         return parent_parser
