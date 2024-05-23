@@ -13,7 +13,7 @@ from lavis.common.optims import (
 import json
 import torch.distributed as dist
 from peft import LoraConfig, TaskType
-from model.help_funcs import caption_evaluate, AttrDict, classification_evaluate
+from model.help_funcs import task_specifically_evaluate, AttrDict
 from transformers import Adafactor
 import ast
 
@@ -52,7 +52,7 @@ def get_module_state_dict(state_dict, module_name):
 
 
 # peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
-class Blip2Stage2(pl.LightningModule):
+class Blip2Stage3(pl.LightningModule):
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         # checkpoint.pop('optimizer_states')
         to_be_removed = []
@@ -209,42 +209,73 @@ class Blip2Stage2(pl.LightningModule):
     def on_test_epoch_end(self):
         list_predictions = self.list_predictions
         list_targets = self.list_targets
+        list_tasks = self.list_tasks
+        list_logits = self.list_logits
+
         predictions = [i for ii in list_predictions for i in ii]
         targets = [i for ii in list_targets for i in ii]
+        tasks = [i for ii in list_tasks for i in ii]
+        logits = [i for ii in list_logits for i in ii]
 
         all_predictions = [None for _ in range(self.trainer.world_size)]
         all_targets = [None for _ in range(self.trainer.world_size)]
+        all_tasks = [None for _ in range(self.trainer.world_size)]
+        all_logits = [None for _ in range(self.trainer.world_size)]
 
         if self.num_devices > 1:
             dist.all_gather_object(all_predictions, predictions)
             dist.all_gather_object(all_targets, targets)
+            dist.all_gather_object(all_tasks, tasks)
+            dist.all_gather_object(all_logits, logits)
+        else:
+            all_predictions[0] = predictions
+            all_targets[0] = targets
+            all_tasks[0] = tasks
+            all_logits[0] = logits
+
         if self.global_rank == 0:
             all_predictions = [i for ii in all_predictions for i in ii]
             all_targets = [i for ii in all_targets for i in ii]
-            self.save_predictions(all_predictions, all_targets)
-            # fixme: I am not sure if the max length is the same as previous experiments
-            evaluation_metrics = caption_evaluate(
-                all_predictions, all_targets, self.tokenizer, self.max_len * 2
+            all_tasks = [i for ii in all_tasks for i in ii]
+            all_logits = [i for ii in all_logits for i in ii]
+
+            self.save_predictions(all_predictions, all_targets, all_tasks)
+
+            evaluation_metrics = task_specifically_evaluate(
+                all_predictions=all_predictions,
+                all_targets=all_targets,
+                all_tasks=all_tasks,
+                all_logits=all_logits,
+                tokenizer=self.blip2opt.opt_tokenizer,
+                text_trunc_length=self.max_len * 2,
             )
+
             for k in evaluation_metrics:
                 self.log(k, evaluation_metrics[k], sync_dist=False)
 
-    def save_predictions(self, predictions, targets):
+    def save_predictions(self, predictions, targets, tasks):
         assert len(predictions) == len(targets)
+        assert len(predictions) == len(tasks)
         with open(
             os.path.join(self.logger.log_dir, "predictions.txt"), "w", encoding="utf8"
         ) as f:
-            for p, t in zip(predictions, targets):
-                line = {"prediction": p, "target": t}
+            for i in range(len(predictions)):
+                line = {
+                    "prediction": predictions[i],
+                    "target": targets[i],
+                    "task": tasks[i],
+                }
                 f.write(json.dumps(line, ensure_ascii=True) + "\n")
 
     def on_test_epoch_start(self) -> None:
         self.list_predictions = []
         self.list_targets = []
+        self.list_tasks = []
+        self.list_logits = []
 
     @torch.no_grad()
     def test_step(self, batch, batch_idx):
-        graphs, prompt_tokens, texts = batch
+        graphs, prompt_tokens, texts, tasks = batch
         ##============== Captioning Results ===================##
         samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
         outputs = self.blip2opt.generate(
@@ -254,13 +285,16 @@ class Blip2Stage2(pl.LightningModule):
             max_length=self.max_len,
             min_length=self.min_len,
         )
-        self.list_predictions.append(outputs.prediction)
+        self.list_predictions.append(outputs.predictions)
         self.list_targets.append(texts)
+        self.list_tasks.append(tasks)
+        self.list_logits.append(outputs.logits)
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, dataloader_idx):
         if dataloader_idx == 0:
-            _, _, text_tokens = batch
+            _, _, text_tokens, tasks = batch
+            batch = batch[:-1]
             batch_size = text_tokens.input_ids.shape[0]
             loss = self.blip2opt(batch)
             ##============== Overall Loss ===================##
@@ -275,7 +309,7 @@ class Blip2Stage2(pl.LightningModule):
         elif dataloader_idx == 1:
             if (self.current_epoch + 1) % self.caption_eval_epoch != 0:
                 return
-            graphs, prompt_tokens, texts = batch
+            graphs, prompt_tokens, texts, tasks = batch
             ##============== Captioning Results ===================##
             samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
             outputs = self.blip2opt.generate(
@@ -287,8 +321,11 @@ class Blip2Stage2(pl.LightningModule):
             )
             self.list_predictions.append(outputs.predictions)
             self.list_targets.append(texts)
+            self.list_tasks.append(tasks)
+            self.list_logits.append(outputs.logits)
+
         elif dataloader_idx == 2:
-            reaction_tokens, _, _ = batch
+            reaction_tokens, _, _, tasks = batch
             batch_size = reaction_tokens.input_ids.shape[0]
             loss = self.blip2opt.forward_reaction(batch)
             ##============== Overall Loss ===================##
@@ -305,6 +342,8 @@ class Blip2Stage2(pl.LightningModule):
     def on_validation_epoch_start(self) -> None:
         self.list_predictions = []
         self.list_targets = []
+        self.list_tasks = []
+        self.list_logits = []
 
     def on_validation_epoch_end(self) -> None:
         # def validation_epoch_end(self, outputs):
@@ -314,22 +353,45 @@ class Blip2Stage2(pl.LightningModule):
         # list_predictions, list_targets = zip(*caption_outputs)
         list_predictions = self.list_predictions
         list_targets = self.list_targets
+        list_tasks = self.list_tasks
+        list_logits = self.list_logits
+
         predictions = [i for ii in list_predictions for i in ii]
         targets = [i for ii in list_targets for i in ii]
+        tasks = [i for ii in list_tasks for i in ii]
+        logits = [i for ii in list_logits for i in ii]
 
         all_predictions = [None for _ in range(self.trainer.world_size)]
         all_targets = [None for _ in range(self.trainer.world_size)]
+        all_tasks = [None for _ in range(self.trainer.world_size)]
+        all_logits = [None for _ in range(self.trainer.world_size)]
+
         if self.num_devices > 1:
             dist.all_gather_object(all_predictions, predictions)
             dist.all_gather_object(all_targets, targets)
+            dist.all_gather_object(all_tasks, tasks)
+            dist.all_gather_object(all_logits, logits)
+        else:
+            all_predictions[0] = predictions
+            all_targets[0] = targets
+            all_tasks[0] = tasks
+            all_logits[0] = logits
 
         if self.global_rank == 0:
             all_predictions = [i for ii in all_predictions for i in ii]
             all_targets = [i for ii in all_targets for i in ii]
-            self.save_predictions(all_predictions, all_targets)
-            # fixme: I am not sure if the max length is the same as previous experiments
-            evaluation_metrics = caption_evaluate(
-                all_predictions, all_targets, self.tokenizer, self.max_len * 2
+            all_tasks = [i for ii in all_tasks for i in ii]
+            all_logits = [i for ii in all_logits for i in ii]
+
+            self.save_predictions(all_predictions, all_targets, all_tasks)
+
+            evaluation_metrics = task_specifically_evaluate(
+                all_predictions=all_predictions,
+                all_targets=all_targets,
+                all_tasks=all_tasks,
+                all_logits=all_logits,
+                tokenizer=self.blip2opt.tokenizer,
+                text_trunc_length=self.max_len * 2,
             )
             for k in evaluation_metrics:
                 self.log(k, evaluation_metrics[k], sync_dist=False)
@@ -366,8 +428,10 @@ class Blip2Stage2(pl.LightningModule):
             )
             return molecule_loss + self.reaction_weight * reaction_loss
         else:
-            batch_size = batch[-1].input_ids.size(0)
+            batch_size = batch[-2].input_ids.size(0)
             ##============== Overall Loss ===================##
+            if len(batch) == 4:
+                batch = batch[:-1]
             loss = self.blip2opt(batch)
             self.log(
                 "lr",

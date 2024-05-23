@@ -195,6 +195,13 @@ class Blip2OPT(Blip2Base):
         )
         self.opt_tokenizer.add_special_tokens({"pad_token": "<pad>"})
         self.opt_tokenizer.add_tokens("<mol>")  # molecule placeholder
+
+        # added tokens for answer type, which is used for instruction tuning
+        self.opt_tokenizer.add_tokens("<BOOLEAN>")
+        self.opt_tokenizer.add_tokens("</BOOLEAN>")
+        self.opt_tokenizer.add_tokens("<FLOAT>")
+        self.opt_tokenizer.add_tokens("</FLOAT>")
+
         self.mol_token = "<mol>"
         self.opt_tokenizer.mol_token_id = self.opt_tokenizer(
             "<mol>", add_special_tokens=False
@@ -594,12 +601,33 @@ class Blip2OPT(Blip2Base):
             repetition_penalty=repetition_penalty,
             length_penalty=length_penalty,
             num_return_sequences=num_captions,
-            # use_cache=False,
+            output_scores=True,
+            output_logits=True,
+            return_dict_in_generate=True,
         )
-        output_text = self.opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        # TODO solve the minor discrepancy between logits decoded and output sequence decoded
+        scores = outputs.scores
+        batch_size, sequence_length = outputs.sequences.shape
+        # stack logtis
+        logits_stacked = torch.zeros(
+            batch_size,
+            0,
+            self.opt_model.config.vocab_size,
+            device=outputs.logits[0].device,
+        )
+        for i in range(sequence_length):
+            logits = outputs.logits[i].unsqueeze(1)
+            logits_stacked = torch.cat([logits_stacked, logits], dim=1)
+
+        outputs.logits = logits_stacked
+        output_text = self.opt_tokenizer.batch_decode(
+            outputs.sequences, skip_special_tokens=True
+        )
 
         output_text = [text.strip() for text in output_text]
-        return output_text
+        outputs.predictions = output_text
+        return outputs
 
     @torch.no_grad()
     def blip_qa(
