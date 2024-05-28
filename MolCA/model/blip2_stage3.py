@@ -531,6 +531,6 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--coeff_recon_loss", type=float, default=0.2)
 
         parser.add_argument("--used_gnn_layer", type=int, default=-1)
-        parser.add_argument("--gnn_jk", type=str, default="last")
+        parser.add_argument("--gnn_jk", type=str, default="layer")
         parser.add_argument("--num_random_query_embedding", type=int, default=0)
         return parent_parser

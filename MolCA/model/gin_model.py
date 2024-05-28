@@ -320,18 +320,18 @@ class GNN(torch.nn.Module):
             h_list.append(h)
 
         ## Different implementations of Jk-concat
-        if self.args.used_gnn_layer > -1:
-            node_representation = h_list[self.args.used_gnn_layer]
         if self.JK == "concat":
             node_representation = torch.cat(h_list, dim=1)
-        elif self.JK == "last":
-            node_representation = h_list[-1]
+        elif self.JK == "layer":
+            node_representation = h_list[self.args.used_gnn_layer]
         elif self.JK == "max":
             h_list = [h.unsqueeze_(0) for h in h_list]
             node_representation = torch.max(torch.cat(h_list, dim=0), dim=0)[0]
         elif self.JK == "sum":
             h_list = [h.unsqueeze_(0) for h in h_list]
             node_representation = torch.sum(torch.cat(h_list, dim=0), dim=0)[0]
+        else:
+            raise ValueError("Invalid graph pooling type.")
 
         h_graph = self.pool(node_representation, batch)  # shape = [B, D]
         batch_node, batch_mask = to_dense_batch(
