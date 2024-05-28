@@ -251,11 +251,14 @@ class GNN(torch.nn.Module):
 
     """
 
-    def __init__(self, num_layer, emb_dim, JK="last", drop_ratio=0, gnn_type="gin"):
+    def __init__(
+        self, num_layer, emb_dim, JK="last", drop_ratio=0, gnn_type="gin", args=None
+    ):
         super(GNN, self).__init__()
         self.num_layer = num_layer
         self.drop_ratio = drop_ratio
         self.JK = JK
+        self.args = args
 
         if self.num_layer < 2:
             raise ValueError("Number of GNN layers must be greater than 1.")
@@ -317,6 +320,8 @@ class GNN(torch.nn.Module):
             h_list.append(h)
 
         ## Different implementations of Jk-concat
+        if self.args.used_gnn_layer > -1:
+            node_representation = h_list[self.args.used_gnn_layer]
         if self.JK == "concat":
             node_representation = torch.cat(h_list, dim=1)
         elif self.JK == "last":

@@ -67,13 +67,14 @@ class Blip2Base(BaseModel):
         return Qformer, query_tokens
 
     @classmethod
-    def init_graph_encoder(cls, gin_num_layers, gin_hidden_dim, gin_drop_ratio):
+    def init_graph_encoder(cls, gin_num_layers, gin_hidden_dim, gin_drop_ratio, args):
         graph_encoder = GNN(
             num_layer=gin_num_layers,
             emb_dim=gin_hidden_dim,
             gnn_type="gin",
             drop_ratio=gin_drop_ratio,
-            JK="last",
+            JK=args.gnn_jk,
+            args=args,
         )
         ckpt = torch.load(
             "MolCA/gin_pretrained/graphcl_80.pth", map_location=torch.device("cpu")
