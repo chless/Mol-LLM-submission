@@ -260,7 +260,24 @@ class Stage3DM(LightningDataModule):
         os.makedirs(base_path, exist_ok=True)
         # load tox21 dataset using deepchem
 
-        tasks, datasets, transformers = dc.molnet.load_tox21(
+        if root == "bace":
+            loading_fn = dc.molnet.load_bace_classification  # 1 task
+        elif root == "bbbp":
+            loading_fn = dc.molnet.load_bbbp  # 1 task
+        elif root == "clintox":
+            loading_fn = dc.molnet.load_clintox  # 2 tasks
+        elif root == "toxcast":
+            loading_fn = dc.molnet.load_toxcast  # 617
+        elif root == "sider":
+            loading_fn = dc.molnet.load_sider  # 27 tasks
+        elif root == "tox21":
+            loading_fn = dc.molnet.load_tox21  # 12 tasks
+        elif root == "qm9":  # 12 tasks
+            loading_fn = dc.molnet.load_qm9
+        else:
+            raise NotImplementedError
+
+        tasks, datasets, transformers = loading_fn(
             featurizer="Raw",
             splitter="scaffold",
             save_dir=base_path,
