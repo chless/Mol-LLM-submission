@@ -169,14 +169,14 @@ def group_task_specific_evaluation(all_predictions, all_targets, all_tasks, all_
 
 
 def task_specifically_evaluate(
-    all_predictions, all_targets, all_tasks, all_logits, tokenizer, text_trunc_length
+    all_predictions, all_targets, all_tasks, all_probs, tokenizer, text_trunc_length
 ):
     # TODO figure why is this tuple
     if isinstance(tokenizer, tuple):
         tokenizer = tokenizer[0]
 
-    predictions, targets, tasks, logits = group_task_specific_evaluation(
-        all_predictions, all_targets, all_tasks, all_logits
+    predictions, targets, tasks, probs = group_task_specific_evaluation(
+        all_predictions, all_targets, all_tasks, all_probs
     )
 
     evaluation_metrics = dict()
@@ -185,7 +185,7 @@ def task_specifically_evaluate(
         classification_metrics = classification_evaluate(
             predictions=predictions["classification"],
             targets=targets["classification"],
-            logits=logits["classification"],
+            probs=probs["classification"],
             tasks=tasks["classification"],
             tokenizer=tokenizer,
             text_trunc_length=text_trunc_length,
@@ -202,6 +202,8 @@ def task_specifically_evaluate(
         )
         evaluation_metrics.update(captioning_metrics)
 
+    # TODO add regression evaluation
+
     return evaluation_metrics
 
 
@@ -214,32 +216,35 @@ from sklearn.metrics import (
 )
 
 
-def classification_evaluate(
-    predictions, targets, logits, tasks, tokenizer, text_trunc_length
-):
+def convert_logit2binary_prob(logits, tokenizer):
     true_token_id = tokenizer.convert_tokens_to_ids(["true"])[0]
     True_token_id = tokenizer.convert_tokens_to_ids(["True"])[0]
     false_token_id = tokenizer.convert_tokens_to_ids(["false"])[0]
     False_token_id = tokenizer.convert_tokens_to_ids(["False"])[0]
 
-    total_probs = torch.zeros(len(predictions), 2)
-    total_labels = torch.zeros(len(predictions), dtype=torch.long)
-
-    for i in range(len(predictions)):
-        probs = logits[i].softmax(dim=-1)
-        # answer form: <dtype>True</dtype> or <dtype>False</dtype>
-
+    total_probs = torch.zeros(len(logits), 2)
+    for i, logit in enumerate(logits):
+        probs = logit.softmax(dim=-1)
         true_prob = probs[1, true_token_id] + probs[1, True_token_id]
         false_prob = probs[1, false_token_id] + probs[1, False_token_id]
-        # normalize the true_prob, false_prob by softmax
         total_probs[i] = torch.cat(
             [false_prob.unsqueeze(0), true_prob.unsqueeze(0)], dim=0
         ).softmax(-1)
+    return total_probs
 
-        target = targets[i]
-        label = int("True" in target or "true" in target)
+
+def classification_evaluate(
+    predictions, targets, probs, tasks, tokenizer, text_trunc_length
+):
+
+    total_labels = torch.zeros(len(predictions), dtype=torch.long)
+
+    for i in range(len(predictions)):
+        label = int("True" in targets[i] or "true" in targets[i])
         total_labels[i] = label
 
+    probs_unsqueezed = [p.unsqueeze(0) for p in probs]
+    total_probs = torch.cat(probs_unsqueezed, dim=0)
     total_preds = total_probs.argmax(dim=-1)
 
     # Convert tensors to numpy arrays for use with scikit-learn metrics

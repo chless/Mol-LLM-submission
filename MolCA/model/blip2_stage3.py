@@ -13,7 +13,11 @@ from lavis.common.optims import (
 import json
 import torch.distributed as dist
 from peft import LoraConfig, TaskType
-from model.help_funcs import task_specifically_evaluate, AttrDict
+from model.help_funcs import (
+    task_specifically_evaluate,
+    AttrDict,
+    convert_logit2binary_prob,
+)
 from transformers import Adafactor
 import ast
 
@@ -210,34 +214,34 @@ class Blip2Stage3(pl.LightningModule):
         list_predictions = self.list_predictions
         list_targets = self.list_targets
         list_tasks = self.list_tasks
-        list_logits = self.list_logits
+        list_probs = self.list_probs
 
         predictions = [i for ii in list_predictions for i in ii]
         targets = [i for ii in list_targets for i in ii]
         tasks = [i for ii in list_tasks for i in ii]
-        logits = [i for ii in list_logits for i in ii]
+        probs = [i for ii in list_probs for i in ii]
 
         all_predictions = [None for _ in range(self.trainer.world_size)]
         all_targets = [None for _ in range(self.trainer.world_size)]
         all_tasks = [None for _ in range(self.trainer.world_size)]
-        all_logits = [None for _ in range(self.trainer.world_size)]
+        all_probs = [None for _ in range(self.trainer.world_size)]
 
         if self.num_devices > 1:
             dist.all_gather_object(all_predictions, predictions)
             dist.all_gather_object(all_targets, targets)
             dist.all_gather_object(all_tasks, tasks)
-            dist.all_gather_object(all_logits, logits)
+            dist.all_gather_object(all_probs, probs)
         else:
             all_predictions[0] = predictions
             all_targets[0] = targets
             all_tasks[0] = tasks
-            all_logits[0] = logits
+            all_probs[0] = probs
 
         if self.global_rank == 0:
             all_predictions = [i for ii in all_predictions for i in ii]
             all_targets = [i for ii in all_targets for i in ii]
             all_tasks = [i for ii in all_tasks for i in ii]
-            all_logits = [i for ii in all_logits for i in ii]
+            all_probs = [i for ii in all_probs for i in ii]
 
             self.save_predictions(all_predictions, all_targets, all_tasks)
 
@@ -245,13 +249,13 @@ class Blip2Stage3(pl.LightningModule):
                 all_predictions=all_predictions,
                 all_targets=all_targets,
                 all_tasks=all_tasks,
-                all_logits=all_logits,
+                all_probs=all_probs,
                 tokenizer=self.blip2opt.opt_tokenizer,
                 text_trunc_length=self.max_len * 2,
             )
 
             for k in evaluation_metrics:
-                self.log(k, evaluation_metrics[k], sync_dist=False)
+                self.log("test_" + k, evaluation_metrics[k], sync_dist=False)
 
     def save_predictions(self, predictions, targets, tasks):
         assert len(predictions) == len(targets)
@@ -271,7 +275,7 @@ class Blip2Stage3(pl.LightningModule):
         self.list_predictions = []
         self.list_targets = []
         self.list_tasks = []
-        self.list_logits = []
+        self.list_probs = []
 
     @torch.no_grad()
     def test_step(self, batch, batch_idx):
@@ -288,7 +292,8 @@ class Blip2Stage3(pl.LightningModule):
         self.list_predictions.append(outputs.predictions)
         self.list_targets.append(texts)
         self.list_tasks.append(tasks)
-        self.list_logits.append(outputs.logits)
+        probs = convert_logit2binary_prob(outputs.logits, self.blip2opt.opt_tokenizer)
+        self.list_probs.append(probs)
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, dataloader_idx):
@@ -322,7 +327,10 @@ class Blip2Stage3(pl.LightningModule):
             self.list_predictions.append(outputs.predictions)
             self.list_targets.append(texts)
             self.list_tasks.append(tasks)
-            self.list_logits.append(outputs.logits)
+            probs = convert_logit2binary_prob(
+                outputs.logits, self.blip2opt.opt_tokenizer
+            )
+            self.list_probs.append(probs)
 
         elif dataloader_idx == 2:
             reaction_tokens, _, _, tasks = batch
@@ -343,58 +351,54 @@ class Blip2Stage3(pl.LightningModule):
         self.list_predictions = []
         self.list_targets = []
         self.list_tasks = []
-        self.list_logits = []
+        self.list_probs = []
 
     def on_validation_epoch_end(self) -> None:
-        # def validation_epoch_end(self, outputs):
         if (self.current_epoch + 1) % self.caption_eval_epoch != 0:
             return
-        # caption_outputs = outputs[1]
-        # list_predictions, list_targets = zip(*caption_outputs)
         list_predictions = self.list_predictions
         list_targets = self.list_targets
         list_tasks = self.list_tasks
-        list_logits = self.list_logits
+        list_probs = self.list_probs
 
         predictions = [i for ii in list_predictions for i in ii]
         targets = [i for ii in list_targets for i in ii]
         tasks = [i for ii in list_tasks for i in ii]
-        logits = [i for ii in list_logits for i in ii]
+        probs = [i for ii in list_probs for i in ii]
 
         all_predictions = [None for _ in range(self.trainer.world_size)]
         all_targets = [None for _ in range(self.trainer.world_size)]
         all_tasks = [None for _ in range(self.trainer.world_size)]
-        all_logits = [None for _ in range(self.trainer.world_size)]
+        all_probs = [None for _ in range(self.trainer.world_size)]
 
         if self.num_devices > 1:
             dist.all_gather_object(all_predictions, predictions)
             dist.all_gather_object(all_targets, targets)
             dist.all_gather_object(all_tasks, tasks)
-            dist.all_gather_object(all_logits, logits)
+            dist.all_gather_object(all_probs, probs)
         else:
             all_predictions[0] = predictions
             all_targets[0] = targets
             all_tasks[0] = tasks
-            all_logits[0] = logits
+            all_probs[0] = probs
 
         if self.global_rank == 0:
             all_predictions = [i for ii in all_predictions for i in ii]
             all_targets = [i for ii in all_targets for i in ii]
             all_tasks = [i for ii in all_tasks for i in ii]
-            all_logits = [i for ii in all_logits for i in ii]
-
+            all_probs = [i for ii in all_probs for i in ii]
             self.save_predictions(all_predictions, all_targets, all_tasks)
 
             evaluation_metrics = task_specifically_evaluate(
                 all_predictions=all_predictions,
                 all_targets=all_targets,
                 all_tasks=all_tasks,
-                all_logits=all_logits,
-                tokenizer=self.blip2opt.tokenizer,
+                all_probs=all_probs,
+                tokenizer=self.blip2opt.opt_tokenizer,
                 text_trunc_length=self.max_len * 2,
             )
             for k in evaluation_metrics:
-                self.log(k, evaluation_metrics[k], sync_dist=False)
+                self.log("validation_" + k, evaluation_metrics[k], sync_dist=False)
 
     def training_step(self, batch, batch_idx):
         if self.scheduler:
@@ -525,4 +529,8 @@ class Blip2Stage3(pl.LightningModule):
         )
         parser.add_argument("--graph_decoder_ckpt", type=str, default=None)
         parser.add_argument("--coeff_recon_loss", type=float, default=0.2)
+
+        parser.add_argument("--used_gnn_layer", type=int, default=-1)
+        parser.add_argument("--gnn_jk", type=str, default="last")
+        parser.add_argument("--num_random_query_embedding", type=int, default=0)
         return parent_parser
