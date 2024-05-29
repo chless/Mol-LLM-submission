@@ -176,18 +176,25 @@ class InferenceCollater:
         return graphs, smiles_prompt_tokens, texts, tasks
 
 
+# binary classification
 PROPERTY_CLASSIFICATION_BENCHMARKS = [
-    "bace",
-    "bbbp",
-    "clintox",
-    "toxcast",
-    "sider",
-    "tox21",  # molca
-    "hiv",
-    "pcba",
-    "muv",
-    "chembl",
+    "bace",  # 1 task # molca, biot5+, instructmol
+    "bbbp",  # 1 task # molca, biot5+, instructmol, llasmol
+    "clintox",  # 2 tasks # molca, biot5+, llasmol
+    "toxcast",  # 617 # molca
+    "sider",  # 27 # molca, llasmol
+    "tox21",  # 12 tasks # molca
+    "hiv",  # 1 tasks # biot5+, instructmol, llasmol
 ]
+PROPERTY_REGRESSION_BENCHMARKS = [
+    "qm9",  # 12 tasks #biot5+, instructmol (homo:2, lumo:3, homo-lumo gap:4)
+    "esol",  # 1 task # llasmol
+    "lipophilicity",  # 1 task # llasmol
+]
+
+CAPTIONING_BENCHMARKS = ["pubchem324k"]
+
+INSTRUCTION_TEMPLATE = "\n Given a molecule from the {dataset_name} dataset, you are predicting whether the molecule has the {task_name} property. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
 
 
 class Stage3DM(LightningDataModule):
@@ -211,7 +218,7 @@ class Stage3DM(LightningDataModule):
         self.prompt = args.prompt
         self.graph_only = args.graph_only
 
-        if root in PROPERTY_CLASSIFICATION_BENCHMARKS:
+        if root in PROPERTY_CLASSIFICATION_BENCHMARKS + PROPERTY_REGRESSION_BENCHMARKS:
             self.tasks, self.train_data, self.val_data, self.test_data = (
                 self.get_dataset_from_deepchem(root)
             )
@@ -262,18 +269,13 @@ class Stage3DM(LightningDataModule):
 
         if root == "bace":
             loading_fn = dc.molnet.load_bace_classification  # 1 task
-        elif root == "bbbp":
-            loading_fn = dc.molnet.load_bbbp  # 1 task
-        elif root == "clintox":
-            loading_fn = dc.molnet.load_clintox  # 2 tasks
-        elif root == "toxcast":
-            loading_fn = dc.molnet.load_toxcast  # 617
-        elif root == "sider":
-            loading_fn = dc.molnet.load_sider  # 27 tasks
-        elif root == "tox21":
-            loading_fn = dc.molnet.load_tox21  # 12 tasks
-        elif root == "qm9":  # 12 tasks
-            loading_fn = dc.molnet.load_qm9
+        elif (
+            root
+            in PROPERTY_CLASSIFICATION_BENCHMARKS
+            + PROPERTY_REGRESSION_BENCHMARKS
+            + CAPTIONING_BENCHMARKS
+        ):
+            loading_fn = getattr(dc.molnet, f"load_{root}")
         else:
             raise NotImplementedError
 
@@ -417,20 +419,28 @@ class Stage3DM(LightningDataModule):
 from tqdm import tqdm
 from rdkit import Chem
 
+BOOL_TOKENS = ["<BOOLEAN>", "</BOOLEAN>"]
+FLOAT_TOKENS = ["<FLOAT>", "</FLOAT>"]
+
 
 class MoleculeNetDatasetDeepChem(Dataset):
     def __init__(self, data, tasks, subtask_idx=0, prompt=None, debug=False):
         self.mol_list = data.X
         self.label_list = data.y[:, subtask_idx]
         self.tasks_list = tasks
+        self.root = tasks[0].split("/")[0]
         self.task = tasks[subtask_idx]
         if debug:
             self.mol_list = self.mol_list[:100]
             self.label_list = self.label_list[:100]
         self.prompt = prompt
         # label wrapping token
-        self.bool_token = ["<BOOLEAN>", "</BOOLEAN>"]
-        self.float_token = ["<FLOAT>", "</FLOAT>"]
+        if self.root in PROPERTY_CLASSIFICATION_BENCHMARKS:
+            self.label_tokens = BOOL_TOKENS
+        elif self.root in PROPERTY_REGRESSION_BENCHMARKS:
+            self.label_tokens = FLOAT_TOKENS
+        else:
+            raise NotImplementedError
 
         if not prompt:
             self.prompt = (
@@ -447,13 +457,21 @@ class MoleculeNetDatasetDeepChem(Dataset):
     def __len__(self):
         return len(self.smiles_list)
 
+    def wrap_label(self, label):
+        if self.root in PROPERTY_CLASSIFICATION_BENCHMARKS:
+            if label:
+                return self.label_tokens[0] + "True" + self.label_tokens[1]
+            else:
+                return self.label_tokens[0] + "False" + self.label_tokens[1]
+        elif self.root in PROPERTY_REGRESSION_BENCHMARKS:
+            return self.label_tokens[0] + str(label) + self.label_tokens[1]
+        else:
+            raise NotImplementedError
+
     def __getitem__(self, index):
         smiles = self.smiles_list[index]
         label = self.label_list[index]
-        if label:
-            label = self.bool_token[0] + "True" + self.bool_token[1]
-        else:
-            label = self.bool_token[0] + "False" + self.bool_token[1]
+        label = self.wrap_label(label)
         graph = smiles2data(smiles)
 
         if self.prompt.find("{}") >= 0:
@@ -467,7 +485,11 @@ class MoleculeNetDatasetDeepChem(Dataset):
 
     def get_instruction_for_task(self, task):
         dataset_name, task_name = task.split("/")
-        instruction = f"\n Given a molecule from the {dataset_name} dataset, you are predicting whether the molecule has the {task_name} property. The answer should be in the form {self.bool_token[0]}True{self.bool_token[1]} or {self.bool_token[0]}False{self.bool_token[1]}."
+        instruction = INSTRUCTION_TEMPLATE.format(
+            dataset_name=dataset_name,
+            task_name=task_name,
+            label_tokens=self.label_tokens,
+        )
         return instruction
 
     def convert_selfies2smiles(self, selfies):
