@@ -4,6 +4,13 @@ from rouge_score import rouge_scorer
 from tqdm import tqdm
 import numpy as np
 import torch
+from data_provider.stage3_dm import (
+    PROPERTY_CLASSIFICATION_BENCHMARKS,
+    PROPERTY_REGRESSION_BENCHMARKS,
+    CAPTIONING_BENCHMARKS,
+    FLOAT_TOKENS,
+)
+import ast
 
 
 def caption_evaluate(predictions, targets, tokenizer, tasks, text_trunc_length):
@@ -110,22 +117,6 @@ def pad_and_concat(tensor_list, fill_value=0):
     raise NotImplementedError()
 
 
-PROPERTY_CLASSIFICATION_BENCHMARKS = [
-    "bace",
-    "bbbp",
-    "clintox",
-    "toxcast",
-    "sider",
-    "tox21",  # molca
-    "hiv",
-    "pcba",
-    "muv",
-    "chembl",
-]
-PROPERTY_REGRESSION_BENCHMARKS = ["qm9", "esol", "freesolv", "lipophilicity", "pdbbind"]
-CAPTIONING_BENCHMARKS = ["pubchem324k"]
-
-
 def group_task_specific_evaluation(all_predictions, all_targets, all_tasks, all_logits):
     # retrieve indice of each task, finding tasks in the all_tasks are in PROPERTY_CLASSIFICATION_BENCHMARKS or PROPERTY_REGRESSION_BENCHMARKS
     regression_idxs = []
@@ -171,9 +162,6 @@ def group_task_specific_evaluation(all_predictions, all_targets, all_tasks, all_
 def task_specifically_evaluate(
     all_predictions, all_targets, all_tasks, all_probs, tokenizer, text_trunc_length
 ):
-    # TODO figure why is this tuple
-    if isinstance(tokenizer, tuple):
-        tokenizer = tokenizer[0]
 
     predictions, targets, tasks, probs = group_task_specific_evaluation(
         all_predictions, all_targets, all_tasks, all_probs
@@ -202,6 +190,16 @@ def task_specifically_evaluate(
         )
         evaluation_metrics.update(captioning_metrics)
 
+    if len(predictions["regression"]) > 0:
+        regression_metrics = regression_evaluate(
+            predictions=predictions["regression"],
+            targets=targets["regression"],
+            tasks=tasks["regression"],
+            tokenizer=tokenizer,
+            text_trunc_length=text_trunc_length,
+        )
+        evaluation_metrics.update(regression_metrics)
+
     # TODO add regression evaluation
 
     return evaluation_metrics
@@ -225,8 +223,10 @@ def convert_logit2binary_prob(logits, tokenizer):
     total_probs = torch.zeros(len(logits), 2)
     for i, logit in enumerate(logits):
         probs = logit.softmax(dim=-1)
+        # in generated answer, 0 th token is <BOOLEAN> and 1 is the prediction, and 2 is </BOOLEAN>
         true_prob = probs[1, true_token_id] + probs[1, True_token_id]
         false_prob = probs[1, false_token_id] + probs[1, False_token_id]
+        # normalize the probability for binary answer
         total_probs[i] = torch.cat(
             [false_prob.unsqueeze(0), true_prob.unsqueeze(0)], dim=0
         ).softmax(-1)
@@ -271,4 +271,28 @@ def classification_evaluate(
         "recall": rec,
         "roc_auc": roc_auc,
     }
+    return evaluation_metrics
+
+
+def regression_evaluate(predictions, targets, tasks, tokenizer, text_trunc_length):
+
+    total_labels = torch.zeros(len(predictions), dtype=torch.float32)
+    total_predictions = torch.zeros(len(predictions), dtype=torch.float32)
+    for i in range(len(predictions)):
+        label = ast.literal_eval(
+            targets[i].replace(FLOAT_TOKENS[0], "").replace(FLOAT_TOKENS[1], "")
+        )
+        total_labels[i] = label
+        prediction = (
+            predictions[i].replace(FLOAT_TOKENS[0], "").replace(FLOAT_TOKENS[1], "")
+        )
+        try:
+            prediction = float(prediction)
+        except:
+            prediction = 0.0
+        total_predictions[i] = prediction
+
+    # Calculate mae
+    mae = torch.mean(torch.abs(total_labels - total_predictions)).item()
+    evaluation_metrics = {"mae": mae}
     return evaluation_metrics
