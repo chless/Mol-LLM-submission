@@ -292,7 +292,14 @@ def regression_evaluate(predictions, targets, tasks, tokenizer, text_trunc_lengt
             prediction = 0.0
         total_predictions[i] = prediction
 
-    # Calculate mae
+    # Calculate regression metrics
     mae = torch.mean(torch.abs(total_labels - total_predictions)).item()
-    evaluation_metrics = {"mae": mae}
+    mse = torch.mean((total_labels - total_predictions) ** 2).item()
+    rmse = torch.sqrt(mse).item()
+
+    evaluation_metrics = {
+        "mae": mae,
+        "mse": mse,
+        "rmse": rmse,
+    }
     return evaluation_metrics
