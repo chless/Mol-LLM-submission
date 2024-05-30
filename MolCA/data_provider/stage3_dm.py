@@ -189,7 +189,7 @@ PROPERTY_CLASSIFICATION_BENCHMARKS = [
 PROPERTY_REGRESSION_BENCHMARKS = [
     "qm9",  # 12 tasks #biot5+, instructmol (homo:2, lumo:3, homo-lumo gap:4)
     "esol",  # 1 task # llasmol
-    "lipophilicity",  # 1 task # llasmol
+    "lipo",  # 1 task # llasmol
 ]
 
 CAPTIONING_BENCHMARKS = ["pubchem324k"]
@@ -268,7 +268,9 @@ class Stage3DM(LightningDataModule):
         # load tox21 dataset using deepchem
 
         if root == "bace":
-            loading_fn = dc.molnet.load_bace_classification  # 1 task
+            loading_fn = dc.molnet.load_bace_classification
+        elif root == "esol":
+            loading_fn = dc.molnet.load_delaney
         elif (
             root
             in PROPERTY_CLASSIFICATION_BENCHMARKS
