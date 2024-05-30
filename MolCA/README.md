@@ -2,29 +2,6 @@
 
 Codes of our EMNLP2023 paper. [[Paper Link](https://arxiv.org/abs/2310.12798)], [[Website](https://acharkq.github.io/MolCA/)], [[Demo](https://8b8760bb1ba284ef54.gradio.live)]
 
-Authors: Zhiyuan Liu, Sihang Li, Yanchen Luo, Hao Fei, Yixin Cao, Kenji Kawaguchi, Xiang Wang, Tat-Seng Chua
-
-
-## Comparison to Previous Molecule-Text Modeling Methods
-
-![fig1](./figures/framework_compare.png)
-
-* <b>1D language modeling</b> methods represent molecules by their 1D Simplified Molecular Input Line Entry System (SMILES) strings and process them in a manner similar to texts, as illustrated in Figure 1a. While convenient, treating molecules as strings overlooks the molecules' 2D graph representations, which are crucial to human professionals in comprehending the molecule structures. 
-* <b>Cross-model contrastive learning</b> methods represent molecules as graphs and use a Graph Neural Network as the molecular graph encoder. The graph encoder is trained jointly with an LM through cross-modal contrastive learning, as illustrated in Figure 1b. However, the application scope of cross-modal contrastive learning is limited: it is suitable for retrieval tasks, but is insufficient for open-ended molecule-to-text generation tasks, such as molecule captioning and molecule's IUPAC name prediction. This is because molecule-to-text generation is a conditional generation task. It requires the LM to understand 2D graphs as the generation conditions, which contrastive learning cannot achieve. 
-* <b>MolCA</b> enables the LM to understand 2D graphs as inputs, therefore effectively conditioning the molecule-to-text generation process. To enable the LM to understand 2D graphs, we identify that the key challenge is <b>cross-modal alignment</b>: translating the representations of 2D graphs into 1D soft prompts in the text space so that the LM can understand. This translation is facilitated by the cross-modal projector, bridging the gap between the graph encoder's representation space and the LM's input space, as illustrated in Figure 1c. 
-
-
-## MolCA's Training Pipeline
-
-![fig3](./static/images/stage1.jpg)
-
-* <b>Pretrain Stage 1.</b> The projector and the encoder are trained to extract the molecule features that are the most relevant to the text. This stage endows the resulting model with powerful molecule-text retrieval ability. 
-
-![fig4](./figures/stage23_cropped.png)
-
-* <b>Pretrain Stage 2 (left).</b> The cross-modal projector is connected to a frozen LM and trained for molecule captioning. This task forces the cross-modal projector to produce soft prompts that the LM can understand
-* <b>Finetune Stage (right).</b> MolCA is fine-tuned for downstream generation tasks. The example shows the prediction of a molecule's IUPAC name.
-
 ## Requirements
 
 You can create the environment for MolCA by running the following command in order:
@@ -111,3 +88,47 @@ If you use our codes or checkpoints, please cite our paper:
     url={https://openreview.net/forum?id=14WRhMNq7H}
 }
 ```
+
+# Moleculenet Experiments
+
+## Implemented benchamrks
+
+* PROPERTY_CLASSIFICATION_BENCHMARKS = [
+    "bace",  # 1 task # molca, biot5+, instructmol
+    "bbbp",  # 1 task # molca, biot5+, instructmol, llasmol
+    "clintox",  # 2 tasks # molca, biot5+, llasmol
+    "toxcast",  # 617 # molca
+    "sider",  # 27 # molca, llasmol
+    "tox21",  # 12 tasks # molca
+    "hiv",  # 1 tasks # biot5+, instructmol, llasmol
+]
+* PROPERTY_REGRESSION_BENCHMARKS = [
+    "qm9",  # 12 tasks #biot5+, instructmol (homo:2, lumo:3, homo-lumo gap:4)
+    "esol",  # 1 task # llasmol
+    "lipo",  # 1 task # llasmol
+]
+
+```
+python MolCA/stage3.py
+                "--root=qm9",
+                "--subtask_idx=0",
+                "--devices", "0",
+                "--filename=debugging",
+                "--stage2_path=MolCA/all_checkpoints/MolCA/stage2.ckpt",
+                "--opt_model=facebook/galactica-1.3b",
+                "--mode=ft",
+                "--prompt", "[START_I_SMILES]{}[END_I_SMILES].",
+                "--tune_gnn",
+                "--llm_tune=lora",
+                "--inference_batch_size=64",
+                "--val_check_interval=0.1",
+                "--max_epochs=1",
+                "--num_beam=1",
+                "--num_random_query_embedding=0",
+                "--gnn_jk=layer",
+                "--result_file=MolCA/results/molnet_task-specific_0530.csv",
+```
+
+* root: task name like qm9
+* subtask_idx: subtask idx corresponding to the task
+* result_file: a csv file to which evaluation metrics are saved
