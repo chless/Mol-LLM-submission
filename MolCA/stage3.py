@@ -145,14 +145,45 @@ def main(args):
     if args.mode in {"pretrain", "ft"}:
         trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
         # test after training
-        output = trainer.test(model, datamodule=dm)
+        # The length of the list corresponds to the number of test dataloaders used.
+        outputs = trainer.test(model, datamodule=dm)
+
     elif args.mode == "eval":
         trainer.fit_loop.epoch_progress.current.completed = args.caption_eval_epoch - 1
         trainer.validate(model, datamodule=dm)
     elif args.mode == "test":
-        output = trainer.test(model, datamodule=dm)
+        outputs = trainer.test(model, datamodule=dm)
     else:
         raise NotImplementedError()
+
+    if args.result_file is not None:
+        update_result_csv(
+            args=args, outputs=outputs, task_names=dm.train_data.get_task_names()
+        )
+
+
+def update_result_csv(args, outputs, task_names):
+    # first, read the content in result_csv file
+    import json
+
+    if os.path.exists(args.result_file):
+        results_dict = json.load(open(args.result_file, "r"))
+    else:
+        os.makedirs(os.path.dirname(args.result_file), exist_ok=True)
+        results_dict = dict()
+        results_dict[args.root] = {subtask: {} for subtask in task_names}
+
+    subtask = task_names[args.subtask_idx]
+    # TODO: extend multiple dataloader, for multi-task intruction-tuning
+    # currently, len(outputs)=1
+    for idx in range(len(outputs)):
+        output = outputs[idx]
+        for k in output.keys():
+            results_dict[args.root][subtask][k] = output[k]
+    # finally, save the updated results_dict
+    with open(args.result_file, "w") as f:
+        json.dump(results_dict, f, indent=4)
+    print(f"Updated the result file {args.result_file}")
 
 
 class SaveLoRAModelCallback(plc.Callback):
@@ -200,6 +231,7 @@ def get_args():
     parser.add_argument("--task", type=str, default=None)
     parser.add_argument("--val_check_interval", type=float, default=0.1)
     parser.add_argument("--neptune_project", type=str, default="chless/text-mol")
+    parser.add_argument("--result_file", type=str, default="MolCA/results/debug.json")
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)

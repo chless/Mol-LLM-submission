@@ -162,3 +162,5 @@ MolCA/all_checkpoints
 .neptune
 
 dataset
+
+MolCA/results
