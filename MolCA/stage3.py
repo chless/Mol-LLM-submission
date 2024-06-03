@@ -94,22 +94,24 @@ def main(args):
             args,
         )
 
+    # callbacks to save model parameters
     callbacks = []
-    # fixme save only used parameters
-    # callbacks.append(plc.ModelCheckpoint(dirpath="MolCA/all_checkpoints/"+args.filename+"/", every_n_epochs=10, save_top_k=-1))
-    callbacks.append(
-        plc.ModelCheckpoint(
-            dirpath="MolCA/all_checkpoints/" + args.filename + "/",
-            filename="{epoch:02d}",
-            every_n_epochs=args.save_every_n_epochs,
-            save_last=True,
-            save_top_k=-1,
-            save_on_train_epoch_end=True,
+    if args.not_save_model:
+        pass
+    else:
+        callbacks.append(
+            plc.ModelCheckpoint(
+                dirpath="MolCA/all_checkpoints/" + args.filename + "/",
+                filename="{epoch:02d}",
+                every_n_epochs=args.save_every_n_epochs,
+                save_last=True,
+                save_top_k=-1,
+                save_on_train_epoch_end=True,
+            )
         )
-    )
-    callbacks.append(
-        SaveLoRAModelCallback(f"MolCA/all_checkpoints/{args.filename}/lora")
-    )
+        callbacks.append(
+            SaveLoRAModelCallback(f"MolCA/all_checkpoints/{args.filename}/lora")
+        )
 
     if len(args.devices.split(",")) > 1:
         if args.strategy_name == "fsdp":
@@ -239,6 +241,7 @@ def get_args():
     parser.add_argument("--val_check_interval", type=float, default=0.1)
     parser.add_argument("--neptune_project", type=str, default="chless/text-mol")
     parser.add_argument("--result_file", type=str, default="MolCA/results/debug.json")
+    parser.add_argument("--not_save_model", action="store_true", default=False)
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)
