@@ -51,13 +51,19 @@ def smiles_handler(text, mol_ph, is_gal=True, graph_only=False):
         smiles = match.group(3)
         smiles_list.append(smiles)
 
+    # graph embedding without smiles tokens
+    # '<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
     if graph_only:
         text = CUSTOM_SEQ_RE.sub(r"%s" % (mol_ph), text)
         return text, smiles_list
+    # smiles tokens with graph embedding
+    # '[START_I_SMILES][H]N([H])C(=O)C([H])([H])[H][END_I_SMILES]<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
     if is_gal:
         text = CUSTOM_SEQ_RE.sub(r"\1\3\4%s" % (mol_ph), text)
         text = escape_custom_split_sequence(text)
         return text, smiles_list
+    # smiles tokens without graph tokens
+    # '[H]N([H])C(=O)C([H])([H])[H]<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
     else:
         text = CUSTOM_SEQ_RE.sub(r"\3%s" % (mol_ph), text)
         return text, smiles_list
@@ -195,6 +201,7 @@ PROPERTY_REGRESSION_BENCHMARKS = [
 CAPTIONING_BENCHMARKS = ["pubchem324k"]
 
 INSTRUCTION_TEMPLATE = "\n Given a molecule from the {dataset_name} dataset, you are predicting whether the molecule has the {task_name} property. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
+INSTRUCTION_TEMPLATE = "\n Given the molecule, you should predict {task_name} property of the molecule. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
 
 
 class Stage3DM(LightningDataModule):
