@@ -17,6 +17,7 @@ import deepchem as dc
 from deepchem.splits.splitters import ScaffoldSplitter
 
 # we split individual characters inside special tokens like [START_DNA]
+# TODO: change this ugly I_SMILES things to regular special token, and add the special token to vocab whichever LLM
 CUSTOM_SEQ_RE = re.compile(r"(\[START_(DNA|SMILES|I_SMILES|AMINO)])(.*?)(\[END_\2])")
 
 # token added to implement a custom sequence tokenization. This token is added at
@@ -45,7 +46,7 @@ def _insert_split_marker(m: re.Match):
     return f"{start_token}{sequence}{SPLIT_MARKER}{end_token}"
 
 
-def smiles_handler(text, mol_ph, is_gal=True, graph_only=False):
+def smiles_handler(text, mol_ph, mol_representation):
     smiles_list = []
     for match in CUSTOM_SEQ_RE.finditer(text):
         smiles = match.group(3)
@@ -53,16 +54,22 @@ def smiles_handler(text, mol_ph, is_gal=True, graph_only=False):
 
     # graph embedding without smiles tokens
     # '<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
-    if graph_only:
+    if mol_representation == "graph_only":
         text = CUSTOM_SEQ_RE.sub(r"%s" % (mol_ph), text)
+        return text, smiles_list
+    # smiles tokens without graph embedding
+    # \1, \4 corresponds to the special tokens for string (\2 is the special token, which included in the nest of \1)
+    # \3 corresponds to the content of the smiles token
+    elif mol_representation == "string_only":
+        text = CUSTOM_SEQ_RE.sub(r"\1\3\4", text)
         return text, smiles_list
     # smiles tokens with graph embedding
     # '[START_I_SMILES][H]N([H])C(=O)C([H])([H])[H][END_I_SMILES]<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
-    if is_gal:
+    elif mol_representation == "string+graph":
         text = CUSTOM_SEQ_RE.sub(r"\1\3\4%s" % (mol_ph), text)
         text = escape_custom_split_sequence(text)
         return text, smiles_list
-    # smiles tokens without graph tokens
+    # smiles tokens with graph tokens without special tokens
     # '[H]N([H])C(=O)C([H])([H])[H]<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
     else:
         text = CUSTOM_SEQ_RE.sub(r"\3%s" % (mol_ph), text)
@@ -92,16 +99,14 @@ class TrainCollater:
         text_max_len,
         mol_ph,
         mol_token_id,
-        is_gal=True,
-        graph_only=False,
+        mol_representation=True,
     ):
         self.text_max_len = text_max_len
         self.tokenizer = tokenizer
         self.collater = Collater([], [])
         self.mol_ph = mol_ph
         self.mol_token_id = mol_token_id
-        self.is_gal = is_gal
-        self.graph_only = graph_only
+        self.mol_representation = mol_representation
 
     def __call__(self, batch):
         graphs, texts, smiles_prompt, tasks = zip(*batch)
@@ -109,7 +114,7 @@ class TrainCollater:
 
         ## deal with prompt
         smiles_prompt = [
-            smiles_handler(p, self.mol_ph, self.is_gal, self.graph_only)[0]
+            smiles_handler(p, self.mol_ph, self.mol_representation)[0]
             for p in smiles_prompt
         ]
 
@@ -146,22 +151,20 @@ class InferenceCollater:
         text_max_len,
         mol_ph,
         mol_token_id,
-        is_gal=True,
-        graph_only=False,
+        mol_representation=True,
     ):
         self.text_max_len = text_max_len
         self.tokenizer = tokenizer
         self.collater = Collater([], [])
         self.mol_ph = mol_ph
         self.mol_token_id = mol_token_id
-        self.is_gal = is_gal
-        self.graph_only = graph_only
+        self.mol_representation = mol_representation
 
     def __call__(self, batch):
         graphs, texts, smiles_prompt, tasks = zip(*batch)
         graphs = self.collater(graphs)
         smiles_prompt = [
-            smiles_handler(p, self.mol_ph, self.is_gal, self.graph_only)[0]
+            smiles_handler(p, self.mol_ph, self.mol_representation)[0]
             for p in smiles_prompt
         ]
 
@@ -200,7 +203,7 @@ PROPERTY_REGRESSION_BENCHMARKS = [
 
 CAPTIONING_BENCHMARKS = ["pubchem324k"]
 
-INSTRUCTION_TEMPLATE = "\n Given a molecule from the {dataset_name} dataset, you are predicting whether the molecule has the {task_name} property. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
+# INSTRUCTION_TEMPLATE = "\n Given a molecule from the {dataset_name} dataset, you are predicting whether the molecule has the {task_name} property. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
 INSTRUCTION_TEMPLATE = "\n Given the molecule, you should predict {task_name} property of the molecule. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
 
 
@@ -223,7 +226,6 @@ class Stage3DM(LightningDataModule):
         self.num_workers = num_workers
         self.text_max_len = text_max_len
         self.prompt = args.prompt
-        self.graph_only = args.graph_only
 
         if root in PROPERTY_CLASSIFICATION_BENCHMARKS + PROPERTY_REGRESSION_BENCHMARKS:
             self.tasks, self.train_data, self.val_data, self.test_data = (
@@ -267,7 +269,7 @@ class Stage3DM(LightningDataModule):
 
         self.init_tokenizer(tokenizer)
         self.mol_ph_token = "<mol>" * self.args.num_query_token
-        self.is_gal = args.opt_model.find("galactica") >= 0
+        self.mol_representation = args.mol_representation
 
     def get_dataset_from_deepchem(self, root):
         base_path = f"dataset/{root}"
@@ -321,8 +323,7 @@ class Stage3DM(LightningDataModule):
                     self.text_max_len,
                     self.mol_ph_token,
                     self.mol_token_id,
-                    self.is_gal,
-                    self.graph_only,
+                    self.mol_representation,
                 ),
             )
         elif self.mode == "ft":
@@ -339,8 +340,7 @@ class Stage3DM(LightningDataModule):
                     self.text_max_len,
                     self.mol_ph_token,
                     self.mol_token_id,
-                    self.is_gal,
-                    self.graph_only,
+                    self.mol_representation,
                 ),
             )
         else:
@@ -361,8 +361,7 @@ class Stage3DM(LightningDataModule):
                 self.text_max_len,
                 self.mol_ph_token,
                 self.mol_token_id,
-                self.is_gal,
-                self.graph_only,
+                self.mol_representation,
             ),
         )
         test_loader = DataLoader(
@@ -378,8 +377,7 @@ class Stage3DM(LightningDataModule):
                 self.text_max_len,
                 self.mol_ph_token,
                 self.mol_token_id,
-                self.is_gal,
-                self.graph_only,
+                self.mol_representation,
             ),
         )
         return [val_loader, test_loader]
@@ -398,8 +396,7 @@ class Stage3DM(LightningDataModule):
                 self.text_max_len,
                 self.mol_ph_token,
                 self.mol_token_id,
-                self.is_gal,
-                self.graph_only,
+                self.mol_representation,
             ),
         )
         return loader
@@ -418,7 +415,6 @@ class Stage3DM(LightningDataModule):
             default="The SMILES of this molecule is [START_I_SMILES]{}[END_I_SMILES]. ",
         )
         parser.add_argument("--filtered_cid_path", type=str, default=None)
-        parser.add_argument("--graph_only", action="store_true", default=False)
 
         # moleculenet dataset
         parser.add_argument("--subtask_idx", type=int, default=0)
