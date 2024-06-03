@@ -135,7 +135,6 @@ if __name__ == "__main__":
     parser.add_argument("--precision", type=str, default="bf16-mixed")
     parser.add_argument("--max_epochs", type=int, default=50)
     parser.add_argument("--check_val_every_n_epoch", type=int, default=1)
-    parser.add_argument("--graph_reconstruction", action="store_true", default=False)
     parser.add_argument("--graph_decoder_ckpt", type=str, default=None)
 
     # added args

@@ -12,5 +12,4 @@ python3 MolCA/stage2.py \
 --prompt '[START_I_SMILES]{}[END_I_SMILES].' \
 --tune_gnn \
 --llm_tune freeze \
---inference_batch_size 4 \
---graph_reconstruction
+--inference_batch_size 4

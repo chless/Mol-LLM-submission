@@ -155,15 +155,6 @@ class Blip2OPT(Blip2Base):
                 gin_num_layers, gin_hidden_dim, gin_drop_ratio, args
             )
             self.coeff_recon_loss = self.args.coeff_recon_loss
-        if args.graph_embedding_mse_logging:
-            self.graph_encoder_frozen, self.ln_graph_frozen = self.init_graph_encoder(
-                gin_num_layers, gin_hidden_dim, gin_drop_ratio
-            )
-            for name, param in self.graph_encoder_frozen.named_parameters():
-                param.requires_grad = False
-            self.graph_encoder_frozen = self.graph_encoder_frozen.eval()
-            self.graph_encoder_frozen.train = disabled_train
-            logging.info("copied the original graph encoder, with frozen parameters")
 
         self.tune_gnn = tune_gnn
         if not tune_gnn:
@@ -378,18 +369,6 @@ class Blip2OPT(Blip2Base):
         )
         loss = outputs.loss
         results = {"ce_loss": loss}
-
-        if self.args.graph_embedding_mse_logging:
-            graph_embeds_frozen, graph_masks_frozen = self.graph_encoder_frozen(graphs)
-            graph_embeds_frozen = graph_embeds_frozen.detach()
-            graph_embeds_frozen = self.ln_graph_frozen(
-                graph_embeds_frozen, graph_masks_frozen
-            )
-            loss_mse = F.mse_loss(graph_embeds_frozen, graph_embeds)
-            results.update({"mse_loss": loss_mse})
-
-            if self.args.graph_embedding_mse_backprop:
-                loss = loss + loss_mse
 
         if self.args.graph_reconstruction:
             graph_decoder_input = query_output.last_hidden_state

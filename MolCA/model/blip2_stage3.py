@@ -151,9 +151,6 @@ class Blip2Stage3(pl.LightningModule):
         load_ignore_unexpected(self.blip2opt.Qformer, qformer_dict)
         self.blip2opt.graph_encoder.load_state_dict(graph_encoder_dict)
         self.blip2opt.ln_graph.load_state_dict(ln_graph_dict)
-        if self.args.graph_embedding_mse_logging:
-            self.blip2opt.graph_encoder_frozen.load_state_dict(graph_encoder_dict)
-            self.blip2opt.ln_graph_frozen.load_state_dict(ln_graph_dict)
         self.blip2opt.query_tokens.data.copy_(qs_weight)
         return self
 
@@ -517,15 +514,9 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--stage2_path", type=str, default="")
         parser.add_argument("--init_checkpoint", type=str, default="")
         parser.add_argument("--caption_eval_epoch", type=int, default=10)
-        # graph reconstruction
+        # added_args
         parser.add_argument(
             "--graph_reconstruction", action="store_true", default=False
-        )
-        parser.add_argument(
-            "--graph_embedding_mse_logging", action="store_true", default=False
-        )
-        parser.add_argument(
-            "--graph_embedding_mse_backprop", action="store_true", default=False
         )
         parser.add_argument("--graph_decoder_ckpt", type=str, default=None)
         parser.add_argument("--coeff_recon_loss", type=float, default=0.2)

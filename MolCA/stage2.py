@@ -233,12 +233,6 @@ def get_args():
     parser.add_argument("--val_check_interval", type=float, default=0.1)
 
     # added args
-    parser.add_argument(
-        "--graph_embedding_mse_logging", action="store_true", default=False
-    )
-    parser.add_argument(
-        "--graph_embedding_mse_backprop", action="store_true", default=False
-    )
     parser.add_argument("--qformer_instruction", action="store_true", default=False)
     parser.add_argument("--debug", action="store_true", default=False)
     args = parser.parse_args()
