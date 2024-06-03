@@ -179,6 +179,13 @@ def update_result_csv(args, outputs, task_names):
     for idx in range(len(outputs)):
         output = outputs[idx]
         for k in output.keys():
+            # extend results_dict with new key
+            if k not in results_dict:
+                results_dict[args.root] = dict()
+            if subtask not in results_dict[args.root]:
+                results_dict[args.root][subtask] = dict()
+            if k not in results_dict[args.root][subtask]:
+                results_dict[args.root][subtask][k] = None
             results_dict[args.root][subtask][k] = output[k]
     # finally, save the updated results_dict
     with open(args.result_file, "w") as f:
