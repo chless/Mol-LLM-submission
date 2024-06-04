@@ -6,7 +6,12 @@ import pytorch_lightning as pl
 from pytorch_lightning import Trainer, strategies
 import pytorch_lightning.callbacks as plc
 from pytorch_lightning.loggers import CSVLogger
-from data_provider.stage3_dm import Stage3DM
+from data_provider.stage3_dm import (
+    Stage3DM,
+    PROPERTY_CLASSIFICATION_BENCHMARKS,
+    PROPERTY_REGRESSION_BENCHMARKS,
+    CAPTIONING_BENCHMARKS,
+)
 from data_provider.stage2_chebi_dm import Stage2CheBIDM
 from model.blip2_stage3 import Blip2Stage3
 
@@ -168,31 +173,37 @@ def update_result_csv(args, outputs, task_names):
     # first, read the content in result_csv file
     import json
 
-    if os.path.exists(args.result_file):
-        results_dict = json.load(open(args.result_file, "r"))
-    else:
-        os.makedirs(os.path.dirname(args.result_file), exist_ok=True)
-        results_dict = dict()
-        results_dict[args.root] = {subtask: {} for subtask in task_names}
+    single_tasks = (
+        PROPERTY_REGRESSION_BENCHMARKS
+        + PROPERTY_CLASSIFICATION_BENCHMARKS
+        + CAPTIONING_BENCHMARKS
+    )
+    if args.root in single_tasks:
+        if os.path.exists(args.result_file):
+            results_dict = json.load(open(args.result_file, "r"))
+        else:
+            os.makedirs(os.path.dirname(args.result_file), exist_ok=True)
+            results_dict = dict()
 
-    subtask = task_names[args.subtask_idx]
-    # TODO: extend multiple dataloader, for multi-task intruction-tuning
-    # currently, len(outputs)=1
-    for idx in range(len(outputs)):
-        output = outputs[idx]
-        for k in output.keys():
-            # extend results_dict with new key
-            if k not in results_dict:
-                results_dict[args.root] = dict()
-            if subtask not in results_dict[args.root]:
-                results_dict[args.root][subtask] = dict()
-            if k not in results_dict[args.root][subtask]:
-                results_dict[args.root][subtask][k] = None
-            results_dict[args.root][subtask][k] = output[k]
-    # finally, save the updated results_dict
-    with open(args.result_file, "w") as f:
-        json.dump(results_dict, f, indent=4)
-    print(f"Updated the result file {args.result_file}")
+        subtask = task_names[args.subtask_idx]
+        # TODO: extend multiple dataloader, for multi-task intruction-tuning
+        # currently, len(outputs)=1
+        for idx in range(len(outputs)):
+            output = outputs[idx]
+            for k in output.keys():
+                # extend results_dict with new key
+                if args.root not in results_dict:
+                    results_dict[args.root] = dict()
+                if subtask not in results_dict[args.root]:
+                    results_dict[args.root][subtask] = dict()
+                if k not in results_dict[args.root][subtask]:
+                    results_dict[args.root][subtask][k] = output[k]
+        # finally, save the updated results_dict
+        with open(args.result_file, "w") as f:
+            json.dump(results_dict, f, indent=4)
+        print(f"Updated the result file {args.result_file}")
+    else:
+        pass
 
 
 class SaveLoRAModelCallback(plc.Callback):
