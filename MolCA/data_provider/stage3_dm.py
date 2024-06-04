@@ -60,6 +60,7 @@ def smiles_handler(text, mol_ph, mol_representation):
     # smiles tokens without graph embedding
     # \1, \4 corresponds to the special tokens for string (\2 is the special token, which included in the nest of \1)
     # \3 corresponds to the content of the smiles token
+    # '[START_I_SMILES][H]N([H])C(=O)C([H])([H])[H][END_I_SMILES]'
     elif mol_representation == "string_only":
         text = CUSTOM_SEQ_RE.sub(r"\1\3\4", text)
         return text, smiles_list
@@ -231,6 +232,36 @@ class Stage3DM(LightningDataModule):
             self.tasks, self.train_data, self.val_data, self.test_data = (
                 self.get_dataset_from_deepchem(root)
             )
+            self.tasks = [f"{root}/{t}" for t in self.tasks]
+            self.train_dataset = MoleculeNetDatasetDeepChem(
+                data=self.train_data,
+                tasks=self.tasks,
+                prompt=self.prompt,
+                subtask_idx=args.subtask_idx,
+                debug=args.debug,
+            )
+            self.val_dataset = MoleculeNetDatasetDeepChem(
+                data=self.val_data,
+                tasks=self.tasks,
+                prompt=self.prompt,
+                subtask_idx=args.subtask_idx,
+                debug=args.debug,
+            )
+            self.test_dataset = MoleculeNetDatasetDeepChem(
+                data=self.test_data,
+                tasks=self.tasks,
+                prompt=self.prompt,
+                subtask_idx=args.subtask_idx,
+                debug=args.debug,
+            )
+        elif root in ["molnet_cls"]:
+            datasets = [
+                self.get_dataset_from_deepchem(task_name)
+                for task_name in PROPERTY_CLASSIFICATION_BENCHMARKS
+            ]
+            self.tasks, self.train_data, self.val_data, self.test_data = zip(*datasets)
+            # TODO:replace hard coding for cases, which have multiple tasks
+
             self.tasks = [f"{root}/{t}" for t in self.tasks]
             self.train_dataset = MoleculeNetDatasetDeepChem(
                 data=self.train_data,
