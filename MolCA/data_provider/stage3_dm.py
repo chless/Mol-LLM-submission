@@ -205,7 +205,10 @@ PROPERTY_REGRESSION_BENCHMARKS = [
 CAPTIONING_BENCHMARKS = ["pubchem324k"]
 
 # INSTRUCTION_TEMPLATE = "\n Given a molecule from the {dataset_name} dataset, you are predicting whether the molecule has the {task_name} property. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
-INSTRUCTION_TEMPLATE = "\n Given the molecule, you should predict {task_name} property of the molecule. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
+INSTRUCTION_CLASSIFICATION = "\n Given the molecule, you should predict {task_name} property of the molecule. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
+INSTRUCTION_REGRESSION = "\n Given the molecule, you should predict {task_name} property of the molecule. The answer should be in the form {label_tokens[0]}x.xxxx{label_tokens[1]}."
+INSTRUCTION_CAPTIONING = "\n Given the molecule, you should generate a text description corresponding to the molecule. The answer should be in the form {label_tokens[0]}text{label_tokens[1]}."
+INSTRUCTION_REACTION = "\n Given the molecule, you should predict chemical reaction involving the molecule. The answer should be in the form {label_tokens[0]}SMILES{label_tokens[1]}."
 
 
 class Stage3DM(LightningDataModule):
@@ -521,8 +524,16 @@ class MoleculeNetDatasetDeepChem(Dataset):
 
     def get_instruction_for_task(self, task):
         dataset_name, task_name = task.split("/")
-        instruction = INSTRUCTION_TEMPLATE.format(
-            dataset_name=dataset_name,
+        if dataset_name in PROPERTY_CLASSIFICATION_BENCHMARKS:
+            instruction = INSTRUCTION_CLASSIFICATION
+        elif dataset_name in PROPERTY_REGRESSION_BENCHMARKS:
+            instruction = INSTRUCTION_REGRESSION
+        elif dataset_name in CAPTIONING_BENCHMARKS:
+            instruction = INSTRUCTION_CAPTIONING
+        else:
+            raise NotImplementedError
+
+        instruction = instruction.format(
             task_name=task_name,
             label_tokens=self.label_tokens,
         )
