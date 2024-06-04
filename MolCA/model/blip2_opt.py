@@ -585,7 +585,8 @@ class Blip2OPT(Blip2Base):
         mol_tokens = self.opt_proj(query_output.last_hidden_state)
 
         prompt_embeds = self.opt_model.get_input_embeddings()(prompt_tokens.input_ids)
-        prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
+        if "graph" in self.args.mol_representation:
+            prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
 
         outputs = self.opt_model.generate(
             inputs_embeds=prompt_embeds,
