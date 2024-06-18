@@ -20,5 +20,5 @@ python3 MolCA/stage3.py \
 --batch_size 64 \
 --num_beam 1 \
 --mol_representation $molrep \
---result_file MolCA/results/molnet_task-specific_${molrep}_0604.csv \
+--result_file MolCA/results/molnet_task-specific_${molrep}_0604-2.csv \
 --not_save_model
