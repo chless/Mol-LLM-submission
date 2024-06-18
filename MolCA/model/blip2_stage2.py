@@ -452,4 +452,16 @@ class Blip2Stage2(pl.LightningModule):
         )
         parser.add_argument("--graph_decoder_ckpt", type=str, default=None)
         parser.add_argument("--coeff_recon_loss", type=float, default=0.2)
+        
+        parser.add_argument("--used_gnn_layer", type=int, default=-1)
+        parser.add_argument("--gnn_jk", type=str, default="layer")
+        parser.add_argument("--num_random_query_embedding", type=int, default=0)
+        parser.add_argument(
+            "--mol_representation",
+            type=str,
+            default="string+graph",
+            choices=["string_only", "graph_only", "string+graph"],
+        )
+        
+        
         return parent_parser

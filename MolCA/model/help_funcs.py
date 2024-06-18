@@ -13,7 +13,7 @@ from data_provider.stage3_dm import (
 import ast
 
 
-def caption_evaluate(predictions, targets, tokenizer, tasks, text_trunc_length):
+def caption_evaluate(predictions, targets, tokenizer, text_trunc_length):
     meteor_scores = []
     references = []
     hypotheses = []
