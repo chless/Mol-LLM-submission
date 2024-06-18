@@ -31,6 +31,7 @@ class Blip2Stage1(pl.LightningModule):
             args.num_query_token,
             args.cross_attention_freq,
             args.projection_dim,
+            args,
         )
 
         self.save_hyperparameters(args)
@@ -290,6 +291,8 @@ class Blip2Stage1(pl.LightningModule):
         )  # or linear_warmup_step_lr
         parser.add_argument("--init_checkpoint", type=str, default="")
         parser.add_argument("--retrieval_eval_epoch", type=int, default=10)
+        parser.add_argument("--gnn_jk", type=str, default="layer")
+        parser.add_argument("--used_gnn_layer", type=int, default=-1)
         return parent_parser
 
 
