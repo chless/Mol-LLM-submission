@@ -514,10 +514,6 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--stage2_path", type=str, default="")
         parser.add_argument("--init_checkpoint", type=str, default="")
         parser.add_argument("--caption_eval_epoch", type=int, default=10)
-        # added_args
-        parser.add_argument(
-            "--graph_reconstruction", action="store_true", default=False
-        )
         parser.add_argument("--graph_decoder_ckpt", type=str, default=None)
         parser.add_argument("--coeff_recon_loss", type=float, default=0.2)
 

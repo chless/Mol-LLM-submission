@@ -150,11 +150,6 @@ class Blip2OPT(Blip2Base):
         self.graph_encoder, self.ln_graph = self.init_graph_encoder(
             gin_num_layers, gin_hidden_dim, gin_drop_ratio, args
         )
-        if self.args.graph_reconstruction:
-            self.graph_decoder = self.init_graph_decoder(
-                gin_num_layers, gin_hidden_dim, gin_drop_ratio, args
-            )
-            self.coeff_recon_loss = self.args.coeff_recon_loss
 
         self.tune_gnn = tune_gnn
         if not tune_gnn:
@@ -370,31 +365,6 @@ class Blip2OPT(Blip2Base):
         )
         loss = outputs.loss
         results = {"ce_loss": loss}
-
-        if self.args.graph_reconstruction:
-            graph_decoder_input = query_output.last_hidden_state
-            graph_decoder_input = graph_decoder_input.reshape(
-                graph_decoder_input.shape[0], -1
-            )
-            graph_decoder_input = graph_decoder_input.unsqueeze(1).expand(
-                -1, graph_embeds.shape[1] - 1, -1
-            )
-            graph_preds = self.graph_decoder(
-                graph_decoder_input, graph_masks, graphs.edge_index, graphs.edge_attr
-            )
-            loss_atom = F.cross_entropy(graph_preds.atom_type_prob, graphs.x[:, 0])
-            loss_chiral = F.cross_entropy(
-                graph_preds.chirality_tag_prob, graphs.x[:, 1]
-            )
-            loss_recon = loss_atom + loss_chiral
-            results.update(
-                {
-                    "atom_recon_loss": loss_atom,
-                    "chiral_recon_loss": loss_chiral,
-                    "recon_loss": loss_recon,
-                }
-            )
-            loss = loss + self.coeff_recon_loss * loss_recon
 
         results.update({"loss": loss})
         return results

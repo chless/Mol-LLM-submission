@@ -446,13 +446,9 @@ class Blip2Stage2(pl.LightningModule):
         parser.add_argument("--stage2_path", type=str, default="")
         parser.add_argument("--init_checkpoint", type=str, default="")
         parser.add_argument("--caption_eval_epoch", type=int, default=10)
-        # graph reconstruction
-        parser.add_argument(
-            "--graph_reconstruction", action="store_true", default=False
-        )
         parser.add_argument("--graph_decoder_ckpt", type=str, default=None)
         parser.add_argument("--coeff_recon_loss", type=float, default=0.2)
-        
+
         parser.add_argument("--used_gnn_layer", type=int, default=-1)
         parser.add_argument("--gnn_jk", type=str, default="layer")
         parser.add_argument("--num_random_query_embedding", type=int, default=0)
@@ -462,6 +458,5 @@ class Blip2Stage2(pl.LightningModule):
             default="string+graph",
             choices=["string_only", "graph_only", "string+graph"],
         )
-        
-        
+
         return parent_parser
