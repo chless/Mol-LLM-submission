@@ -8,9 +8,10 @@ import pytorch_lightning.callbacks as plc
 from pytorch_lightning.loggers import CSVLogger
 from data_provider.stage3_dm import (
     Stage3DM,
-    PROPERTY_CLASSIFICATION_BENCHMARKS,
-    PROPERTY_REGRESSION_BENCHMARKS,
-    CAPTIONING_BENCHMARKS,
+    CLASSIFICATION_BENCHMARKS,
+    REGRESSION_BENCHMARKS,
+    MOL2TEXT_BENCHMARKS,
+    TEXT2MOL_BENCHMARKS,
 )
 from data_provider.stage2_chebi_dm import Stage2CheBIDM
 from model.blip2_stage3 import Blip2Stage3
@@ -174,9 +175,10 @@ def update_result_csv(args, outputs, task_names):
     import json
 
     single_tasks = (
-        PROPERTY_REGRESSION_BENCHMARKS
-        + PROPERTY_CLASSIFICATION_BENCHMARKS
-        + CAPTIONING_BENCHMARKS
+        REGRESSION_BENCHMARKS
+        + CLASSIFICATION_BENCHMARKS
+        + MOL2TEXT_BENCHMARKS
+        + TEXT2MOL_BENCHMARKS
     )
     if args.root in single_tasks:
         if os.path.exists(args.result_file):

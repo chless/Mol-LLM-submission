@@ -93,7 +93,7 @@ If you use our codes or checkpoints, please cite our paper:
 
 ## Implemented benchamrks
 
-* PROPERTY_CLASSIFICATION_BENCHMARKS = [
+* CLASSIFICATION_BENCHMARKS = [
     "bace",  # 1 task # molca, biot5+, instructmol
     "bbbp",  # 1 task # molca, biot5+, instructmol, llasmol
     "clintox",  # 2 tasks # molca, biot5+, llasmol
@@ -102,7 +102,7 @@ If you use our codes or checkpoints, please cite our paper:
     "tox21",  # 12 tasks # molca
     "hiv",  # 1 tasks # biot5+, instructmol, llasmol
 ]
-* PROPERTY_REGRESSION_BENCHMARKS = [
+* REGRESSION_BENCHMARKS = [
     "qm9",  # 12 tasks #biot5+, instructmol (homo:2, lumo:3, homo-lumo gap:4)
     "esol",  # 1 task # llasmol
     "lipo",  # 1 task # llasmol

@@ -196,13 +196,23 @@ PROPERTY_CLASSIFICATION_BENCHMARKS = [
     "tox21",  # 12 tasks # molca
     "hiv",  # 1 tasks # biot5+, instructmol, llasmol
 ]
-PROPERTY_REGRESSION_BENCHMARKS = [
+REGRESSION_BENCHMARKS = [
     "qm9",  # 12 tasks #biot5+, instructmol (homo:2, lumo:3, homo-lumo gap:4)
     "esol",  # 1 task # llasmol
     "lipo",  # 1 task # llasmol
 ]
 
-CAPTIONING_BENCHMARKS = ["pubchem324k"]
+MOL2TEXT_BENCHMARKS = ["molecular_description_generation"]
+
+TEXT2MOL_BENCHMARKS = [
+    "description_guided_molecule_design",
+]
+
+REACTION_BENCHAMRKS = [
+    "forward_reaction_prediction",
+    "reagent_prediction",
+    "retrosynthesis",
+]
 
 # INSTRUCTION_TEMPLATE = "\n Given a molecule from the {dataset_name} dataset, you are predicting whether the molecule has the {task_name} property. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
 INSTRUCTION_CLASSIFICATION = "\n Given the molecule, you should predict {task_name} property of the molecule. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."

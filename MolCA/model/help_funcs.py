@@ -5,9 +5,10 @@ from tqdm import tqdm
 import numpy as np
 import torch
 from data_provider.stage3_dm import (
-    PROPERTY_CLASSIFICATION_BENCHMARKS,
-    PROPERTY_REGRESSION_BENCHMARKS,
-    CAPTIONING_BENCHMARKS,
+    CLASSIFICATION_BENCHMARKS,
+    REGRESSION_BENCHMARKS,
+    MOL2TEXT_BENCHMARKS,
+    TEXT2MOL_BENCHMARKS,
     FLOAT_TOKENS,
 )
 import ast
@@ -118,18 +119,18 @@ def pad_and_concat(tensor_list, fill_value=0):
 
 
 def group_task_specific_evaluation(all_predictions, all_targets, all_tasks, all_logits):
-    # retrieve indice of each task, finding tasks in the all_tasks are in PROPERTY_CLASSIFICATION_BENCHMARKS or PROPERTY_REGRESSION_BENCHMARKS
+    # retrieve indice of each task, finding tasks in the all_tasks are in CLASSIFICATION_BENCHMARKS or REGRESSION_BENCHMARKS
     regression_idxs = []
     classification_idxs = []
     caption_idxs = []
     for i, task in enumerate(all_tasks):
-        for benchmark in PROPERTY_REGRESSION_BENCHMARKS:
+        for benchmark in REGRESSION_BENCHMARKS:
             if benchmark in task:
                 regression_idxs.append(i)
-        for benchmark in PROPERTY_CLASSIFICATION_BENCHMARKS:
+        for benchmark in CLASSIFICATION_BENCHMARKS:
             if benchmark in task:
                 classification_idxs.append(i)
-        for benchmark in CAPTIONING_BENCHMARKS:
+        for benchmark in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
             if benchmark in task:
                 caption_idxs.append(i)
     assert len(regression_idxs) + len(classification_idxs) + len(caption_idxs) == len(
