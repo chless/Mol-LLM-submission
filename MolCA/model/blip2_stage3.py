@@ -276,7 +276,7 @@ class Blip2Stage3(pl.LightningModule):
 
     @torch.no_grad()
     def test_step(self, batch, batch_idx):
-        graphs, prompt_tokens, texts, tasks = batch
+        graphs, prompt_tokens, texts, tasks, instructions = batch
         ##============== Captioning Results ===================##
         samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
         outputs = self.blip2opt.generate(
@@ -295,23 +295,17 @@ class Blip2Stage3(pl.LightningModule):
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, dataloader_idx):
         if dataloader_idx == 0:
-            _, _, text_tokens, tasks = batch
-            batch = batch[:-1]
-            batch_size = text_tokens.input_ids.shape[0]
-            loss = self.blip2opt(batch)
-            ##============== Overall Loss ===================##
-            for key, loss_item in loss.items():
-                self.log(
-                    f"val/{key}",
-                    float(loss_item),
-                    batch_size=batch_size,
-                    sync_dist=True,
-                )
-            return loss["loss"]
+            task = "classification"
         elif dataloader_idx == 1:
-            if (self.current_epoch + 1) % self.caption_eval_epoch != 0:
-                return
-            graphs, prompt_tokens, texts, tasks = batch
+            task = "regression"
+        elif dataloader_idx == 2:
+            task = "reaction"
+        elif dataloader_idx == 3:
+            task = "translation"
+        # TODO: figure out why batch composition is different from training_step
+        graphs, prompt_tokens, texts, tasks = batch
+
+        if (self.current_epoch + 1) % self.caption_eval_epoch != 0:
             ##============== Captioning Results ===================##
             samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
             outputs = self.blip2opt.generate(
@@ -324,25 +318,25 @@ class Blip2Stage3(pl.LightningModule):
             self.list_predictions.append(outputs.predictions)
             self.list_targets.append(texts)
             self.list_tasks.append(tasks)
+            # TODO: implement exception for tasks other than classification
+            """
             probs = convert_logit2binary_prob(
                 outputs.logits, self.blip2opt.opt_tokenizer
             )
             self.list_probs.append(probs)
+            """
 
-        elif dataloader_idx == 2:
-            reaction_tokens, _, _, tasks = batch
-            batch_size = reaction_tokens.input_ids.shape[0]
-            loss = self.blip2opt.forward_reaction(batch)
-            ##============== Overall Loss ===================##
+        batch_size = texts.input_ids.shape[0]
+        loss = self.blip2opt(batch[:-1])  # omit tasks when inputting to the model
+        ##============== Overall Loss ===================##
+        for key, loss_item in loss.items():
             self.log(
-                "val reaction loss",
-                float(loss["loss"]),
+                f"val/{task}",
+                float(loss_item),
                 batch_size=batch_size,
                 sync_dist=True,
             )
-            return loss["loss"]
-        else:
-            raise NotImplementedError
+        return loss["loss"]
 
     def on_validation_epoch_start(self) -> None:
         self.list_predictions = []
@@ -386,6 +380,8 @@ class Blip2Stage3(pl.LightningModule):
             all_probs = [i for ii in all_probs for i in ii]
             self.save_predictions(all_predictions, all_targets, all_tasks)
 
+            # TODO: implement this
+            """
             evaluation_metrics = task_specifically_evaluate(
                 all_predictions=all_predictions,
                 all_targets=all_targets,
@@ -396,6 +392,7 @@ class Blip2Stage3(pl.LightningModule):
             )
             for k in evaluation_metrics:
                 self.log("validation_" + k, evaluation_metrics[k], sync_dist=False)
+            """
 
     def training_step(self, batch, batch_idx):
         if self.scheduler:
@@ -428,11 +425,50 @@ class Blip2Stage3(pl.LightningModule):
                 sync_dist=True,
             )
             return molecule_loss + self.reaction_weight * reaction_loss
-        else:
-            batch_size = batch[-2].input_ids.size(0)
+        elif isinstance(batch, list) and len(batch) == 4:
+            batch_size = len(batch) * batch[0][1].input_ids.shape[0]  #
             ##============== Overall Loss ===================##
-            if len(batch) == 4:
-                batch = batch[:-1]
+            # TODO: figure out why batches from different tasks are mixed up
+            (
+                classification_batch,
+                regression_batch,
+                reaction_batch,
+                translation_batch,
+            ) = batch
+            losses = {
+                "classification": self.blip2opt(classification_batch[:-1]),
+                "regression": self.blip2opt(regression_batch[:-1]),
+                "reaction": self.blip2opt(reaction_batch[:-1]),
+                "translation": self.blip2opt(translation_batch[:-1]),
+            }
+            self.log(
+                "lr",
+                self.trainer.optimizers[0].param_groups[0]["lr"],
+                batch_size=batch_size,
+                sync_dist=True,
+            )
+            for key, loss in losses.items():
+                self.log(
+                    f"{key}_loss",
+                    float(loss["loss"]),
+                    batch_size=batch_size,
+                    sync_dist=True,
+                )
+
+            total_loss = (
+                losses["classification"]["loss"]
+                + losses["regression"]["loss"]
+                + losses["reaction"]["loss"]
+                + losses["translation"]["loss"]
+            )
+            self.log(
+                "total loss", float(total_loss), batch_size=batch_size, sync_dist=True
+            )
+
+            return total_loss
+        else:
+            batch_size = batch[1].input_ids.size(0)  #
+            ##============== Overall Loss ===================##
             loss = self.blip2opt(batch)
             self.log(
                 "lr",

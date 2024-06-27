@@ -15,6 +15,8 @@ import os
 
 import deepchem as dc
 from deepchem.splits.splitters import ScaffoldSplitter
+from torch.utils.data import ConcatDataset
+from datasets import load_dataset
 
 # we split individual characters inside special tokens like [START_DNA]
 # TODO: change this ugly I_SMILES things to regular special token, and add the special token to vocab whichever LLM
@@ -25,6 +27,11 @@ CUSTOM_SEQ_RE = re.compile(r"(\[START_(DNA|SMILES|I_SMILES|AMINO)])(.*?)(\[END_\
 # that they do not occur in the corpus. The digits are escaped so that the token does not appear
 # literally in the source code in case we ever include it in the training data.
 SPLIT_MARKER = f"SPL{1}T-TH{1}S-Pl3A5E"
+
+BOOL_TOKENS = ["<BOOLEAN>", "</BOOLEAN>"]
+FLOAT_TOKENS = ["<FLOAT>", "</FLOAT>"]
+DESCRIPTION_TOKENS = ["<DESCRIPTION>", "</DESCRIPTION>"]
+SMILES_TOKENS = ["[START_I_SMILES]", "[END_I_SMILES]"]
 
 
 def _insert_split_marker(m: re.Match):
@@ -46,7 +53,7 @@ def _insert_split_marker(m: re.Match):
     return f"{start_token}{sequence}{SPLIT_MARKER}{end_token}"
 
 
-def smiles_handler(text, mol_ph, mol_representation):
+def smiles_handler(text, mol_ph, mol_representation, model="llama"):
     smiles_list = []
     for match in CUSTOM_SEQ_RE.finditer(text):
         smiles = match.group(3)
@@ -63,12 +70,15 @@ def smiles_handler(text, mol_ph, mol_representation):
     # '[START_I_SMILES][H]N([H])C(=O)C([H])([H])[H][END_I_SMILES]'
     elif mol_representation == "string_only":
         text = CUSTOM_SEQ_RE.sub(r"\1\3\4", text)
+        if "galactica" in model:
+            text = escape_custom_split_sequence(text)
         return text, smiles_list
     # smiles tokens with graph embedding
     # '[START_I_SMILES][H]N([H])C(=O)C([H])([H])[H][END_I_SMILES]<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
     elif mol_representation == "string+graph":
         text = CUSTOM_SEQ_RE.sub(r"\1\3\4%s" % (mol_ph), text)
-        text = escape_custom_split_sequence(text)
+        if "galactica" in model:
+            text = escape_custom_split_sequence(text)
         return text, smiles_list
     # smiles tokens with graph tokens without special tokens
     # '[H]N([H])C(=O)C([H])([H])[H]<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
@@ -101,6 +111,8 @@ class TrainCollater:
         mol_ph,
         mol_token_id,
         mol_representation=True,
+        multi_task=False,
+        model=None,
     ):
         self.text_max_len = text_max_len
         self.tokenizer = tokenizer
@@ -108,16 +120,25 @@ class TrainCollater:
         self.mol_ph = mol_ph
         self.mol_token_id = mol_token_id
         self.mol_representation = mol_representation
+        self.multi_task = multi_task
+        self.model = model
 
     def __call__(self, batch):
-        graphs, texts, smiles_prompt, tasks = zip(*batch)
+        # in multi-task, perdevice  batch size should be multiple of 4: classificaiton, regression, translation, reaction
+        if self.multi_task:
+            graphs, texts, smiles_prompt, tasks, instructions = zip(*batch)
+        else:
+            graphs, texts, smiles_prompt, tasks = zip(*batch)
         graphs = self.collater(graphs)
 
         ## deal with prompt
         smiles_prompt = [
-            smiles_handler(p, self.mol_ph, self.mol_representation)[0]
+            smiles_handler(p, self.mol_ph, self.mol_representation, self.model)[0]
             for p in smiles_prompt
         ]
+
+        for i in range(len(texts)):
+            smiles_prompt[i] += instructions[i]
 
         self.tokenizer.padding_side = "left"
         smiles_prompt_tokens = self.tokenizer(
@@ -153,6 +174,8 @@ class InferenceCollater:
         mol_ph,
         mol_token_id,
         mol_representation=True,
+        multi_task=False,
+        model=None,
     ):
         self.text_max_len = text_max_len
         self.tokenizer = tokenizer
@@ -160,14 +183,22 @@ class InferenceCollater:
         self.mol_ph = mol_ph
         self.mol_token_id = mol_token_id
         self.mol_representation = mol_representation
+        self.multi_task = multi_task
+        self.model = model
 
     def __call__(self, batch):
-        graphs, texts, smiles_prompt, tasks = zip(*batch)
+        if self.multi_task:
+            graphs, texts, smiles_prompt, tasks, instructions = zip(*batch)
+        else:
+            graphs, texts, smiles_prompt, tasks = zip(*batch)
         graphs = self.collater(graphs)
         smiles_prompt = [
-            smiles_handler(p, self.mol_ph, self.mol_representation)[0]
+            smiles_handler(p, self.mol_ph, self.mol_representation, self.model)[0]
             for p in smiles_prompt
         ]
+
+        for i in range(len(texts)):
+            smiles_prompt[i] += instructions[i]
 
         ## deal with prompt
         self.tokenizer.padding_side = "left"
@@ -180,6 +211,15 @@ class InferenceCollater:
             truncation=False,
             return_attention_mask=True,
         )
+        texts = self.tokenizer(
+            text=texts,
+            return_tensors="pt",
+            add_special_tokens=True,
+            max_length=self.text_max_len,
+            truncation=True,
+            padding="longest",
+            return_attention_mask=True,
+        )
 
         is_mol_token = smiles_prompt_tokens.input_ids == self.mol_token_id
         smiles_prompt_tokens["is_mol_token"] = is_mol_token
@@ -187,7 +227,7 @@ class InferenceCollater:
 
 
 # binary classification
-PROPERTY_CLASSIFICATION_BENCHMARKS = [
+CLASSIFICATION_BENCHMARKS = [
     "bace",  # 1 task # molca, biot5+, instructmol
     "bbbp",  # 1 task # molca, biot5+, instructmol, llasmol
     "clintox",  # 2 tasks # molca, biot5+, llasmol
@@ -210,7 +250,7 @@ TEXT2MOL_BENCHMARKS = [
 
 REACTION_BENCHAMRKS = [
     "forward_reaction_prediction",
-    "reagent_prediction",
+    # "reagent_prediction", # TODO: deal with two molecule in input
     "retrosynthesis",
 ]
 
@@ -240,115 +280,315 @@ class Stage3DM(LightningDataModule):
         self.num_workers = num_workers
         self.text_max_len = text_max_len
         self.prompt = args.prompt
+        self.debug = args.debug
+        self.args = args
 
-        if root in PROPERTY_CLASSIFICATION_BENCHMARKS + PROPERTY_REGRESSION_BENCHMARKS:
-            self.tasks, self.train_data, self.val_data, self.test_data = (
-                self.get_dataset_from_deepchem(root)
-            )
-            self.tasks = [f"{root}/{t}" for t in self.tasks]
-            self.train_dataset = MoleculeNetDatasetDeepChem(
-                data=self.train_data,
-                tasks=self.tasks,
-                prompt=self.prompt,
-                subtask_idx=args.subtask_idx,
-                debug=args.debug,
-            )
-            self.val_dataset = MoleculeNetDatasetDeepChem(
-                data=self.val_data,
-                tasks=self.tasks,
-                prompt=self.prompt,
-                subtask_idx=args.subtask_idx,
-                debug=args.debug,
-            )
-            self.test_dataset = MoleculeNetDatasetDeepChem(
-                data=self.test_data,
-                tasks=self.tasks,
-                prompt=self.prompt,
-                subtask_idx=args.subtask_idx,
-                debug=args.debug,
-            )
-        elif root in ["molnet_cls"]:
-            datasets = [
-                self.get_dataset_from_deepchem(task_name)
-                for task_name in PROPERTY_CLASSIFICATION_BENCHMARKS
+        if root == "multi_task":
+            task_subtask_lists = {
+                "bace": [0],
+                "bbbp": [0],
+                "clintox": [0, 1],
+                "toxcast": [0],
+                "sider": [0],
+                "tox21": [0],
+                "hiv": [0],
+                "qm9": [2, 3, 4],
+                "esol": [0],
+                "lipo": [0],
+                "forward_reaction_prediction": [0],
+                # "reagent_prediction": [0],
+                "retrosynthesis": [0],
+                "description_guided_molecule_design": [0],
+                "molecular_description_generation": [0],
+            }
+            self.task_subtask_pairs = [
+                (task, subtask)
+                for task, subtasks in task_subtask_lists.items()
+                for subtask in subtasks
             ]
-            self.tasks, self.train_data, self.val_data, self.test_data = zip(*datasets)
-            # TODO:replace hard coding for cases, which have multiple tasks
 
+            total_benchmarks = (
+                REACTION_BENCHAMRKS
+                + MOL2TEXT_BENCHMARKS
+                + TEXT2MOL_BENCHMARKS
+                + CLASSIFICATION_BENCHMARKS
+                + REGRESSION_BENCHMARKS
+            )
+
+            multi_task_datasets = {
+                task_name: self.get_dataset(task_name)  # {task_name: [train, val, test]
+                for task_name in total_benchmarks
+            }
+
+            self.train_dataset, self.val_dataset, self.test_dataset = [], [], []
+            for task_subtask_pair in tqdm(
+                self.task_subtask_pairs, desc="Processing task_subtask_pairs"
+            ):
+                task_name = task_subtask_pair[0]
+                subtasks = multi_task_datasets[task_name][0]
+                subtask_idx = task_subtask_pair[1]
+                task_subtask_pair = f"{task_name}/{subtasks[subtask_idx]}"
+
+                data_split = multi_task_datasets[task_name][
+                    1:
+                ]  # train_set, val_set, test_set
+
+                if task_name in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
+                    train_dataset = MoleculeNetDatasetDeepChem(
+                        data=data_split[0],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        subtask_idx=subtask_idx,
+                        debug=self.debug,
+                    )
+                    valid_dataset = MoleculeNetDatasetDeepChem(
+                        data=data_split[1],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        subtask_idx=subtask_idx,
+                        debug=self.debug,
+                    )
+                    test_dataset = MoleculeNetDatasetDeepChem(
+                        data=data_split[2],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        subtask_idx=subtask_idx,
+                        debug=self.debug,
+                    )
+                elif task_name in REACTION_BENCHAMRKS:
+                    train_dataset = MolInstructionDatset(
+                        data=data_split[0],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        representation="smiles",
+                        debug=self.debug,
+                    )
+                    valid_dataset = MolInstructionDatset(
+                        data=data_split[1],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        representation="smiles",
+                        debug=self.debug,
+                    )
+                    test_dataset = MolInstructionDatset(
+                        data=data_split[2],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        representation="smiles",
+                        debug=self.debug,
+                    )
+                elif task_name in MOL2TEXT_BENCHMARKS:
+                    # train_dataset = MoleculeCaptionV2(root+f'train.pt', self.text_max_len, self.prompt, debug=self.debug)
+                    # valid_dataset = MoleculeCaptionV2(root + f'valid.pt', self.text_max_len, self.prompt, debug=self.debug)
+                    # test_dataset = MoleculeCaptionV2(root + f'test.pt', self.text_max_len, self.prompt, debug=self.debug)
+                    train_dataset = MolInstructionDatset(
+                        data=data_split[0],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        representation="smiles",
+                        debug=self.debug,
+                    )
+                    valid_dataset = MolInstructionDatset(
+                        data=data_split[1],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        representation="smiles",
+                        debug=self.debug,
+                    )
+                    test_dataset = MolInstructionDatset(
+                        data=data_split[2],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        representation="smiles",
+                        debug=self.debug,
+                    )
+                elif task_name in TEXT2MOL_BENCHMARKS:
+                    # train_dataset = MoleculeCaptionV2(root+f'train.pt', self.text_max_len, self.prompt, debug=self.debug)
+                    # valid_dataset = MoleculeCaptionV2(root + f'valid.pt', self.text_max_len, self.prompt, debug=self.debug)
+                    # test_dataset = MoleculeCaptionV2(root + f'test.pt', self.text_max_len, self.prompt, debug=self.debug)
+                    train_dataset = MolInstructionDatset(
+                        data=data_split[0],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        representation="smiles",
+                        debug=self.debug,
+                    )
+                    valid_dataset = MolInstructionDatset(
+                        data=data_split[1],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        representation="smiles",
+                        debug=self.debug,
+                    )
+                    test_dataset = MolInstructionDatset(
+                        data=data_split[2],
+                        task_subtask_pair=task_subtask_pair,
+                        prompt=self.prompt,
+                        representation="smiles",
+                        debug=self.debug,
+                    )
+
+                self.train_dataset.append(train_dataset)
+                self.val_dataset.append(valid_dataset)
+                self.test_dataset.append(test_dataset)
+
+            # concat datasets ffrom each subtask into large class [classification, regression, reaction prediction, translation]
+
+            self.concat_datasets = {
+                task: {"train": [], "val": [], "test": []}
+                for task in ["classification", "regression", "reaction", "translation"]
+            }
+
+            for i in range(len(self.task_subtask_pairs)):
+                task_subtask_pair = self.task_subtask_pairs[i]
+                task_name = task_subtask_pair[0]
+                if task_name in CLASSIFICATION_BENCHMARKS:
+                    self.concat_datasets["classification"]["train"].append(
+                        self.train_dataset[i]
+                    )
+                    self.concat_datasets["classification"]["val"].append(
+                        self.val_dataset[i]
+                    )
+                    self.concat_datasets["classification"]["test"].append(
+                        self.test_dataset[i]
+                    )
+                elif task_name in REGRESSION_BENCHMARKS:
+                    self.concat_datasets["regression"]["train"].append(
+                        self.train_dataset[i]
+                    )
+                    self.concat_datasets["regression"]["val"].append(
+                        self.val_dataset[i]
+                    )
+                    self.concat_datasets["regression"]["test"].append(
+                        self.test_dataset[i]
+                    )
+                elif task_name in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
+                    self.concat_datasets["translation"]["train"].append(
+                        self.train_dataset[i]
+                    )
+                    self.concat_datasets["translation"]["val"].append(
+                        self.val_dataset[i]
+                    )
+                    self.concat_datasets["translation"]["test"].append(
+                        self.test_dataset[i]
+                    )
+                elif task_name in REACTION_BENCHAMRKS:
+                    self.concat_datasets["reaction"]["train"].append(
+                        self.train_dataset[i]
+                    )
+                    self.concat_datasets["reaction"]["val"].append(self.val_dataset[i])
+                    self.concat_datasets["reaction"]["test"].append(
+                        self.test_dataset[i]
+                    )
+                else:
+                    raise NotImplementedError
+
+            for task in ["classification", "regression", "reaction", "translation"]:
+                for split in ["train", "val", "test"]:
+                    if not isinstance(self.concat_datasets[task][split], ConcatDataset):
+                        self.concat_datasets[task][split] = ConcatDataset(
+                            self.concat_datasets[task][split]
+                        )
+                    else:
+                        raise ValueError(f"Already concatenated {task} {split} dataset")
+
+        elif root in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
+            self.tasks, self.train_data, self.val_data, self.test_data = (
+                self.get_dataset(root)
+            )
             self.tasks = [f"{root}/{t}" for t in self.tasks]
             self.train_dataset = MoleculeNetDatasetDeepChem(
                 data=self.train_data,
                 tasks=self.tasks,
                 prompt=self.prompt,
                 subtask_idx=args.subtask_idx,
-                debug=args.debug,
+                debug=self.debug,
             )
             self.val_dataset = MoleculeNetDatasetDeepChem(
                 data=self.val_data,
                 tasks=self.tasks,
                 prompt=self.prompt,
                 subtask_idx=args.subtask_idx,
-                debug=args.debug,
+                debug=self.debug,
             )
             self.test_dataset = MoleculeNetDatasetDeepChem(
                 data=self.test_data,
                 tasks=self.tasks,
                 prompt=self.prompt,
                 subtask_idx=args.subtask_idx,
-                debug=args.debug,
+                debug=self.debug,
             )
         else:
             self.pretrain_dataset = MoleculeCaptionV2(
-                root + f"pretrain.pt", text_max_len, self.prompt, debug=args.debug
+                root + f"pretrain.pt", text_max_len, self.prompt, debug=self.debug
             )
             self.train_dataset = MoleculeCaptionV2(
-                root + f"train.pt", text_max_len, self.prompt, debug=args.debug
+                root + f"train.pt", text_max_len, self.prompt, debug=self.debug
             )
             self.val_dataset = MoleculeCaptionV2(
-                root + f"valid.pt", text_max_len, self.prompt, debug=args.debug
+                root + f"valid.pt", text_max_len, self.prompt, debug=self.debug
             )
             self.test_dataset = MoleculeCaptionV2(
-                root + f"test.pt", text_max_len, self.prompt, debug=args.debug
+                root + f"test.pt", text_max_len, self.prompt, debug=self.debug
             )
 
         self.init_tokenizer(tokenizer)
         self.mol_ph_token = "<mol>" * self.args.num_query_token
         self.mol_representation = args.mol_representation
 
-    def get_dataset_from_deepchem(self, root):
+    def get_dataset(self, root):
         base_path = f"dataset/{root}"
         os.makedirs(base_path, exist_ok=True)
-        # load tox21 dataset using deepchem
-
+        # get dataset from deepchem
         if root == "bace":
             loading_fn = dc.molnet.load_bace_classification
         elif root == "esol":
             loading_fn = dc.molnet.load_delaney
-        elif (
-            root
-            in PROPERTY_CLASSIFICATION_BENCHMARKS
-            + PROPERTY_REGRESSION_BENCHMARKS
-            + CAPTIONING_BENCHMARKS
-        ):
+        elif root in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
             loading_fn = getattr(dc.molnet, f"load_{root}")
+        elif root in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
+            mol_instruction_dataset = load_dataset(
+                "zjunlp/Mol-Instructions", "Molecule-oriented Instructions"
+            )
+            dataset = mol_instruction_dataset[root]
+            train_dataset = dataset.filter(lambda x: "train" in x["metadata"])
+            split = train_dataset.train_test_split(test_size=0.1, shuffle=True)
+            train_dataset, valid_dataset = split["train"], split["test"]
+
+            test_dataset = dataset.filter(lambda x: "test" in x["metadata"])
+            tasks = [root]
+        elif root in REACTION_BENCHAMRKS:
+            mol_instruction_dataset = load_dataset(
+                "zjunlp/Mol-Instructions", "Molecule-oriented Instructions"
+            )
+            dataset = mol_instruction_dataset[root]
+            train_dataset = dataset.filter(lambda x: "train" in x["metadata"])
+            split = train_dataset.train_test_split(test_size=0.1, shuffle=True)
+            train_dataset, valid_dataset = split["train"], split["test"]
+
+            test_dataset = dataset.filter(lambda x: "test" in x["metadata"])
+            tasks = [root]
         else:
             raise NotImplementedError
 
-        tasks, datasets, transformers = loading_fn(
-            featurizer="Raw",
-            splitter="scaffold",
-            save_dir=base_path,
-            data_dir=base_path,
-            reload=True,
-        )
-        train_dataset, valid_dataset, test_dataset = datasets
+        if root in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
+            tasks, datasets, transformers = loading_fn(
+                featurizer="Raw",
+                splitter="scaffold",
+                save_dir=base_path,
+                data_dir=base_path,
+                reload=True,
+            )
+            train_dataset, valid_dataset, test_dataset = datasets
+        else:
+            pass
         return tasks, train_dataset, valid_dataset, test_dataset
 
     def init_tokenizer(self, tokenizer):
         self.tokenizer = tokenizer
-        self.train_dataset.tokenizer = tokenizer
-        self.val_dataset.tokenizer = tokenizer
-        self.test_dataset.tokenizer = tokenizer
+        # self.train_dataset.tokenizer = tokenizer
+        # self.val_dataset.tokenizer = tokenizer
+        # self.test_dataset.tokenizer = tokenizer
         self.mol_token_id = self.tokenizer.mol_token_id
         # self.tokenizer.mol_token_id = tokenizer("<mol>", add_special_tokens=False).input_ids[0]
 
@@ -368,6 +608,7 @@ class Stage3DM(LightningDataModule):
                     self.mol_ph_token,
                     self.mol_token_id,
                     self.mol_representation,
+                    model=self.args.opt_model,
                 ),
             )
         elif self.mode == "ft":
@@ -385,65 +626,139 @@ class Stage3DM(LightningDataModule):
                     self.mol_ph_token,
                     self.mol_token_id,
                     self.mol_representation,
+                    model=self.args.opt_model,
                 ),
             )
+        elif self.mode == "multi_task":
+            loader = [
+                DataLoader(
+                    self.concat_datasets[task]["train"],
+                    batch_size=self.batch_size,
+                    shuffle=True,
+                    num_workers=self.num_workers,
+                    pin_memory=False,
+                    drop_last=True,
+                    persistent_workers=True,
+                    collate_fn=TrainCollater(
+                        self.tokenizer,
+                        self.text_max_len,
+                        self.mol_ph_token,
+                        self.mol_token_id,
+                        self.mol_representation,
+                        multi_task=True,
+                        model=self.args.opt_model,
+                    ),
+                )
+                for task in ["classification", "regression", "reaction", "translation"]
+            ]
         else:
             raise NotImplementedError
         return loader
 
     def val_dataloader(self):
-        val_loader = DataLoader(
-            self.val_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=False,
-            drop_last=False,
-            persistent_workers=True,
-            collate_fn=TrainCollater(
-                self.tokenizer,
-                self.text_max_len,
-                self.mol_ph_token,
-                self.mol_token_id,
-                self.mol_representation,
-            ),
-        )
-        test_loader = DataLoader(
-            self.test_dataset,
-            batch_size=self.inference_batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=False,
-            drop_last=False,
-            persistent_workers=True,
-            collate_fn=InferenceCollater(
-                self.tokenizer,
-                self.text_max_len,
-                self.mol_ph_token,
-                self.mol_token_id,
-                self.mol_representation,
-            ),
-        )
-        return [val_loader, test_loader]
+        if self.mode != "multi_task":
+            val_loader = DataLoader(
+                self.val_dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=False,
+                drop_last=False,
+                persistent_workers=True,
+                collate_fn=TrainCollater(
+                    self.tokenizer,
+                    self.text_max_len,
+                    self.mol_ph_token,
+                    self.mol_token_id,
+                    self.mol_representation,
+                    model=self.args.opt_model,
+                ),
+            )
+            test_loader = DataLoader(
+                self.test_dataset,
+                batch_size=self.inference_batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=False,
+                drop_last=False,
+                persistent_workers=True,
+                collate_fn=InferenceCollater(
+                    self.tokenizer,
+                    self.text_max_len,
+                    self.mol_ph_token,
+                    self.mol_token_id,
+                    self.mol_representation,
+                    model=self.args.opt_model,
+                ),
+            )
+            return [val_loader, test_loader]
+        else:
+            loader = [
+                DataLoader(
+                    self.concat_datasets[task]["val"],
+                    batch_size=self.inference_batch_size,
+                    shuffle=False,
+                    num_workers=self.num_workers,
+                    pin_memory=False,
+                    drop_last=False,
+                    persistent_workers=True,
+                    collate_fn=InferenceCollater(
+                        self.tokenizer,
+                        self.text_max_len,
+                        self.mol_ph_token,
+                        self.mol_token_id,
+                        self.mol_representation,
+                        multi_task=True,
+                        model=self.args.opt_model,
+                    ),
+                )
+                for task in ["classification", "regression", "reaction", "translation"]
+            ]
+            return loader
 
     def test_dataloader(self):
-        loader = DataLoader(
-            self.test_dataset,
-            batch_size=self.inference_batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=False,
-            drop_last=False,
-            persistent_workers=True,
-            collate_fn=InferenceCollater(
-                self.tokenizer,
-                self.text_max_len,
-                self.mol_ph_token,
-                self.mol_token_id,
-                self.mol_representation,
-            ),
-        )
-        return loader
+        if self.mode != "multi_task":
+            loader = DataLoader(
+                self.test_dataset,
+                batch_size=self.inference_batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=False,
+                drop_last=False,
+                persistent_workers=True,
+                collate_fn=InferenceCollater(
+                    self.tokenizer,
+                    self.text_max_len,
+                    self.mol_ph_token,
+                    self.mol_token_id,
+                    self.mol_representation,
+                    model=self.args.opt_model,
+                ),
+            )
+            return loader
+        else:
+            loader = [
+                DataLoader(
+                    self.concat_datasets[task]["test"],
+                    batch_size=self.inference_batch_size,
+                    shuffle=False,
+                    num_workers=self.num_workers,
+                    pin_memory=False,
+                    drop_last=False,
+                    persistent_workers=True,
+                    collate_fn=InferenceCollater(
+                        self.tokenizer,
+                        self.text_max_len,
+                        self.mol_ph_token,
+                        self.mol_token_id,
+                        self.mol_representation,
+                        multi_task=True,
+                        model=self.args.opt_model,
+                    ),
+                )
+                for task in ["classification", "regression", "reaction", "translation"]
+            ]
+            return loader
 
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group("Data module")
@@ -466,30 +781,67 @@ class Stage3DM(LightningDataModule):
 
 
 from tqdm import tqdm
+
 from rdkit import Chem
 
-BOOL_TOKENS = ["<BOOLEAN>", "</BOOLEAN>"]
-FLOAT_TOKENS = ["<FLOAT>", "</FLOAT>"]
+
+def wrap_label(label, task):
+
+    if task in CLASSIFICATION_BENCHMARKS:
+        label_tokens = BOOL_TOKENS
+    elif task in REGRESSION_BENCHMARKS:
+        label_tokens = FLOAT_TOKENS
+    elif task in MOL2TEXT_BENCHMARKS:
+        label_tokens = DESCRIPTION_TOKENS
+    elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHAMRKS:
+        label_tokens = SMILES_TOKENS
+    else:
+        raise NotImplementedError
+
+    if task in CLASSIFICATION_BENCHMARKS:
+        if label:
+            return label_tokens[0] + "True" + label_tokens[1]
+        else:
+            return label_tokens[0] + "False" + label_tokens[1]
+    elif task in REGRESSION_BENCHMARKS:
+        return label_tokens[0] + str(label) + label_tokens[1]
+    elif task in REACTION_BENCHAMRKS + MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
+        return label_tokens[0] + label + label_tokens[1]
+    else:
+        raise NotImplementedError
 
 
+# TODO use task or refactor it
+# getitem shoul return enough information that what is label, and what is the label meaning (to format instruction)
 class MoleculeNetDatasetDeepChem(Dataset):
-    def __init__(self, data, tasks, subtask_idx=0, prompt=None, debug=False):
+    def __init__(
+        self, data, task_subtask_pair, subtask_idx=0, prompt=None, debug=False
+    ):
         self.mol_list = data.X
         self.label_list = data.y[:, subtask_idx]
-        self.tasks_list = tasks
-        self.root = tasks[0].split("/")[0]
-        self.task = tasks[subtask_idx]
-        if debug:
-            self.mol_list = self.mol_list[:100]
-            self.label_list = self.label_list[:100]
-        self.prompt = prompt
-        # label wrapping token
-        if self.root in PROPERTY_CLASSIFICATION_BENCHMARKS:
+        self.task_subtask_pair = task_subtask_pair
+        self.task, self.subtask = task_subtask_pair.split("/")
+
+        if self.task in CLASSIFICATION_BENCHMARKS:
+            instruction = INSTRUCTION_CLASSIFICATION
             self.label_tokens = BOOL_TOKENS
-        elif self.root in PROPERTY_REGRESSION_BENCHMARKS:
+        elif self.task in REGRESSION_BENCHMARKS:
+            instruction = INSTRUCTION_REGRESSION
             self.label_tokens = FLOAT_TOKENS
         else:
             raise NotImplementedError
+
+        self.instruction = instruction.format(
+            task_name=self.subtask,
+            label_tokens=self.label_tokens,
+        )
+
+        self.debug = debug
+
+        if self.debug:
+            self.mol_list = self.mol_list[:100]
+            self.label_list = self.label_list[:100]
+        self.prompt = prompt
 
         if not prompt:
             self.prompt = (
@@ -506,53 +858,111 @@ class MoleculeNetDatasetDeepChem(Dataset):
     def __len__(self):
         return len(self.smiles_list)
 
-    def wrap_label(self, label):
-        if self.root in PROPERTY_CLASSIFICATION_BENCHMARKS:
-            if label:
-                return self.label_tokens[0] + "True" + self.label_tokens[1]
-            else:
-                return self.label_tokens[0] + "False" + self.label_tokens[1]
-        elif self.root in PROPERTY_REGRESSION_BENCHMARKS:
-            return self.label_tokens[0] + str(label) + self.label_tokens[1]
-        else:
-            raise NotImplementedError
-
     def __getitem__(self, index):
         smiles = self.smiles_list[index]
         label = self.label_list[index]
-        label = self.wrap_label(label)
+        label = wrap_label(label, self.task)
         graph = smiles2data(smiles)
 
         if self.prompt.find("{}") >= 0:
             smiles_prompt = self.prompt.format(smiles[:128])
         else:
             smiles_prompt = self.prompt
-        task = self.task
-        smiles_prompt += self.get_instruction_for_task(task)
 
-        return graph, label, smiles_prompt, task
+        output = {
+            "graph": graph,
+            "label": label,
+            "smiles_prompt": smiles_prompt,
+            "task_subtask_pair": self.task_subtask_pair,
+            "instruction": self.instruction,
+        }
 
-    def get_instruction_for_task(self, task):
-        dataset_name, task_name = task.split("/")
-        if dataset_name in PROPERTY_CLASSIFICATION_BENCHMARKS:
-            instruction = INSTRUCTION_CLASSIFICATION
-        elif dataset_name in PROPERTY_REGRESSION_BENCHMARKS:
-            instruction = INSTRUCTION_REGRESSION
-        elif dataset_name in CAPTIONING_BENCHMARKS:
-            instruction = INSTRUCTION_CAPTIONING
+        return graph, label, smiles_prompt, self.task_subtask_pair, self.instruction
+
+
+from selfies import decoder
+
+
+def convert_selfies2smiles(selfies):
+    return decoder(selfies)
+
+
+from tqdm import tqdm
+
+
+class MolInstructionDatset(Dataset):
+    def __init__(
+        self, data, task_subtask_pair, prompt=None, representation="smiles", debug=False
+    ):
+        self.debug = debug
+
+        if self.debug:
+            self.data = data[:100]
         else:
-            raise NotImplementedError
+            self.data = data
 
-        instruction = instruction.format(
-            task_name=task_name,
-            label_tokens=self.label_tokens,
-        )
-        return instruction
+        self.prompt = prompt
+        self.representation = representation
+        self.task_subtask_pair = task_subtask_pair
+        self.task, self.subtask = task_subtask_pair.split("/")
 
-    def convert_selfies2smiles(self, selfies):
-        from selfies import decoder
+        if not prompt:
+            self.prompt = (
+                "The SMILES of this molecule is [START_I_SMILES]{}[END_I_SMILES]. "
+            )
+        else:
+            self.prompt = prompt
 
-        return decoder(selfies)
+        self.input_list = self.data["input"]
+        self.label_list = self.data["output"]
+        self.instruction_list = self.data["instruction"]
+
+    def __len__(self):
+        return len(self.input_list)
+
+    # LLM input order: <instruction><qformer_output><smiles_tokens>
+    def __getitem__(self, index):
+        instruction = self.instruction_list[index]
+        input = self.input_list[index]
+        label = self.label_list[index]
+        # one smiles in output
+        if self.task in TEXT2MOL_BENCHMARKS:
+            selfies = label  # label in mol-instruction dataset is annotated as selfies
+            smiles = convert_selfies2smiles(
+                label
+            )  # molca task smiles instead of selfies
+            label = smiles
+        # two smiles in input
+        elif self.task in ["reagent_prediction"]:
+            two_selfies = input
+            list_selfies = two_selfies.split(">>")
+            smiles = [convert_selfies2smiles(s) for s in list_selfies]
+        else:
+            # one smiles in input
+            selfies = input
+            smiles = convert_selfies2smiles(selfies)
+
+        if isinstance(smiles, list):
+            graph = [smiles2data(s) for s in smiles]
+        else:
+            graph = smiles2data(smiles)
+
+        label = wrap_label(label, self.task)
+
+        if self.prompt.find("{}") >= 0:
+            smiles_prompt = self.prompt.format(smiles[:128])
+        else:
+            smiles_prompt = self.prompt
+
+        output = {
+            "graph": graph,
+            "label": label,
+            "smiles_prompt": smiles_prompt,
+            "task_subtask_pair": self.task_subtask_pair,
+            "instruction": instruction,
+        }
+
+        return graph, label, smiles_prompt, self.task_subtask_pair, instruction
 
 
 from ogb.utils import smiles2graph
