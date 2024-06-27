@@ -5,7 +5,7 @@ import warnings
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, strategies
 import pytorch_lightning.callbacks as plc
-from pytorch_lightning.loggers import CSVLogger
+from pytorch_lightning.loggers import CSVLogger, NeptuneLogger, TensorBoardLogger
 from data_provider.stage3_dm import (
     Stage3DM,
     CLASSIFICATION_BENCHMARKS,
@@ -15,9 +15,6 @@ from data_provider.stage3_dm import (
 )
 from data_provider.stage2_chebi_dm import Stage2CheBIDM
 from model.blip2_stage3 import Blip2Stage3
-
-import neptune
-from pytorch_lightning.loggers import NeptuneLogger
 
 # instruction-tuning for benchmark datasets
 
@@ -78,6 +75,12 @@ def main(args):
     devices = ast.literal_eval(args.devices)
     num_devices = len(devices) if not isinstance(devices, int) else 1
     # adjust intended total batch size is the same regarlless of the number of devices
+    if args.mode == "multi_task":
+        assert args.batch_size % 4 == 0, "batch size should be multiple of 4"
+        args.batch_size = args.batch_size // 4
+    assert (
+        args.batch_size % num_devices == 0
+    ), "batch size should be multiple of num_devices"
     args.batch_size = args.batch_size // num_devices
     if args.root.lower().find("chebi") >= 0:
         dm = Stage2CheBIDM(
@@ -135,6 +138,10 @@ def main(args):
         api_key=os.environ.get("NEPTUNE_API_TOKEN"),
         project=args.neptune_project,
     )
+    tb_logger = TensorBoardLogger(
+        f"./MolCA/all_checkpoints/tensorboard/",
+        name=args.result_file.split("/")[-1].split(".")[0],
+    )
 
     trainer_args = {
         "accelerator": args.accelerator,
@@ -143,14 +150,14 @@ def main(args):
         "check_val_every_n_epoch": args.check_val_every_n_epoch,
         "callbacks": callbacks,
         "strategy": strategy,
-        "logger": [logger, neptune_logger],
+        "logger": [logger, neptune_logger, tb_logger],
     }
     if args.max_steps > 0:
         trainer_args["max_steps"] = args.max_steps
     else:
         trainer_args["max_epochs"] = args.max_epochs
     trainer = Trainer(**trainer_args)
-    if args.mode in {"pretrain", "ft"}:
+    if args.mode in {"pretrain", "ft", "multi_task"}:
         trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
         # test after training
         # The length of the list corresponds to the number of test dataloaders used.
