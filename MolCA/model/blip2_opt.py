@@ -314,26 +314,6 @@ class Blip2OPT(Blip2Base):
             encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
             return_dict=True,
         )
-        if self.args.num_random_query_embedding > 0:
-            # replace the tensor at the second dimension, as many embedding as the num_query_embedding
-            random_embedding = torch.randn(
-                query_output.last_hidden_state.shape[0],
-                self.args.num_random_query_embedding,
-                query_output.last_hidden_state.shape[2],
-                device=device,
-            )
-            rand_idxs = torch.randint(
-                0,
-                query_output.last_hidden_state.shape[1],
-                (
-                    query_output.last_hidden_state.shape[0],
-                    self.args.num_random_query_embedding,
-                ),
-                device=device,
-            )
-            query_output.last_hidden_state[
-                :, : self.args.num_random_query_embedding, :
-            ] = random_embedding
         mol_tokens = self.opt_proj(query_output.last_hidden_state)
 
         empty_targets = (
