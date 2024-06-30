@@ -4,7 +4,7 @@ import argparse
 import warnings
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, strategies
-import pytorch_lightning.callbacks as plc
+from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger, NeptuneLogger, TensorBoardLogger
 from data_provider.stage3_dm import (
     Stage3DM,
@@ -82,6 +82,7 @@ def main(args):
         args.batch_size % num_devices == 0
     ), "batch size should be multiple of num_devices"
     args.batch_size = args.batch_size // num_devices
+    print(f"batch size per device: {args.batch_size}")
     if args.root.lower().find("chebi") >= 0:
         dm = Stage2CheBIDM(
             args.mode,
@@ -102,6 +103,8 @@ def main(args):
             tokenizer,
             args,
         )
+        if args.save_dataset:
+            torch.save(dm, f"{args.root}_dm.pt")
 
     # callbacks to save model parameters
     callbacks = []
@@ -109,10 +112,10 @@ def main(args):
         pass
     else:
         callbacks.append(
-            plc.ModelCheckpoint(
+            ModelCheckpoint(
                 dirpath="MolCA/all_checkpoints/" + args.filename + "/",
-                filename="{epoch:02d}",
-                every_n_epochs=args.save_every_n_epochs,
+                filename="{epoch:02d}-{global_step:06d}",
+                every_n_train_steps=args.every_n_train_steps,
                 save_last=True,
                 save_top_k=-1,
                 save_on_train_epoch_end=True,
@@ -134,10 +137,13 @@ def main(args):
         args.devices = [eval(args.devices)]
     # logger setting
     logger = CSVLogger(save_dir=f"./MolCA/all_checkpoints/{args.filename}/")
+    """
     neptune_logger = NeptuneLogger(
         api_key=os.environ.get("NEPTUNE_API_TOKEN"),
         project=args.neptune_project,
+        log_model_checkpoints=False
     )
+    """
     tb_logger = TensorBoardLogger(
         f"./MolCA/all_checkpoints/tensorboard/",
         name=args.result_file.split("/")[-1].split(".")[0],
@@ -150,7 +156,7 @@ def main(args):
         "check_val_every_n_epoch": args.check_val_every_n_epoch,
         "callbacks": callbacks,
         "strategy": strategy,
-        "logger": [logger, neptune_logger, tb_logger],
+        "logger": [logger, tb_logger],
     }
     if args.max_steps > 0:
         trainer_args["max_steps"] = args.max_steps
@@ -159,10 +165,11 @@ def main(args):
     trainer = Trainer(**trainer_args)
     if args.mode in {"pretrain", "ft", "multi_task"}:
         trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
-        # test after training
-        # The length of the list corresponds to the number of test dataloaders used.
         outputs = trainer.test(model, datamodule=dm)
 
+    # TODO: Deprecate eval mode.
+    # Previously, molca authors evaluate validation dataset and testset at the same in validation epoch.
+    # Now, we separate validation and testset evaluation, as usual.
     elif args.mode == "eval":
         trainer.fit_loop.epoch_progress.current.completed = args.caption_eval_epoch - 1
         trainer.validate(model, datamodule=dm)
@@ -171,7 +178,7 @@ def main(args):
     else:
         raise NotImplementedError()
 
-    if args.result_file is not None:
+    if args.result_file is not None and args.mode != "multi_task":
         update_result_csv(
             args=args, outputs=outputs, task_names=dm.train_data.get_task_names()
         )
@@ -215,7 +222,7 @@ def update_result_csv(args, outputs, task_names):
         pass
 
 
-class SaveLoRAModelCallback(plc.Callback):
+class SaveLoRAModelCallback(Callback):
     def __init__(self, dir_path):
         """
         Args:
@@ -257,11 +264,13 @@ def get_args():
     parser.add_argument("--max_steps", type=int, default=-1)
     parser.add_argument("--accumulate_grad_batches", type=int, default=1)
     parser.add_argument("--check_val_every_n_epoch", type=int, default=1)
+    parser.add_argument("--every_n_train_steps", type=int, default=2000)
     parser.add_argument("--task", type=str, default=None)
     parser.add_argument("--val_check_interval", type=float, default=0.1)
     parser.add_argument("--neptune_project", type=str, default="chless/text-mol")
     parser.add_argument("--result_file", type=str, default="MolCA/results/debug.json")
     parser.add_argument("--not_save_model", action="store_true", default=False)
+    parser.add_argument("--save_dataset", action="store_true", default=False)
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)
