@@ -207,53 +207,6 @@ class Blip2Stage3(pl.LightningModule):
                 raise NotImplementedError()
         return optimizer
 
-    def on_test_epoch_end(self):
-        list_predictions = self.list_predictions
-        list_targets = self.list_targets
-        list_tasks = self.list_tasks
-        list_probs = self.list_probs
-
-        predictions = [i for ii in list_predictions for i in ii]
-        targets = [i for ii in list_targets for i in ii]
-        tasks = [i for ii in list_tasks for i in ii]
-        probs = [i for ii in list_probs for i in ii]
-
-        all_predictions = [None for _ in range(self.trainer.world_size)]
-        all_targets = [None for _ in range(self.trainer.world_size)]
-        all_tasks = [None for _ in range(self.trainer.world_size)]
-        all_probs = [None for _ in range(self.trainer.world_size)]
-
-        if self.num_devices > 1:
-            dist.all_gather_object(all_predictions, predictions)
-            dist.all_gather_object(all_targets, targets)
-            dist.all_gather_object(all_tasks, tasks)
-            dist.all_gather_object(all_probs, probs)
-        else:
-            all_predictions[0] = predictions
-            all_targets[0] = targets
-            all_tasks[0] = tasks
-            all_probs[0] = probs
-
-        if self.global_rank == 0:
-            all_predictions = [i for ii in all_predictions for i in ii]
-            all_targets = [i for ii in all_targets for i in ii]
-            all_tasks = [i for ii in all_tasks for i in ii]
-            all_probs = [i for ii in all_probs for i in ii]
-
-            self.save_predictions(all_predictions, all_targets, all_tasks)
-
-            evaluation_metrics = task_specifically_evaluate(
-                all_predictions=all_predictions,
-                all_targets=all_targets,
-                all_tasks=all_tasks,
-                all_probs=all_probs,
-                tokenizer=self.blip2opt.opt_tokenizer,
-                text_trunc_length=self.max_len * 2,
-            )
-
-            for k in evaluation_metrics:
-                self.log("test_" + k, evaluation_metrics[k], sync_dist=False)
-
     def save_predictions(self, predictions, targets, tasks):
         assert len(predictions) == len(targets)
         assert len(predictions) == len(tasks)
@@ -269,130 +222,24 @@ class Blip2Stage3(pl.LightningModule):
                 f.write(json.dumps(line, ensure_ascii=True) + "\n")
 
     def on_test_epoch_start(self) -> None:
-        self.list_predictions = []
-        self.list_targets = []
-        self.list_tasks = []
-        self.list_probs = []
+        self.on_evaluation_epoch_start()
 
     @torch.no_grad()
-    def test_step(self, batch, batch_idx):
-        graphs, prompt_tokens, texts, tasks, instructions = batch
-        ##============== Captioning Results ===================##
-        samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
-        outputs = self.blip2opt.generate(
-            samples,
-            do_sample=self.do_sample,
-            num_beams=self.num_beams,
-            max_length=self.max_len,
-            min_length=self.min_len,
-        )
-        self.list_predictions.append(outputs.predictions)
-        self.list_targets.append(texts)
-        self.list_tasks.append(tasks)
-        probs = convert_logit2binary_prob(outputs.logits, self.blip2opt.opt_tokenizer)
-        self.list_probs.append(probs)
+    def test_step(self, batch, batch_idx, dataloader_idx):
+        return self.evaluation_step(batch, batch_idx, dataloader_idx, mode="test")
+
+    def on_test_epoch_end(self):
+        self.on_evaluation_epoch_end(mode="test")
+
+    def on_validation_epoch_start(self) -> None:
+        self.on_evaluation_epoch_start()
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, dataloader_idx):
-        if dataloader_idx == 0:
-            task = "classification"
-        elif dataloader_idx == 1:
-            task = "regression"
-        elif dataloader_idx == 2:
-            task = "reaction"
-        elif dataloader_idx == 3:
-            task = "translation"
-        # TODO: figure out why batch composition is different from training_step
-        graphs, prompt_tokens, texts, tasks = batch
-
-        if (self.current_epoch + 1) % self.caption_eval_epoch != 0:
-            ##============== Captioning Results ===================##
-            samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
-            outputs = self.blip2opt.generate(
-                samples,
-                do_sample=self.do_sample,
-                num_beams=self.num_beams,
-                max_length=self.max_len,
-                min_length=self.min_len,
-            )
-            self.list_predictions.append(outputs.predictions)
-            self.list_targets.append(texts)
-            self.list_tasks.append(tasks)
-            # TODO: implement exception for tasks other than classification
-            """
-            probs = convert_logit2binary_prob(
-                outputs.logits, self.blip2opt.opt_tokenizer
-            )
-            self.list_probs.append(probs)
-            """
-
-        batch_size = texts.input_ids.shape[0]
-        loss = self.blip2opt(batch[:-1])  # omit tasks when inputting to the model
-        ##============== Overall Loss ===================##
-        for key, loss_item in loss.items():
-            self.log(
-                f"val/{task}",
-                float(loss_item),
-                batch_size=batch_size,
-                sync_dist=True,
-            )
-        return loss["loss"]
-
-    def on_validation_epoch_start(self) -> None:
-        self.list_predictions = []
-        self.list_targets = []
-        self.list_tasks = []
-        self.list_probs = []
+        return self.evaluation_step(batch, batch_idx, dataloader_idx, mode="val")
 
     def on_validation_epoch_end(self) -> None:
-        if (self.current_epoch + 1) % self.caption_eval_epoch != 0:
-            return
-        list_predictions = self.list_predictions
-        list_targets = self.list_targets
-        list_tasks = self.list_tasks
-        list_probs = self.list_probs
-
-        predictions = [i for ii in list_predictions for i in ii]
-        targets = [i for ii in list_targets for i in ii]
-        tasks = [i for ii in list_tasks for i in ii]
-        probs = [i for ii in list_probs for i in ii]
-
-        all_predictions = [None for _ in range(self.trainer.world_size)]
-        all_targets = [None for _ in range(self.trainer.world_size)]
-        all_tasks = [None for _ in range(self.trainer.world_size)]
-        all_probs = [None for _ in range(self.trainer.world_size)]
-
-        if self.num_devices > 1:
-            dist.all_gather_object(all_predictions, predictions)
-            dist.all_gather_object(all_targets, targets)
-            dist.all_gather_object(all_tasks, tasks)
-            dist.all_gather_object(all_probs, probs)
-        else:
-            all_predictions[0] = predictions
-            all_targets[0] = targets
-            all_tasks[0] = tasks
-            all_probs[0] = probs
-
-        if self.global_rank == 0:
-            all_predictions = [i for ii in all_predictions for i in ii]
-            all_targets = [i for ii in all_targets for i in ii]
-            all_tasks = [i for ii in all_tasks for i in ii]
-            all_probs = [i for ii in all_probs for i in ii]
-            self.save_predictions(all_predictions, all_targets, all_tasks)
-
-            # TODO: implement this
-            """
-            evaluation_metrics = task_specifically_evaluate(
-                all_predictions=all_predictions,
-                all_targets=all_targets,
-                all_tasks=all_tasks,
-                all_probs=all_probs,
-                tokenizer=self.blip2opt.opt_tokenizer,
-                text_trunc_length=self.max_len * 2,
-            )
-            for k in evaluation_metrics:
-                self.log("validation_" + k, evaluation_metrics[k], sync_dist=False)
-            """
+        self.on_evaluation_epoch_end(mode="val")
 
     def training_step(self, batch, batch_idx):
         if self.scheduler:
@@ -479,6 +326,107 @@ class Blip2Stage3(pl.LightningModule):
             for key, loss_item in loss.items():
                 self.log(key, float(loss_item), batch_size=batch_size, sync_dist=True)
             return loss["loss"]
+
+    def on_evaluation_epoch_start(self):
+        self.list_predictions = []
+        self.list_targets = []
+        self.list_tasks = []
+        self.list_probs = []
+
+    def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
+        if dataloader_idx == 0:
+            task = "classification"
+        elif dataloader_idx == 1:
+            task = "regression"
+        elif dataloader_idx == 2:
+            task = "reaction"
+        elif dataloader_idx == 3:
+            task = "translation"
+        # TODO: figure out why batch composition is different from training_step
+        graphs, prompt_tokens, texts, tasks = batch
+
+        if (self.current_epoch + 1) % self.caption_eval_epoch != 0:
+            ##============== Captioning Results ===================##
+            samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
+            outputs = self.blip2opt.generate(
+                samples,
+                do_sample=self.do_sample,
+                num_beams=self.num_beams,
+                max_length=self.max_len,
+                min_length=self.min_len,
+            )
+            predictions = outputs.predictions
+            targets = self.blip2opt.opt_tokenizer.batch_decode(texts.input_ids)
+            self.list_predictions.append(predictions)
+            self.list_targets.append(targets)
+            self.list_tasks.append(tasks)
+            # TODO: implement exception for tasks other than classification
+            """
+            probs = convert_logit2binary_prob(
+                outputs.logits, self.blip2opt.opt_tokenizer
+            )
+            self.list_probs.append(probs)
+            """
+
+        batch_size = texts.input_ids.shape[0]
+        loss = self.blip2opt(batch[:-1])  # omit tasks when inputting to the model
+        ##============== Overall Loss ===================##
+        for key, loss_item in loss.items():
+            self.log(
+                f"{mode}/{task}",
+                float(loss_item),
+                batch_size=batch_size,
+                sync_dist=True,
+            )
+        return loss["loss"]
+
+    def on_evaluation_epoch_end(self, mode="val") -> None:
+        list_predictions = self.list_predictions
+        list_targets = self.list_targets
+        list_tasks = self.list_tasks
+        list_probs = self.list_probs
+
+        predictions = [i for ii in list_predictions for i in ii]
+        targets = [i for ii in list_targets for i in ii]
+        tasks = [i for ii in list_tasks for i in ii]
+        probs = [i for ii in list_probs for i in ii]
+
+        all_predictions = [None for _ in range(self.trainer.world_size)]
+        all_targets = [None for _ in range(self.trainer.world_size)]
+        all_tasks = [None for _ in range(self.trainer.world_size)]
+        all_probs = [None for _ in range(self.trainer.world_size)]
+
+        if self.num_devices > 1:
+            dist.all_gather_object(all_predictions, predictions)
+            dist.all_gather_object(all_targets, targets)
+            dist.all_gather_object(all_tasks, tasks)
+            dist.all_gather_object(all_probs, probs)
+        else:
+            all_predictions[0] = predictions
+            all_targets[0] = targets
+            all_tasks[0] = tasks
+            all_probs[0] = probs
+
+        if self.global_rank == 0:
+            all_predictions = [i for ii in all_predictions for i in ii]
+            all_targets = [i for ii in all_targets for i in ii]
+            all_tasks = [i for ii in all_tasks for i in ii]
+            all_probs = [i for ii in all_probs for i in ii]
+            self.save_predictions(all_predictions, all_targets, all_tasks)
+
+            # TODO: implement this
+            """
+            evaluation_metrics = task_specifically_evaluate(
+                all_predictions=all_predictions,
+                all_targets=all_targets,
+                all_tasks=all_tasks,
+                all_probs=all_probs,
+                tokenizer=self.blip2opt.opt_tokenizer,
+                text_trunc_length=self.max_len * 2,
+            )
+            for k in evaluation_metrics:
+                self.log(f"{mode}/k, evaluation_metrics[k], sync_dist=False)
+            """
 
     @staticmethod
     def add_model_specific_args(parent_parser):
