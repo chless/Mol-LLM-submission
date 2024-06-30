@@ -10,7 +10,7 @@ from torch_geometric.loader.dataloader import Collater
 from data_provider.molecule_caption_dataset import MoleculeCaption, MoleculeCaptionV2
 import re
 from torch.utils.data import DataLoader, Dataset
-from torch_geometric.data import Data
+from torch_geometric.data import InMemoryDataset, Data
 import os
 
 import deepchem as dc
@@ -284,213 +284,21 @@ class Stage3DM(LightningDataModule):
         self.args = args
 
         if root == "multi_task":
-            task_subtask_lists = {
-                "bace": [0],
-                "bbbp": [0],
-                "clintox": [0, 1],
-                "toxcast": [0],
-                "sider": [0],
-                "tox21": [0],
-                "hiv": [0],
-                "qm9": [2, 3, 4],
-                "esol": [0],
-                "lipo": [0],
-                "forward_reaction_prediction": [0],
-                # "reagent_prediction": [0],
-                "retrosynthesis": [0],
-                "description_guided_molecule_design": [0],
-                "molecular_description_generation": [0],
-            }
-            self.task_subtask_pairs = [
-                (task, subtask)
-                for task, subtasks in task_subtask_lists.items()
-                for subtask in subtasks
-            ]
-
-            total_benchmarks = (
-                REACTION_BENCHAMRKS
-                + MOL2TEXT_BENCHMARKS
-                + TEXT2MOL_BENCHMARKS
-                + CLASSIFICATION_BENCHMARKS
-                + REGRESSION_BENCHMARKS
-            )
-
-            multi_task_datasets = {
-                task_name: self.get_dataset(task_name)  # {task_name: [train, val, test]
-                for task_name in total_benchmarks
-            }
-
-            self.train_dataset, self.val_dataset, self.test_dataset = [], [], []
-            for task_subtask_pair in tqdm(
-                self.task_subtask_pairs, desc="Processing task_subtask_pairs"
-            ):
-                task_name = task_subtask_pair[0]
-                subtasks = multi_task_datasets[task_name][0]
-                subtask_idx = task_subtask_pair[1]
-                task_subtask_pair = f"{task_name}/{subtasks[subtask_idx]}"
-
-                data_split = multi_task_datasets[task_name][
-                    1:
-                ]  # train_set, val_set, test_set
-
-                if task_name in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
-                    train_dataset = MoleculeNetDatasetDeepChem(
-                        data=data_split[0],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        subtask_idx=subtask_idx,
-                        debug=self.debug,
-                    )
-                    valid_dataset = MoleculeNetDatasetDeepChem(
-                        data=data_split[1],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        subtask_idx=subtask_idx,
-                        debug=self.debug,
-                    )
-                    test_dataset = MoleculeNetDatasetDeepChem(
-                        data=data_split[2],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        subtask_idx=subtask_idx,
-                        debug=self.debug,
-                    )
-                elif task_name in REACTION_BENCHAMRKS:
-                    train_dataset = MolInstructionDatset(
-                        data=data_split[0],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        representation="smiles",
-                        debug=self.debug,
-                    )
-                    valid_dataset = MolInstructionDatset(
-                        data=data_split[1],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        representation="smiles",
-                        debug=self.debug,
-                    )
-                    test_dataset = MolInstructionDatset(
-                        data=data_split[2],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        representation="smiles",
-                        debug=self.debug,
-                    )
-                elif task_name in MOL2TEXT_BENCHMARKS:
-                    # train_dataset = MoleculeCaptionV2(root+f'train.pt', self.text_max_len, self.prompt, debug=self.debug)
-                    # valid_dataset = MoleculeCaptionV2(root + f'valid.pt', self.text_max_len, self.prompt, debug=self.debug)
-                    # test_dataset = MoleculeCaptionV2(root + f'test.pt', self.text_max_len, self.prompt, debug=self.debug)
-                    train_dataset = MolInstructionDatset(
-                        data=data_split[0],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        representation="smiles",
-                        debug=self.debug,
-                    )
-                    valid_dataset = MolInstructionDatset(
-                        data=data_split[1],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        representation="smiles",
-                        debug=self.debug,
-                    )
-                    test_dataset = MolInstructionDatset(
-                        data=data_split[2],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        representation="smiles",
-                        debug=self.debug,
-                    )
-                elif task_name in TEXT2MOL_BENCHMARKS:
-                    # train_dataset = MoleculeCaptionV2(root+f'train.pt', self.text_max_len, self.prompt, debug=self.debug)
-                    # valid_dataset = MoleculeCaptionV2(root + f'valid.pt', self.text_max_len, self.prompt, debug=self.debug)
-                    # test_dataset = MoleculeCaptionV2(root + f'test.pt', self.text_max_len, self.prompt, debug=self.debug)
-                    train_dataset = MolInstructionDatset(
-                        data=data_split[0],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        representation="smiles",
-                        debug=self.debug,
-                    )
-                    valid_dataset = MolInstructionDatset(
-                        data=data_split[1],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        representation="smiles",
-                        debug=self.debug,
-                    )
-                    test_dataset = MolInstructionDatset(
-                        data=data_split[2],
-                        task_subtask_pair=task_subtask_pair,
-                        prompt=self.prompt,
-                        representation="smiles",
-                        debug=self.debug,
-                    )
-
-                self.train_dataset.append(train_dataset)
-                self.val_dataset.append(valid_dataset)
-                self.test_dataset.append(test_dataset)
-
-            # concat datasets ffrom each subtask into large class [classification, regression, reaction prediction, translation]
+            # preprocess dataset and save
+            if self.args.get_raw_data:
+                self.get_raw_multi_task_dataset()
 
             self.concat_datasets = {
-                task: {"train": [], "val": [], "test": []}
+                task: {"train": None, "val": None, "test": None}
                 for task in ["classification", "regression", "reaction", "translation"]
             }
 
-            for i in range(len(self.task_subtask_pairs)):
-                task_subtask_pair = self.task_subtask_pairs[i]
-                task_name = task_subtask_pair[0]
-                if task_name in CLASSIFICATION_BENCHMARKS:
-                    self.concat_datasets["classification"]["train"].append(
-                        self.train_dataset[i]
-                    )
-                    self.concat_datasets["classification"]["val"].append(
-                        self.val_dataset[i]
-                    )
-                    self.concat_datasets["classification"]["test"].append(
-                        self.test_dataset[i]
-                    )
-                elif task_name in REGRESSION_BENCHMARKS:
-                    self.concat_datasets["regression"]["train"].append(
-                        self.train_dataset[i]
-                    )
-                    self.concat_datasets["regression"]["val"].append(
-                        self.val_dataset[i]
-                    )
-                    self.concat_datasets["regression"]["test"].append(
-                        self.test_dataset[i]
-                    )
-                elif task_name in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
-                    self.concat_datasets["translation"]["train"].append(
-                        self.train_dataset[i]
-                    )
-                    self.concat_datasets["translation"]["val"].append(
-                        self.val_dataset[i]
-                    )
-                    self.concat_datasets["translation"]["test"].append(
-                        self.test_dataset[i]
-                    )
-                elif task_name in REACTION_BENCHAMRKS:
-                    self.concat_datasets["reaction"]["train"].append(
-                        self.train_dataset[i]
-                    )
-                    self.concat_datasets["reaction"]["val"].append(self.val_dataset[i])
-                    self.concat_datasets["reaction"]["test"].append(
-                        self.test_dataset[i]
-                    )
-                else:
-                    raise NotImplementedError
-
             for task in ["classification", "regression", "reaction", "translation"]:
                 for split in ["train", "val", "test"]:
-                    if not isinstance(self.concat_datasets[task][split], ConcatDataset):
-                        self.concat_datasets[task][split] = ConcatDataset(
-                            self.concat_datasets[task][split]
-                        )
-                    else:
-                        raise ValueError(f"Already concatenated {task} {split} dataset")
+                    self.concat_datasets[task][split] = InstructionInMemoryDataset(
+                        root=self.args.raw_data_root,
+                        filename=f"{task}_{split}",
+                    )
 
         elif root in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
             self.tasks, self.train_data, self.val_data, self.test_data = (
@@ -535,6 +343,193 @@ class Stage3DM(LightningDataModule):
         self.init_tokenizer(tokenizer)
         self.mol_ph_token = "<mol>" * self.args.num_query_token
         self.mol_representation = args.mol_representation
+
+    def get_raw_multi_task_dataset(
+        self,
+    ):
+        task_subtask_lists = {
+            "bace": [0],
+            "bbbp": [0],
+            "clintox": [0, 1],
+            "toxcast": [0],
+            "sider": [0],
+            "tox21": [0],
+            "hiv": [0],
+            "qm9": [2, 3, 4],
+            "esol": [0],
+            "lipo": [0],
+            "forward_reaction_prediction": [0],
+            # "reagent_prediction": [0],
+            "retrosynthesis": [0],
+            "description_guided_molecule_design": [0],
+            "molecular_description_generation": [0],
+        }
+        self.task_subtask_pairs = [
+            (task, subtask)
+            for task, subtasks in task_subtask_lists.items()
+            for subtask in subtasks
+        ]
+
+        total_benchmarks = (
+            REACTION_BENCHAMRKS
+            + MOL2TEXT_BENCHMARKS
+            + TEXT2MOL_BENCHMARKS
+            + CLASSIFICATION_BENCHMARKS
+            + REGRESSION_BENCHMARKS
+        )
+
+        multi_task_datasets = {
+            task_name: self.get_dataset(task_name)  # {task_name: [train, val, test]
+            for task_name in total_benchmarks
+        }
+
+        self.train_dataset, self.val_dataset, self.test_dataset = [], [], []
+        for task_subtask_pair in tqdm(
+            self.task_subtask_pairs, desc="Processing task_subtask_pairs"
+        ):
+            task_name = task_subtask_pair[0]
+            subtasks = multi_task_datasets[task_name][0]
+            subtask_idx = task_subtask_pair[1]
+            task_subtask_pair = f"{task_name}/{subtasks[subtask_idx]}"
+
+            data_split = multi_task_datasets[task_name][
+                1:
+            ]  # train_set, val_set, test_set
+
+            if task_name in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
+                train_dataset = MoleculeNetDatasetDeepChem(
+                    data=data_split[0],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    subtask_idx=subtask_idx,
+                    debug=self.debug,
+                )
+                valid_dataset = MoleculeNetDatasetDeepChem(
+                    data=data_split[1],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    subtask_idx=subtask_idx,
+                    debug=self.debug,
+                )
+                test_dataset = MoleculeNetDatasetDeepChem(
+                    data=data_split[2],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    subtask_idx=subtask_idx,
+                    debug=self.debug,
+                )
+            elif task_name in REACTION_BENCHAMRKS:
+                train_dataset = MolInstructionDatset(
+                    data=data_split[0],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    representation="smiles",
+                    debug=self.debug,
+                )
+                valid_dataset = MolInstructionDatset(
+                    data=data_split[1],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    representation="smiles",
+                    debug=self.debug,
+                )
+                test_dataset = MolInstructionDatset(
+                    data=data_split[2],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    representation="smiles",
+                    debug=self.debug,
+                )
+            elif task_name in MOL2TEXT_BENCHMARKS:
+                train_dataset = MolInstructionDatset(
+                    data=data_split[0],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    representation="smiles",
+                    debug=self.debug,
+                )
+                valid_dataset = MolInstructionDatset(
+                    data=data_split[1],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    representation="smiles",
+                    debug=self.debug,
+                )
+                test_dataset = MolInstructionDatset(
+                    data=data_split[2],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    representation="smiles",
+                    debug=self.debug,
+                )
+            elif task_name in TEXT2MOL_BENCHMARKS:
+                train_dataset = MolInstructionDatset(
+                    data=data_split[0],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    representation="smiles",
+                    debug=self.debug,
+                )
+                valid_dataset = MolInstructionDatset(
+                    data=data_split[1],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    representation="smiles",
+                    debug=self.debug,
+                )
+                test_dataset = MolInstructionDatset(
+                    data=data_split[2],
+                    task_subtask_pair=task_subtask_pair,
+                    prompt=self.prompt,
+                    representation="smiles",
+                    debug=self.debug,
+                )
+
+            self.train_dataset.append(train_dataset)
+            self.val_dataset.append(valid_dataset)
+            self.test_dataset.append(test_dataset)
+
+        # concat datasets from each subtask into large class [classification, regression, reaction prediction, translation]
+
+        concat_datasets = {
+            task: {"train": [], "val": [], "test": []}
+            for task in ["classification", "regression", "reaction", "translation"]
+        }
+
+        for i in range(len(self.task_subtask_pairs)):
+            task_subtask_pair = self.task_subtask_pairs[i]
+            task_name = task_subtask_pair[0]
+            if task_name in CLASSIFICATION_BENCHMARKS:
+                concat_datasets["classification"]["train"].append(self.train_dataset[i])
+                concat_datasets["classification"]["val"].append(self.val_dataset[i])
+                concat_datasets["classification"]["test"].append(self.test_dataset[i])
+            elif task_name in REGRESSION_BENCHMARKS:
+                concat_datasets["regression"]["train"].append(self.train_dataset[i])
+                concat_datasets["regression"]["val"].append(self.val_dataset[i])
+                concat_datasets["regression"]["test"].append(self.test_dataset[i])
+            elif task_name in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
+                concat_datasets["translation"]["train"].append(self.train_dataset[i])
+                concat_datasets["translation"]["val"].append(self.val_dataset[i])
+                concat_datasets["translation"]["test"].append(self.test_dataset[i])
+            elif task_name in REACTION_BENCHAMRKS:
+                concat_datasets["reaction"]["train"].append(self.train_dataset[i])
+                concat_datasets["reaction"]["val"].append(self.val_dataset[i])
+                concat_datasets["reaction"]["test"].append(self.test_dataset[i])
+            else:
+                raise NotImplementedError
+
+        os.path.makedirs(os.path.join(self.args.raw_data_root, "raw"), exist_ok=True)
+
+        for task in ["classification", "regression", "reaction", "translation"]:
+            for split in ["train", "val", "test"]:
+                concat_dataset = ConcatDataset(concat_datasets[task][split])
+                torch.save(
+                    concat_dataset,
+                    f"{self.args.raw_data_root}/raw/{task}_{split}",
+                )
+
+        print("Data preprocessing is done")
+        return concat_datasets
 
     def get_dataset(self, root):
         base_path = f"dataset/{root}"
@@ -599,7 +594,7 @@ class Stage3DM(LightningDataModule):
                 batch_size=self.batch_size,
                 shuffle=True,
                 num_workers=self.num_workers,
-                pin_memory=False,
+                pin_memory=True,
                 drop_last=True,
                 persistent_workers=True,
                 collate_fn=TrainCollater(
@@ -617,7 +612,7 @@ class Stage3DM(LightningDataModule):
                 batch_size=self.batch_size,
                 shuffle=True,
                 num_workers=self.num_workers,
-                pin_memory=False,
+                pin_memory=True,
                 drop_last=True,
                 persistent_workers=True,
                 collate_fn=TrainCollater(
@@ -636,7 +631,7 @@ class Stage3DM(LightningDataModule):
                     batch_size=self.batch_size,
                     shuffle=True,
                     num_workers=self.num_workers,
-                    pin_memory=False,
+                    pin_memory=True,
                     drop_last=True,
                     persistent_workers=True,
                     collate_fn=TrainCollater(
@@ -662,7 +657,7 @@ class Stage3DM(LightningDataModule):
                 batch_size=self.batch_size,
                 shuffle=False,
                 num_workers=self.num_workers,
-                pin_memory=False,
+                pin_memory=True,
                 drop_last=False,
                 persistent_workers=True,
                 collate_fn=TrainCollater(
@@ -679,7 +674,7 @@ class Stage3DM(LightningDataModule):
                 batch_size=self.inference_batch_size,
                 shuffle=False,
                 num_workers=self.num_workers,
-                pin_memory=False,
+                pin_memory=True,
                 drop_last=False,
                 persistent_workers=True,
                 collate_fn=InferenceCollater(
@@ -699,7 +694,7 @@ class Stage3DM(LightningDataModule):
                     batch_size=self.inference_batch_size,
                     shuffle=False,
                     num_workers=self.num_workers,
-                    pin_memory=False,
+                    pin_memory=True,
                     drop_last=False,
                     persistent_workers=True,
                     collate_fn=InferenceCollater(
@@ -723,7 +718,7 @@ class Stage3DM(LightningDataModule):
                 batch_size=self.inference_batch_size,
                 shuffle=False,
                 num_workers=self.num_workers,
-                pin_memory=False,
+                pin_memory=True,
                 drop_last=False,
                 persistent_workers=True,
                 collate_fn=InferenceCollater(
@@ -743,7 +738,7 @@ class Stage3DM(LightningDataModule):
                     batch_size=self.inference_batch_size,
                     shuffle=False,
                     num_workers=self.num_workers,
-                    pin_memory=False,
+                    pin_memory=True,
                     drop_last=False,
                     persistent_workers=True,
                     collate_fn=InferenceCollater(
@@ -762,7 +757,7 @@ class Stage3DM(LightningDataModule):
 
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group("Data module")
-        parser.add_argument("--num_workers", type=int, default=2)
+        parser.add_argument("--num_workers", type=int, default=4)
         parser.add_argument("--batch_size", type=int, default=32)
         parser.add_argument("--inference_batch_size", type=int, default=4)
         parser.add_argument("--use_smiles", action="store_true", default=False)
@@ -777,6 +772,10 @@ class Stage3DM(LightningDataModule):
 
         # moleculenet dataset
         parser.add_argument("--subtask_idx", type=int, default=0)
+        parser.add_argument("--get_raw_data", action="store_true", default=False)
+        parser.add_argument(
+            "--raw_data_root", type=str, default="MolCA/data/multi_task_dataset"
+        )
         return parent_parser
 
 
@@ -811,14 +810,18 @@ def wrap_label(label, task):
         raise NotImplementedError
 
 
+from torch_geometric.data import InMemoryDataset, Data
+
+
 # TODO use task or refactor it
 # getitem shoul return enough information that what is label, and what is the label meaning (to format instruction)
 class MoleculeNetDatasetDeepChem(Dataset):
     def __init__(
         self, data, task_subtask_pair, subtask_idx=0, prompt=None, debug=False
     ):
-        self.mol_list = data.X
-        self.label_list = data.y[:, subtask_idx]
+        self.debug = debug
+        self.data = data
+        self.subtask_idx = subtask_idx
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
 
@@ -836,13 +839,6 @@ class MoleculeNetDatasetDeepChem(Dataset):
             label_tokens=self.label_tokens,
         )
 
-        self.debug = debug
-
-        if self.debug:
-            self.mol_list = self.mol_list[:100]
-            self.label_list = self.label_list[:100]
-        self.prompt = prompt
-
         if not prompt:
             self.prompt = (
                 "The SMILES of this molecule is [START_I_SMILES]{}[END_I_SMILES]. "
@@ -850,15 +846,12 @@ class MoleculeNetDatasetDeepChem(Dataset):
         else:
             self.prompt = prompt
 
-        self.smiles_list = []
-        iter_bar = tqdm(self.mol_list)
-        for mol in iter_bar:
-            self.smiles_list.append(Chem.MolToSmiles(mol))
+        self.set_necessary_data()
 
     def __len__(self):
         return len(self.smiles_list)
 
-    def __getitem__(self, index):
+    def get_necessary_data(self, index):
         smiles = self.smiles_list[index]
         label = self.label_list[index]
         label = wrap_label(label, self.task)
@@ -869,13 +862,47 @@ class MoleculeNetDatasetDeepChem(Dataset):
         else:
             smiles_prompt = self.prompt
 
-        output = {
-            "graph": graph,
-            "label": label,
-            "smiles_prompt": smiles_prompt,
-            "task_subtask_pair": self.task_subtask_pair,
-            "instruction": self.instruction,
-        }
+        return graph, label, smiles_prompt, self.instruction
+
+    def set_necessary_data(self):
+        self.mol_list = self.data.X
+        self.label_list = self.data.y[:, self.subtask_idx]
+        if self.debug:
+            self.mol_list = self.mol_list[:100]
+            self.label_list = self.label_list[:100]
+
+        self.smiles_list = []
+        for mol in self.mol_list:
+            self.smiles_list.append(Chem.MolToSmiles(mol))
+
+        label_list = []
+        smiles_prompt_list = []
+        graph_list = []
+
+        self.count_invalid_smiles = 0
+
+        for i in range(len(self.mol_list)):
+            try:
+                graph, label, smiles_prompt, instruction = self.get_necessary_data(i)
+                label_list.append(label)
+                smiles_prompt_list.append(smiles_prompt)
+                graph_list.append(graph)
+            except Exception as e:
+                self.count_invalid_smiles += 1
+        if self.count_invalid_smiles > 0:
+            print(f"{self.task}: Number of invalid smiles: {self.count_invalid_smiles}")
+            print(
+                f"{self.task}: Number of invalid smiles: {self.count_invalid_smiles/len(self.input_list)}"
+            )
+
+        self.label_list = label_list
+        self.smiles_prompt_list = smiles_prompt_list
+        self.graph_list = graph_list
+
+    def __getitem__(self, index):
+        graph = self.graph_list[index]
+        label = self.label_list[index]
+        smiles_prompt = self.smiles_prompt_list[index]
 
         return graph, label, smiles_prompt, self.task_subtask_pair, self.instruction
 
@@ -895,12 +922,7 @@ class MolInstructionDatset(Dataset):
         self, data, task_subtask_pair, prompt=None, representation="smiles", debug=False
     ):
         self.debug = debug
-
-        if self.debug:
-            self.data = data[:100]
-        else:
-            self.data = data
-
+        self.data = data
         self.prompt = prompt
         self.representation = representation
         self.task_subtask_pair = task_subtask_pair
@@ -913,15 +935,51 @@ class MolInstructionDatset(Dataset):
         else:
             self.prompt = prompt
 
+        self.set_necesary_data()
+
+    def set_necesary_data(self):
+        if self.debug:
+            self.data = self.data[:100]
+        else:
+            self.data = self.data
+
         self.input_list = self.data["input"]
         self.label_list = self.data["output"]
         self.instruction_list = self.data["instruction"]
 
+        input_list = []
+        label_list = []
+        smiles_prompt_list = []
+        graph_list = []
+        instruction_list = []
+
+        self.count_invalid_smiles = 0
+        for i in range(len(self.input_list)):
+            try:
+                graph, label, smiles_prompt, instruction = self.get_necessary_data(i)
+                input_list.append(self.input_list[i])
+                label_list.append(label)
+                smiles_prompt_list.append(smiles_prompt)
+                graph_list.append(graph)
+                instruction_list.append(instruction)
+            except Exception as e:
+                self.count_invalid_smiles += 1
+        if self.count_invalid_smiles > 0:
+            print(f"{self.task}: Number of invalid smiles: {self.count_invalid_smiles}")
+            print(
+                f"{self.task}: Number of invalid smiles: {self.count_invalid_smiles/len(self.input_list)}"
+            )
+
+        self.input_list = input_list
+        self.label_list = label_list
+        self.smiles_prompt_list = smiles_prompt_list
+        self.graph_list = graph_list
+        self.instruction_list = instruction_list
+
     def __len__(self):
         return len(self.input_list)
 
-    # LLM input order: <instruction><qformer_output><smiles_tokens>
-    def __getitem__(self, index):
+    def get_necessary_data(self, index):
         instruction = self.instruction_list[index]
         input = self.input_list[index]
         label = self.label_list[index]
@@ -932,19 +990,21 @@ class MolInstructionDatset(Dataset):
                 label
             )  # molca task smiles instead of selfies
             label = smiles
+            # output smiles do not need to be converted to graph
+            # but assign graph = None retrieve error in torch_geometric, so assign arbitral graph
+            graph = smiles2data(
+                "C"
+            )  # output smiles do not need to be converted to graph
         # two smiles in input
         elif self.task in ["reagent_prediction"]:
             two_selfies = input
             list_selfies = two_selfies.split(">>")
             smiles = [convert_selfies2smiles(s) for s in list_selfies]
+            graph = [smiles2data(s) for s in smiles]
         else:
             # one smiles in input
             selfies = input
             smiles = convert_selfies2smiles(selfies)
-
-        if isinstance(smiles, list):
-            graph = [smiles2data(s) for s in smiles]
-        else:
             graph = smiles2data(smiles)
 
         label = wrap_label(label, self.task)
@@ -954,13 +1014,14 @@ class MolInstructionDatset(Dataset):
         else:
             smiles_prompt = self.prompt
 
-        output = {
-            "graph": graph,
-            "label": label,
-            "smiles_prompt": smiles_prompt,
-            "task_subtask_pair": self.task_subtask_pair,
-            "instruction": instruction,
-        }
+        return graph, label, smiles_prompt, instruction
+
+    # LLM input order: <instruction><qformer_output><smiles_tokens>
+    def __getitem__(self, index):
+        graph = self.graph_list[index]
+        label = self.label_list[index]
+        smiles_prompt = self.smiles_prompt_list[index]
+        instruction = self.instruction_list[index]
 
         return graph, label, smiles_prompt, self.task_subtask_pair, instruction
 
@@ -977,3 +1038,74 @@ def smiles2data(smiles):
     edge_attr = torch.from_numpy(graph["edge_feat"])
     data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
     return data
+
+
+# Initialize with the data_list from ConcatDataset
+class InstructionInMemoryDataset(InMemoryDataset):
+    def __init__(self, root, filename, transform=None, pre_transform=None, debug=False):
+        self.filename = filename  # raw_file_names and processed_file_names use this
+        super(InstructionInMemoryDataset, self).__init__(root, transform, pre_transform)
+        self.load(self.processed_paths[0])
+        if debug:
+            self.reduce_dataset_size(100)
+
+    def reduce_dataset_size(self, new_size):
+        # Check if new size is smaller than the current size
+        current_size = list(self.slices.values())[0].size(0) - 1
+        if new_size >= current_size:
+            print("New size must be smaller than the current dataset size.")
+            return
+
+        # Adjust data
+        for key in self.slices.keys():
+            self.slices[key] = self.slices[key][: new_size + 1]
+
+        # Slice the data according to new slices
+        reduced_data = {}
+        for key, item in self.data:
+            start = self.slices[key][0].item()
+            end = self.slices[key][-1].item()
+            reduced_data[key] = item[start:end]
+
+        self.data = Data(**reduced_data)
+
+    @property
+    def raw_file_names(self):
+        return f"{self.filename}.pth"
+
+    @property
+    def processed_file_names(self):
+        return f"{self.filename}.pt"
+
+    def download(self):
+        raise NotImplementedError(
+            "Data is not available for download. Preprocess data and save it."
+        )
+
+    def process(self):
+        # Process data_list and store in `self.data` and `self.slices`
+        raw_data_list = list(torch.load(self.raw_paths[0]))
+        data_list = []
+
+        for instance in raw_data_list:
+            data = Data(
+                x=instance[0].x,
+                edge_index=instance[0].edge_index,
+                edge_attr=instance[0].edge_attr,
+                y=instance[1],
+                smiles_prompt=instance[2],
+                task_subtask_pair=instance[3],
+                instruction=instance[4],
+            )
+
+            data_list.append(data)
+
+        self.save(data_list, self.processed_paths[0])
+
+    def __getitem__(self, index):
+        data = self.get(index)
+        label = data.y
+        smiles_prompt = data.smiles_prompt
+        task_subtask_pair = data.task_subtask_pair
+        instruction = data.instruction
+        return data, label, smiles_prompt, task_subtask_pair, instruction
