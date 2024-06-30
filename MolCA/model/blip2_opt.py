@@ -302,19 +302,7 @@ class Blip2OPT(Blip2Base):
     def forward(self, batch):
         # graph, smiles tokens, molecule description tokens
         graphs, prompt_tokens, text_tokens = batch
-        graph_embeds, graph_masks = self.graph_encoder(graphs)
-        if not self.tune_gnn:
-            graph_embeds = graph_embeds.detach()
-        graph_embeds = self.ln_graph(graph_embeds, graph_masks)
-        device = graph_embeds.device
-        query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-        query_output = self.Qformer.bert(
-            query_embeds=query_tokens,
-            encoder_hidden_states=graph_embeds,
-            encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
-            return_dict=True,
-        )
-        mol_tokens = self.opt_proj(query_output.last_hidden_state)
+        device = prompt_tokens.input_ids.device
 
         empty_targets = (
             torch.ones(prompt_tokens.attention_mask.shape, dtype=torch.long)
@@ -330,7 +318,20 @@ class Blip2OPT(Blip2Base):
         # Prompt_embeds takes 139 tokens, but the model only takes 8 tokens.
         # Though we use original setting of MolCA, this is unecessary context length comsumption.
         if "graph" in self.args.mol_representation:
+            graph_embeds, graph_masks = self.graph_encoder(graphs)
+            if not self.tune_gnn:
+                graph_embeds = graph_embeds.detach()
+            graph_embeds = self.ln_graph(graph_embeds, graph_masks)
+            query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
+            query_output = self.Qformer.bert(
+                query_embeds=query_tokens,
+                encoder_hidden_states=graph_embeds,
+                encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
+                return_dict=True,
+            )
+            mol_tokens = self.opt_proj(query_output.last_hidden_state)
             prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
+
         inputs_embeds = self.opt_model.get_input_embeddings()(text_tokens.input_ids)
         inputs_embeds = torch.cat((prompt_embeds, inputs_embeds), dim=1)
         attention_mask = torch.cat(
@@ -522,20 +523,20 @@ class Blip2OPT(Blip2Base):
         prompt_tokens = samples["prompt_tokens"]
         # prompt_lens = samples['prompt_lens']
         # with self.maybe_autocast():
-        graph_embeds, graph_masks = self.graph_encoder(graphs)
-        graph_embeds = self.ln_graph(graph_embeds)
-
-        query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-        query_output = self.Qformer.bert(
-            query_embeds=query_tokens,
-            encoder_hidden_states=graph_embeds,
-            encoder_attention_mask=graph_masks,
-            return_dict=True,
-        )
-        mol_tokens = self.opt_proj(query_output.last_hidden_state)
 
         prompt_embeds = self.opt_model.get_input_embeddings()(prompt_tokens.input_ids)
         if "graph" in self.args.mol_representation:
+            graph_embeds, graph_masks = self.graph_encoder(graphs)
+            graph_embeds = self.ln_graph(graph_embeds)
+
+            query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
+            query_output = self.Qformer.bert(
+                query_embeds=query_tokens,
+                encoder_hidden_states=graph_embeds,
+                encoder_attention_mask=graph_masks,
+                return_dict=True,
+            )
+            mol_tokens = self.opt_proj(query_output.last_hidden_state)
             prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
 
         outputs = self.opt_model.generate(
