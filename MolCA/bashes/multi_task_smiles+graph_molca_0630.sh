@@ -7,7 +7,7 @@ python3 MolCA/stage3.py \
 --devices $gpus \
 --root multi_task \
 --mode multi_task \
---filename instruction_tuning_string_only_galac_0628 \
+--filename instruction_tuning_string+graph_molca_galac_0630 \
 --stage2_path 'MolCA/all_checkpoints/MolCA/stage2.ckpt' \
 --opt_model 'facebook/galactica-1.3b' \
 --prompt '[START_I_SMILES]{}[END_I_SMILES].' \
@@ -17,8 +17,9 @@ python3 MolCA/stage3.py \
 --inference_batch_size $inference_batch_size \
 --val_check_interval 1 \
 --max_epochs 10 \
---mol_representation string_only \
+--mol_representation string+graph \
 --num_beam 1 \
---result_file MolCA/results/instruction_tuning_sting_only_galac_0628.csv \
+--result_file MolCA/results/instruction_tuning_sting+graph_molca_galac_0630.csv \
 --save_every_n_epochs 1 \
---raw_data_root MolCA/data/multi_task_dataset_0630-2.pth
+--every_n_train_steps 2000 \
+--raw_data_root MolCA/data/multi_task_dataset
