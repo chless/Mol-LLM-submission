@@ -282,6 +282,7 @@ class Stage3DM(LightningDataModule):
         self.prompt = args.prompt
         self.debug = args.debug
         self.args = args
+        self.root = root
 
         if root == "multi_task":
             # preprocess dataset and save
@@ -607,27 +608,36 @@ class Stage3DM(LightningDataModule):
                 ),
             )
         elif self.mode == "ft":
-            loader = DataLoader(
-                self.train_dataset,
-                batch_size=self.batch_size,
-                shuffle=True,
-                num_workers=self.num_workers,
-                pin_memory=True,
-                drop_last=True,
-                persistent_workers=True,
-                collate_fn=TrainCollater(
-                    self.tokenizer,
-                    self.text_max_len,
-                    self.mol_ph_token,
-                    self.mol_token_id,
-                    self.mol_representation,
-                    model=self.args.opt_model,
-                ),
-            )
-        elif self.mode == "multi_task":
-            loader = [
-                DataLoader(
-                    self.concat_datasets[task]["train"],
+            if self.root == "multi_task":
+                loader = [
+                    DataLoader(
+                        self.concat_datasets[task]["train"],
+                        batch_size=self.batch_size,
+                        shuffle=True,
+                        num_workers=self.num_workers,
+                        pin_memory=True,
+                        drop_last=True,
+                        persistent_workers=True,
+                        collate_fn=TrainCollater(
+                            self.tokenizer,
+                            self.text_max_len,
+                            self.mol_ph_token,
+                            self.mol_token_id,
+                            self.mol_representation,
+                            multi_task=True,
+                            model=self.args.opt_model,
+                        ),
+                    )
+                    for task in [
+                        "classification",
+                        "regression",
+                        "reaction",
+                        "translation",
+                    ]
+                ]
+            else:
+                loader = DataLoader(
+                    self.train_dataset,
                     batch_size=self.batch_size,
                     shuffle=True,
                     num_workers=self.num_workers,
@@ -640,18 +650,15 @@ class Stage3DM(LightningDataModule):
                         self.mol_ph_token,
                         self.mol_token_id,
                         self.mol_representation,
-                        multi_task=True,
                         model=self.args.opt_model,
                     ),
                 )
-                for task in ["classification", "regression", "reaction", "translation"]
-            ]
         else:
             raise NotImplementedError
         return loader
 
     def val_dataloader(self):
-        if self.mode != "multi_task":
+        if self.root != "multi_task":
             val_loader = DataLoader(
                 self.val_dataset,
                 batch_size=self.batch_size,
@@ -712,7 +719,7 @@ class Stage3DM(LightningDataModule):
             return loader
 
     def test_dataloader(self):
-        if self.mode != "multi_task":
+        if self.root != "multi_task":
             loader = DataLoader(
                 self.test_dataset,
                 batch_size=self.inference_batch_size,
