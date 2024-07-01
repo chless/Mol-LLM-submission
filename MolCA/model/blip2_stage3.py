@@ -309,7 +309,7 @@ class Blip2Stage3(pl.LightningModule):
                 + losses["translation"]["loss"]
             )
             self.log(
-                "total loss", float(total_loss), batch_size=batch_size, sync_dist=True
+                "total_loss", float(total_loss), batch_size=batch_size, sync_dist=True
             )
 
             return total_loss
@@ -332,6 +332,8 @@ class Blip2Stage3(pl.LightningModule):
         self.list_targets = []
         self.list_tasks = []
         self.list_probs = []
+        self.total_loss = 0.0
+        self.batch_losses = []
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
         if dataloader_idx == 0:
@@ -378,6 +380,18 @@ class Blip2Stage3(pl.LightningModule):
                 batch_size=batch_size,
                 sync_dist=True,
             )
+        # calculate moving average of total_loss
+        self.batch_losses.append(loss["loss"])
+        if len(self.batch_losses) >= 64:
+            self.total_loss = sum(self.batch_losses) / len(self.batch_losses)
+            self.log(
+                f"{mode}/total_loss",
+                float(self.total_loss),
+                batch_size=batch_size,
+                sync_dist=True,
+            )
+            self.batch_losses.pop(0)
+
         return loss["loss"]
 
     def on_evaluation_epoch_end(self, mode="val") -> None:

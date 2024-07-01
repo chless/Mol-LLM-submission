@@ -111,14 +111,17 @@ def main(args):
     if args.not_save_model:
         pass
     else:
+        monitoring_metric = "total_loss"
         callbacks.append(
             ModelCheckpoint(
                 dirpath="MolCA/all_checkpoints/" + args.filename + "/",
-                filename="{epoch:02d}-{global_step:06d}",
+                filename="{step:05d}-{total_loss:.3f}",
                 every_n_train_steps=args.every_n_train_steps,
                 save_last=True,
-                save_top_k=-1,
+                save_top_k=10,
                 save_on_train_epoch_end=True,
+                monitor=monitoring_metric,
+                mode="min",
             )
         )
         callbacks.append(
@@ -264,9 +267,10 @@ def get_args():
     parser.add_argument("--max_steps", type=int, default=-1)
     parser.add_argument("--accumulate_grad_batches", type=int, default=1)
     parser.add_argument("--check_val_every_n_epoch", type=int, default=1)
-    parser.add_argument("--every_n_train_steps", type=int, default=2000)
+    parser.add_argument("--every_n_train_steps", type=int, default=1000)
     parser.add_argument("--task", type=str, default=None)
     parser.add_argument("--val_check_interval", type=float, default=0.1)
+    parser.add_argument("--save_top_k", type=int, default=10)
     parser.add_argument("--neptune_project", type=str, default="chless/text-mol")
     parser.add_argument("--result_file", type=str, default="MolCA/results/debug.json")
     parser.add_argument("--not_save_model", action="store_true", default=False)
