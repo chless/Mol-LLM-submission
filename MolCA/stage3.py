@@ -75,7 +75,7 @@ def main(args):
     devices = ast.literal_eval(args.devices)
     num_devices = len(devices) if not isinstance(devices, int) else 1
     # adjust intended total batch size is the same regarlless of the number of devices
-    if args.mode == "multi_task":
+    if args.root == "multi_task":
         assert args.batch_size % 4 == 0, "batch size should be multiple of 4"
         args.batch_size = args.batch_size // 4
     assert (
@@ -103,8 +103,6 @@ def main(args):
             tokenizer,
             args,
         )
-        if args.save_dataset:
-            torch.save(dm, f"{args.root}_dm.pt")
 
     # callbacks to save model parameters
     callbacks = []
@@ -181,7 +179,7 @@ def main(args):
     else:
         raise NotImplementedError()
 
-    if args.result_file is not None and args.mode != "multi_task":
+    if args.result_file is not None and args.root != "multi_task":
         update_result_csv(
             args=args, outputs=outputs, task_names=dm.train_data.get_task_names()
         )
@@ -274,7 +272,6 @@ def get_args():
     parser.add_argument("--neptune_project", type=str, default="chless/text-mol")
     parser.add_argument("--result_file", type=str, default="MolCA/results/debug.json")
     parser.add_argument("--not_save_model", action="store_true", default=False)
-    parser.add_argument("--save_dataset", action="store_true", default=False)
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)
