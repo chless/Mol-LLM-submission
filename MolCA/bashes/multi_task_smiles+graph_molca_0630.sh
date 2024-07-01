@@ -21,5 +21,4 @@ python3 MolCA/stage3.py \
 --num_beam 1 \
 --result_file MolCA/results/instruction_tuning_sting+graph_molca_galac_0630.csv \
 --save_every_n_epochs 1 \
---every_n_train_steps 2000 \
 --raw_data_root MolCA/data/multi_task_dataset
