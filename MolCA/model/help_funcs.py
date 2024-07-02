@@ -152,15 +152,66 @@ from rdkit.Chem import AllChem
 from rdkit import RDLogger
 import selfies
 
-def molecule_evaluate(predictions, targets, tokenizer, text_trunc_length):
-    smiles_list = []
-    failure_count = 0
+def molecule_evaluate(predictions, targets, tokenizer, text_trunc_length, morgan_r=2):
+    MACCS_sims = []
+    morgan_sims = []
+    RDK_sims = []
+    morgan_r = 2
+
+    failure_idxs = []
+    exact_matches = []
+
+    for i in tqdm(range(len(targets))):
+        target = targets[i]
+        prediction = predictions[i]
+        # <REFACTOR> after re preprocessing molinstrunction reaction prediction dataset, prediction would be smiles.
+        target_selfies = target.replace(tokenizer.pad_token, "").replace("[START_I_SMILES]", "").replace("[END_I_SMILES]", "")
+        prediction_selfies = prediction.replace(tokenizer.pad_token, "").replace("[START_I_SMILES]", "").replace("[END_I_SMILES]", "")
+        
+        try:
+            target_smiles = selfies.decoder(target_selfies)
+            prediction_smiles = selfies.decoder(prediction_selfies)
+            # </REFACTOR>
+            target_mol = Chem.MolFromSmiles(target_smiles)
+            prediction_mol = Chem.MolFromSmiles(prediction_smiles)
+
+            target_canonical_smiles = Chem.CanonSmiles(target_smiles)
+            prediction_canonical_smiles = Chem.CanonSmiles(prediction_smiles)
+            if target_canonical_smiles == prediction_canonical_smiles:
+                exact_matches.append(True)
+            else:
+                exact_matches.append(False)
+
+
+        except:
+            failure_idxs.append(i)
+            continue
+            
+        MACCS_sims.append(DataStructs.FingerprintSimilarity(
+        MACCSkeys.GenMACCSKeys(target_mol), 
+        MACCSkeys.GenMACCSKeys(prediction_mol), 
+        metric=DataStructs.TanimotoSimilarity))
+        RDK_sims.append(DataStructs.FingerprintSimilarity(
+        Chem.RDKFingerprint(target_mol), 
+        Chem.RDKFingerprint(prediction_mol), 
+        metric=DataStructs.TanimotoSimilarity))
+        morgan_sims.append(DataStructs.TanimotoSimilarity(
+        AllChem.GetMorganFingerprint(target_mol,morgan_r), 
+        AllChem.GetMorganFingerprint(prediction_mol, morgan_r)))
     
-    for target, prediction in tqdm(zip(targets, predictions)):
-        smiles = target.replace(tokenizer.pad_token, "").replace("[START_I_SMILES]", "").replace("[END_I_SMILES]", "")
-
-
-    return 
+    validity_ratio = 1 - len(failure_idxs) / len(predictions)
+    MACCS_sim = np.mean(MACCS_sims)
+    RDK_sim = np.mean(RDK_sims)
+    morgan_sim = np.mean(morgan_sims)
+    exact_match_ratio = np.mean(exact_matches)
+    results = {
+        "validity_ratio": validity_ratio,
+        "MACCS_FTS": MACCS_sim,
+        "RDK_FTS": RDK_sim,
+        "morgan_FTS": morgan_sim,
+        "exact_match_ratio": exact_match_ratio,
+    }
+    return results, failure_idxs
 
 
 
@@ -247,19 +298,22 @@ def task_specifically_evaluate(
                 text_trunc_length=text_trunc_length,
             )
         elif t.split('/')[0] in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS: # output is a molecule
-            results = caption_evaluate(
+            results, failure_idxs = molecule_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
                 tokenizer=tokenizer,
                 text_trunc_length=text_trunc_length,
             )
-            mol_results = molecule_evaluate(
-                predictions=task_predictions,
-                targets=task_targets,
+            _task_predictions = [task_predictions[i] for i in range(len(task_predictions)) if i not in failure_idxs]
+            _task_targets = [task_targets[i] for i in range(len(task_targets)) if i not in failure_idxs]
+
+            caption_results = caption_evaluate(
+                predictions=_task_predictions,
+                targets=_task_targets,
                 tokenizer=tokenizer,
                 text_trunc_length=text_trunc_length,
             )
-            results.update(mol_results)
+            results.update(caption_results)
         elif t.split('/')[0] in MOL2TEXT_BENCHMARKS:
             results = caption_evaluate(
                 predictions=task_predictions,
@@ -332,7 +386,6 @@ def classification_evaluate(
             :, 1
         ].numpy(),  # Use y_score here because roc_auc_score expects probability scores
     )
-    # TODO task specific average of metrics
 
     evaluation_results = {
         "accuracy": acc,
@@ -349,7 +402,7 @@ def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
     total_labels = []
     total_predictions = []
     failure_count = 0
-    order_failure_count = 0
+    tens_order_failure_count = 0
 
     _total_labels = []
     for i in range(len(predictions)):

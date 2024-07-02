@@ -15,6 +15,7 @@ from data_provider.stage3_dm import (
 )
 from data_provider.stage2_chebi_dm import Stage2CheBIDM
 from model.blip2_stage3 import Blip2Stage3
+import json
 
 # instruction-tuning for benchmark datasets
 
@@ -173,9 +174,9 @@ def main(args):
     else:
         raise NotImplementedError()
 
-    if args.result_file is not None and args.root != "multi_task":
+    if args.result_file is not None:
         update_result_csv(
-            args=args, outputs=outputs, task_names=dm.train_data.get_task_names()
+            args=args, outputs=outputs,
         )
 
 def adjustBatchSize(args, num_devices):
@@ -197,21 +198,20 @@ def adjustBatchSize(args, num_devices):
     print(f"inference batch size per device: {args.inference_batch_size}")
 
 
-def update_result_csv(args, outputs, task_names):
+def update_result_csv(args, outputs, task_names=None):
     # first, read the content in result_csv file
-    import json
-
     single_tasks = (
         REGRESSION_BENCHMARKS
         + CLASSIFICATION_BENCHMARKS
         + MOL2TEXT_BENCHMARKS
         + TEXT2MOL_BENCHMARKS
     )
+    os.makedirs(os.path.dirname(args.result_file), exist_ok=True)
     if args.root in single_tasks:
+        assert task_names is not None
         if os.path.exists(args.result_file):
             results_dict = json.load(open(args.result_file, "r"))
         else:
-            os.makedirs(os.path.dirname(args.result_file), exist_ok=True)
             results_dict = dict()
 
         subtask = task_names[args.subtask_idx]
@@ -231,9 +231,20 @@ def update_result_csv(args, outputs, task_names):
         with open(args.result_file, "w") as f:
             json.dump(results_dict, f, indent=4)
         print(f"Updated the result file {args.result_file}")
+
     elif args.root == "multi_task":
+        # task average of output
+        final_output = dict()
+        tasks = list(set(list(outputs[0].keys()) + list(outputs[1].keys()) + list(outputs[2].keys()) + list(outputs[3].keys())))
+        for task in tasks:
+                final_output[task] = []
+                for output in outputs:
+                    if task in output:
+                        final_output[task].append(output[task])
+                final_output[task] = final_output[task][0] # identical, just replicated 4 dataloader
+
         with open(args.result_file, "w") as f:
-            json.dump(outputs, f, indent=4)
+            json.dump(final_output, f, indent=4)
     else:
         raise NotImplementedError()
 

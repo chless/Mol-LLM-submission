@@ -1009,6 +1009,18 @@ class MolInstructionDatset(Dataset):
             list_selfies = two_selfies.split(">>")
             smiles = [convert_selfies2smiles(s) for s in list_selfies]
             graph = [smiles2data(s) for s in smiles]
+        elif self.task in REACTION_BENCHMARKS:
+            # one smiles in input and one smiles in output
+            input_selfies = input
+            smiles = convert_selfies2smiles(input_selfies)
+            graph = smiles2data(smiles)
+
+            # TODO: reprocess training data. currently reaction data input smiles and output selfies
+            output_selfies = label 
+            output_smiles = convert_selfies2smiles(output_selfies)
+            label = output_smiles
+
+
         else:
             # one smiles in input
             selfies = input
@@ -1116,4 +1128,5 @@ class InstructionInMemoryDataset(InMemoryDataset):
         smiles_prompt = data.smiles_prompt
         task_subtask_pair = data.task_subtask_pair
         instruction = data.instruction
+
         return data, label, smiles_prompt, task_subtask_pair, instruction

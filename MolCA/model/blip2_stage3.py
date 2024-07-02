@@ -425,8 +425,7 @@ class Blip2Stage3(pl.LightningModule):
             all_probs = [i for ii in all_probs for i in ii]
             self.save_predictions(all_predictions, all_targets, all_tasks)
 
-            # TODO: implement this
-            evaluation_metrics = task_specifically_evaluate(
+            evaluation_results = task_specifically_evaluate(
                 predictions=all_predictions,
                 targets=all_targets,
                 tasks=all_tasks,
@@ -434,8 +433,13 @@ class Blip2Stage3(pl.LightningModule):
                 tokenizer=self.blip2opt.opt_tokenizer,
                 text_trunc_length=self.max_len * 2,
             )
-            for k in evaluation_metrics:
-                self.log(f"{mode}/{k}", evaluation_metrics[k], sync_dist=False)
+            for task_subtask_pair in evaluation_results:
+                for metric in evaluation_results[task_subtask_pair]:
+                    self.log(
+                        f"{mode}/{task_subtask_pair}/{metric}",
+                        evaluation_results[task_subtask_pair][metric],
+                        sync_dist=False,
+                    )
 
     @staticmethod
     def add_model_specific_args(parent_parser):
