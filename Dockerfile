@@ -15,7 +15,7 @@ RUN conda install pyg -c pyg
 
 # Install additional Python packages
 RUN pip install git+https://github.com/thunlp/OpenDelta.git
-RUN pip install rouge_score nltk ogb peft rdkit salesforce-lavis
+RUN pip install rouge_score nltk ogb peft rdkit salesforce-lavis selfies deepchem Levenshtein evaluate
 RUN pip install -U transformers==4.40.1 pytorch-lightning
 RUN pip install deepspeed
 
