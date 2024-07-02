@@ -360,14 +360,10 @@ class Blip2Stage3(pl.LightningModule):
         self.list_targets.append(targets)
         self.list_tasks.append(tasks)
         # TODO: implement exception for tasks other than classification
-        if task == "classification":
-            probs = convert_logit2binary_prob(
-                outputs.logits, self.blip2opt.opt_tokenizer
-            )
-            self.list_probs.append(probs)
-        else:
-            # save probs only for classification
-            pass
+        probs = convert_logit2binary_prob(
+            outputs.logits, self.blip2opt.opt_tokenizer
+        )
+        self.list_probs.append(probs)
 
 
         batch_size = texts.input_ids.shape[0]

@@ -14,6 +14,7 @@ from data_provider.stage3_dm import (
 )
 import ast
 from model.save_only_metrics import Text2Mol_translation
+import re
 
 
 def caption_evaluate(predictions, targets, tokenizer, text_trunc_length):
@@ -80,19 +81,86 @@ def caption_evaluate(predictions, targets, tokenizer, text_trunc_length):
     }
     return evaluation_results
 
+def caption_evaluate(predictions, targets, tokenizer, text_trunc_length):
+    meteor_scores = []
+    references = []
+    hypotheses = []
+    for gt, out in tqdm(zip(targets, predictions)):
+        gt_tokens = tokenizer.tokenize(
+            gt, truncation=True, max_length=text_trunc_length, padding="max_length"
+        )
+        gt_tokens = list(filter(("[PAD]").__ne__, gt_tokens))
+        gt_tokens = list(filter(("[CLS]").__ne__, gt_tokens))
+        gt_tokens = list(filter(("[SEP]").__ne__, gt_tokens))
+
+        out_tokens = tokenizer.tokenize(
+            out, truncation=True, max_length=text_trunc_length, padding="max_length"
+        )
+        out_tokens = list(filter(("[PAD]").__ne__, out_tokens))
+        out_tokens = list(filter(("[CLS]").__ne__, out_tokens))
+        out_tokens = list(filter(("[SEP]").__ne__, out_tokens))
+
+        references.append([gt_tokens])
+        hypotheses.append(out_tokens)
+
+        mscore = meteor_score([gt_tokens], out_tokens)
+        meteor_scores.append(mscore)
+
+    bleu2 = corpus_bleu(references, hypotheses, weights=(0.5, 0.5))
+    bleu4 = corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25))
+    bleu2 *= 100
+    bleu4 *= 100
+
+    print("BLEU-2 score:", bleu2)
+    print("BLEU-4 score:", bleu4)
+    _meteor_score = np.mean(meteor_scores)
+    _meteor_score *= 100
+    print("Average Meteor score:", _meteor_score)
+
+    scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"])
+
+    rouge_scores = []
+
+    references = []
+    hypotheses = []
+
+    for gt, out in tqdm(zip(targets, predictions)):
+        rs = scorer.score(out, gt)
+        rouge_scores.append(rs)
+
+    print("ROUGE score:")
+    rouge_1 = np.mean([rs["rouge1"].fmeasure for rs in rouge_scores]) * 100
+    rouge_2 = np.mean([rs["rouge2"].fmeasure for rs in rouge_scores]) * 100
+    rouge_l = np.mean([rs["rougeL"].fmeasure for rs in rouge_scores]) * 100
+    print("rouge1:", rouge_1)
+    print("rouge2:", rouge_2)
+    print("rougeL:", rouge_l)
+    evaluation_results = {
+        "bleu2": bleu2,
+        "bleu4": bleu4,
+        "rouge1": rouge_1,
+        "rouge2": rouge_2,
+        "rougeL": rouge_l,
+        "meteor": _meteor_score,
+    }
+    return evaluation_results
+
+from rdkit import Chem
+from rdkit.Chem import MACCSkeys
+from rdkit import DataStructs
+from rdkit.Chem import AllChem
+from rdkit import RDLogger
+import selfies
 
 def molecule_evaluate(predictions, targets, tokenizer, text_trunc_length):
-    evaluation_results = caption_evaluate(
-        predictions=predictions,
-        targets=targets,
-        tokenizer=tokenizer,
-        text_trunc_length=text_trunc_length,
-    )
-    # TODO: implement this
-    metric = Text2Mol_translation()
-    molecule_results = metric.compute(predictions=predictions, references=targets)
-    evaluation_results.update(molecule_results)
-    return evaluation_results
+    smiles_list = []
+    failure_count = 0
+    
+    for target, prediction in tqdm(zip(targets, predictions)):
+        smiles = target.replace(tokenizer.pad_token, "").replace("[START_I_SMILES]", "").replace("[END_I_SMILES]", "")
+
+
+    return 
 
 
 
@@ -134,14 +202,16 @@ def pad_and_concat(tensor_list, fill_value=0):
         return out
     raise NotImplementedError()
 
-def get_task_specific_list(predictions, targets, tasks):
+def get_task_specific_list(predictions, targets, tasks, probs):
     unique_tasks = list(set(tasks))
     task_specific_predictions = {t: [] for t in unique_tasks}
     task_specific_targets = {t: [] for t in unique_tasks}
+    task_specific_probs = {t: [] for t in unique_tasks}
     for i, t in enumerate(tasks):
         task_specific_predictions[t].append(predictions[i])
         task_specific_targets[t].append(targets[i])
-    return task_specific_predictions, task_specific_targets
+        task_specific_probs[t].append(probs[i])
+    return task_specific_predictions, task_specific_targets, task_specific_probs
 
 
 def task_specifically_evaluate(
@@ -152,19 +222,20 @@ def task_specifically_evaluate(
     unique_tasks = list(set(tasks))
     evaluation_results = {task: dict() for task in unique_tasks}
 
-    task_specific_predictions, task_specific_targets = get_task_specific_list(
-        predictions, targets, tasks
+    task_specific_predictions, task_specific_targets, task_specific_probs = get_task_specific_list(
+        predictions, targets, tasks, probs
     )
 
 
     for t in task_specific_predictions.keys():
         task_predictions = task_specific_predictions[t]
         task_targets = task_specific_targets[t]
+        task_probs = task_specific_probs[t]
         if t.split('/')[0] in CLASSIFICATION_BENCHMARKS:
             results = classification_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
-                probs=probs,
+                probs=task_probs,
                 tokenizer=tokenizer,
                 text_trunc_length=text_trunc_length,
             )
@@ -176,12 +247,19 @@ def task_specifically_evaluate(
                 text_trunc_length=text_trunc_length,
             )
         elif t.split('/')[0] in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS: # output is a molecule
-            results = molecule_evaluate(
+            results = caption_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
                 tokenizer=tokenizer,
                 text_trunc_length=text_trunc_length,
             )
+            mol_results = molecule_evaluate(
+                predictions=task_predictions,
+                targets=task_targets,
+                tokenizer=tokenizer,
+                text_trunc_length=text_trunc_length,
+            )
+            results.update(mol_results)
         elif t.split('/')[0] in MOL2TEXT_BENCHMARKS:
             results = caption_evaluate(
                 predictions=task_predictions,
@@ -268,31 +346,56 @@ def classification_evaluate(
 
 def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
 
-    total_labels = torch.zeros(len(predictions), dtype=torch.float32)
-    total_predictions = torch.zeros(len(predictions), dtype=torch.float32)
+    total_labels = []
+    total_predictions = []
+    failure_count = 0
+    order_failure_count = 0
+
+    _total_labels = []
     for i in range(len(predictions)):
+        label = targets[i]
         label = ast.literal_eval(
             targets[i].replace(FLOAT_TOKENS[0], "").replace(FLOAT_TOKENS[1], "").replace(tokenizer.pad_token, "")
         )
-        total_labels[i] = label
-        prediction = (
-            predictions[i].replace(FLOAT_TOKENS[0], "").replace(FLOAT_TOKENS[1], "")
-        )
-        try:
-            prediction = float(prediction)
-        except:
-            prediction = 0.0
-        total_predictions[i] = prediction
+        _total_labels.append(label)
+    _total_labels = np.array(_total_labels)
+    label_max_abs = np.max(np.abs(_total_labels))
 
-    # Calculate regression metrics
-    mae = torch.mean(torch.abs(total_labels - total_predictions)).item()
-    rmse = torch.sqrt(torch.mean((total_labels - total_predictions) ** 2)).item()
-    mse = torch.mean((total_labels - total_predictions) ** 2).item()
+    for i in range(len(predictions)):
+        label = targets[i]
+        prediction = predictions[i]
+
+        try:
+            label = ast.literal_eval(
+                targets[i].replace(FLOAT_TOKENS[0], "").replace(FLOAT_TOKENS[1], "").replace(tokenizer.pad_token, "")
+            )
+            prediction = re.search('\d*?[.]?\d+(?=</FLOAT>)', prediction).group()
+            prediction = float(prediction)
+
+            if prediction > label_max_abs * 10:
+                tens_order_failure_count += 1
+            assert prediction <= label_max_abs * 10
+
+            total_labels.append(label)
+            total_predictions.append(prediction)
+        except:
+            failure_count += 1
+    failure_rate = failure_count / len(predictions)
+
+    # Calculate regression metrics: mae, mse, rmse
+    total_labels = np.array(total_labels)
+    total_predictions = np.array(total_predictions)
+
+    mae = np.mean(np.abs(total_labels - total_predictions))
+    mse = np.mean((total_labels - total_predictions) ** 2)
+    rmse = np.mean((total_labels - total_predictions) ** 2) ** 0.5
 
     evaluation_results = {
         "mae": mae,
         "mse": mse,
         "rmse": rmse,
+        "failure_rate": failure_rate,
+        "tens_order_failure_rate": tens_order_failure_count / len(predictions),
     }
     return evaluation_results
 
