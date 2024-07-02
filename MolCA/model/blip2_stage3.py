@@ -77,7 +77,6 @@ class Blip2Stage3(pl.LightningModule):
         self.args = args
         if not hasattr(args, "do_sample"):
             args.do_sample = False
-        self.caption_eval_epoch = args.caption_eval_epoch
         self.do_sample = args.do_sample
         self.num_beams = args.num_beams
         self.max_len = args.max_len
@@ -347,28 +346,29 @@ class Blip2Stage3(pl.LightningModule):
         # TODO: figure out why batch composition is different from training_step
         graphs, prompt_tokens, texts, tasks = batch
 
-        if (self.current_epoch + 1) % self.caption_eval_epoch != 0:
-            ##============== Captioning Results ===================##
-            samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
-            outputs = self.blip2opt.generate(
-                samples,
-                do_sample=self.do_sample,
-                num_beams=self.num_beams,
-                max_length=self.max_len,
-                min_length=self.min_len,
-            )
-            predictions = outputs.predictions
-            targets = self.blip2opt.opt_tokenizer.batch_decode(texts.input_ids)
-            self.list_predictions.append(predictions)
-            self.list_targets.append(targets)
-            self.list_tasks.append(tasks)
-            # TODO: implement exception for tasks other than classification
-            """
+        samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
+        outputs = self.blip2opt.generate(
+            samples,
+            do_sample=self.do_sample,
+            num_beams=self.num_beams,
+            max_length=self.max_len,
+            min_length=self.min_len,
+        )
+        predictions = outputs.predictions
+        targets = self.blip2opt.opt_tokenizer.batch_decode(texts.input_ids)
+        self.list_predictions.append(predictions)
+        self.list_targets.append(targets)
+        self.list_tasks.append(tasks)
+        # TODO: implement exception for tasks other than classification
+        if task == "classification":
             probs = convert_logit2binary_prob(
                 outputs.logits, self.blip2opt.opt_tokenizer
             )
             self.list_probs.append(probs)
-            """
+        else:
+            # save probs only for classification
+            pass
+
 
         batch_size = texts.input_ids.shape[0]
         loss = self.blip2opt(batch[:-1])  # omit tasks when inputting to the model
@@ -381,6 +381,7 @@ class Blip2Stage3(pl.LightningModule):
                 sync_dist=True,
             )
         # calculate moving average of total_loss
+        # TODO: need to check and revise if necessary
         self.batch_losses.append(loss["loss"])
         if len(self.batch_losses) >= 64:
             self.total_loss = sum(self.batch_losses) / len(self.batch_losses)
@@ -429,18 +430,16 @@ class Blip2Stage3(pl.LightningModule):
             self.save_predictions(all_predictions, all_targets, all_tasks)
 
             # TODO: implement this
-            """
             evaluation_metrics = task_specifically_evaluate(
-                all_predictions=all_predictions,
-                all_targets=all_targets,
-                all_tasks=all_tasks,
-                all_probs=all_probs,
+                predictions=all_predictions,
+                targets=all_targets,
+                tasks=all_tasks,
+                probs=all_probs,
                 tokenizer=self.blip2opt.opt_tokenizer,
                 text_trunc_length=self.max_len * 2,
             )
             for k in evaluation_metrics:
-                self.log(f"{mode}/k, evaluation_metrics[k], sync_dist=False)
-            """
+                self.log(f"{mode}/{k}", evaluation_metrics[k], sync_dist=False)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -511,7 +510,6 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--stage1_path", type=str, default="")
         parser.add_argument("--stage2_path", type=str, default="")
         parser.add_argument("--init_checkpoint", type=str, default="")
-        parser.add_argument("--caption_eval_epoch", type=int, default=10)
         parser.add_argument("--graph_decoder_ckpt", type=str, default=None)
         parser.add_argument("--coeff_recon_loss", type=float, default=0.2)
 

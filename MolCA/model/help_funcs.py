@@ -9,9 +9,11 @@ from data_provider.stage3_dm import (
     REGRESSION_BENCHMARKS,
     MOL2TEXT_BENCHMARKS,
     TEXT2MOL_BENCHMARKS,
+    REACTION_BENCHMARKS,
     FLOAT_TOKENS,
 )
 import ast
+from model.save_only_metrics import Text2Mol_translation
 
 
 def caption_evaluate(predictions, targets, tokenizer, text_trunc_length):
@@ -68,7 +70,7 @@ def caption_evaluate(predictions, targets, tokenizer, text_trunc_length):
     print("rouge1:", rouge_1)
     print("rouge2:", rouge_2)
     print("rougeL:", rouge_l)
-    evaluation_metrics = {
+    evaluation_results = {
         "bleu2": bleu2,
         "bleu4": bleu4,
         "rouge1": rouge_1,
@@ -76,7 +78,22 @@ def caption_evaluate(predictions, targets, tokenizer, text_trunc_length):
         "rougeL": rouge_l,
         "meteor": _meteor_score,
     }
-    return evaluation_metrics
+    return evaluation_results
+
+
+def molecule_evaluate(predictions, targets, tokenizer, text_trunc_length):
+    evaluation_results = caption_evaluate(
+        predictions=predictions,
+        targets=targets,
+        tokenizer=tokenizer,
+        text_trunc_length=text_trunc_length,
+    )
+    # TODO: implement this
+    metric = Text2Mol_translation()
+    molecule_results = metric.compute(predictions=predictions, references=targets)
+    evaluation_results.update(molecule_results)
+    return evaluation_results
+
 
 
 class AttrDict(dict):
@@ -117,93 +134,67 @@ def pad_and_concat(tensor_list, fill_value=0):
         return out
     raise NotImplementedError()
 
-
-def group_task_specific_evaluation(all_predictions, all_targets, all_tasks, all_logits):
-    # retrieve indice of each task, finding tasks in the all_tasks are in CLASSIFICATION_BENCHMARKS or REGRESSION_BENCHMARKS
-    regression_idxs = []
-    classification_idxs = []
-    caption_idxs = []
-    for i, task in enumerate(all_tasks):
-        for benchmark in REGRESSION_BENCHMARKS:
-            if benchmark in task:
-                regression_idxs.append(i)
-        for benchmark in CLASSIFICATION_BENCHMARKS:
-            if benchmark in task:
-                classification_idxs.append(i)
-        for benchmark in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
-            if benchmark in task:
-                caption_idxs.append(i)
-    assert len(regression_idxs) + len(classification_idxs) + len(caption_idxs) == len(
-        all_tasks
-    )
-    # group predictions and targets by task type
-    predictions = {
-        "regression": [all_predictions[i] for i in regression_idxs],
-        "classification": [all_predictions[i] for i in classification_idxs],
-        "caption": [all_predictions[i] for i in caption_idxs],
-    }
-    targets = {
-        "regression": [all_targets[i] for i in regression_idxs],
-        "classification": [all_targets[i] for i in classification_idxs],
-        "caption": [all_targets[i] for i in caption_idxs],
-    }
-    tasks = {
-        "regression": [all_tasks[i] for i in regression_idxs],
-        "classification": [all_tasks[i] for i in classification_idxs],
-        "caption": [all_tasks[i] for i in caption_idxs],
-    }
-    logits = {
-        "regression": [all_logits[i] for i in regression_idxs],
-        "classification": [all_logits[i] for i in classification_idxs],
-        "caption": [all_logits[i] for i in caption_idxs],
-    }
-    return predictions, targets, tasks, logits
+def get_task_specific_list(predictions, targets, tasks):
+    unique_tasks = list(set(tasks))
+    task_specific_predictions = {t: [] for t in unique_tasks}
+    task_specific_targets = {t: [] for t in unique_tasks}
+    for i, t in enumerate(tasks):
+        task_specific_predictions[t].append(predictions[i])
+        task_specific_targets[t].append(targets[i])
+    return task_specific_predictions, task_specific_targets
 
 
 def task_specifically_evaluate(
-    all_predictions, all_targets, all_tasks, all_probs, tokenizer, text_trunc_length
+    predictions, targets, tasks, probs, tokenizer, text_trunc_length
 ):
 
-    predictions, targets, tasks, probs = group_task_specific_evaluation(
-        all_predictions, all_targets, all_tasks, all_probs
+    # get unique items from all_tasks
+    unique_tasks = list(set(tasks))
+    evaluation_results = {task: dict() for task in unique_tasks}
+
+    task_specific_predictions, task_specific_targets = get_task_specific_list(
+        predictions, targets, tasks
     )
 
-    evaluation_metrics = dict()
 
-    if len(predictions["classification"]) > 0:
-        classification_metrics = classification_evaluate(
-            predictions=predictions["classification"],
-            targets=targets["classification"],
-            probs=probs["classification"],
-            tasks=tasks["classification"],
-            tokenizer=tokenizer,
-            text_trunc_length=text_trunc_length,
-        )
-        evaluation_metrics.update(classification_metrics)
+    for t in task_specific_predictions.keys():
+        task_predictions = task_specific_predictions[t]
+        task_targets = task_specific_targets[t]
+        if t.split('/')[0] in CLASSIFICATION_BENCHMARKS:
+            results = classification_evaluate(
+                predictions=task_predictions,
+                targets=task_targets,
+                probs=probs,
+                tokenizer=tokenizer,
+                text_trunc_length=text_trunc_length,
+            )
+        elif t.split('/')[0] in REGRESSION_BENCHMARKS:
+            results = regression_evaluate(
+                predictions=task_predictions,
+                targets=task_targets,
+                tokenizer=tokenizer,
+                text_trunc_length=text_trunc_length,
+            )
+        elif t.split('/')[0] in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS: # output is a molecule
+            results = molecule_evaluate(
+                predictions=task_predictions,
+                targets=task_targets,
+                tokenizer=tokenizer,
+                text_trunc_length=text_trunc_length,
+            )
+        elif t.split('/')[0] in MOL2TEXT_BENCHMARKS:
+            results = caption_evaluate(
+                predictions=task_predictions,
+                targets=task_targets,
+                tokenizer=tokenizer,
+                text_trunc_length=text_trunc_length,
+            )
+        else:
+            raise NotImplementedError("Task not implemented")
+        evaluation_results[t] = results
 
-    if len(predictions["caption"]) > 0:
-        captioning_metrics = caption_evaluate(
-            predictions=predictions["caption"],
-            targets=targets["caption"],
-            tasks=tasks["caption"],
-            tokenizer=tokenizer,
-            text_trunc_length=text_trunc_length,
-        )
-        evaluation_metrics.update(captioning_metrics)
 
-    if len(predictions["regression"]) > 0:
-        regression_metrics = regression_evaluate(
-            predictions=predictions["regression"],
-            targets=targets["regression"],
-            tasks=tasks["regression"],
-            tokenizer=tokenizer,
-            text_trunc_length=text_trunc_length,
-        )
-        evaluation_metrics.update(regression_metrics)
-
-    # TODO add regression evaluation
-
-    return evaluation_metrics
+    return evaluation_results
 
 
 from sklearn.metrics import (
@@ -235,7 +226,7 @@ def convert_logit2binary_prob(logits, tokenizer):
 
 
 def classification_evaluate(
-    predictions, targets, probs, tasks, tokenizer, text_trunc_length
+    predictions, targets, probs, tokenizer, text_trunc_length
 ):
 
     total_labels = torch.zeros(len(predictions), dtype=torch.long)
@@ -265,23 +256,23 @@ def classification_evaluate(
     )
     # TODO task specific average of metrics
 
-    evaluation_metrics = {
+    evaluation_results = {
         "accuracy": acc,
         "f1": f1,
         "precision": prec,
         "recall": rec,
         "roc_auc": roc_auc,
     }
-    return evaluation_metrics
+    return evaluation_results
 
 
-def regression_evaluate(predictions, targets, tasks, tokenizer, text_trunc_length):
+def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
 
     total_labels = torch.zeros(len(predictions), dtype=torch.float32)
     total_predictions = torch.zeros(len(predictions), dtype=torch.float32)
     for i in range(len(predictions)):
         label = ast.literal_eval(
-            targets[i].replace(FLOAT_TOKENS[0], "").replace(FLOAT_TOKENS[1], "")
+            targets[i].replace(FLOAT_TOKENS[0], "").replace(FLOAT_TOKENS[1], "").replace(tokenizer.pad_token, "")
         )
         total_labels[i] = label
         prediction = (
@@ -298,9 +289,11 @@ def regression_evaluate(predictions, targets, tasks, tokenizer, text_trunc_lengt
     rmse = torch.sqrt(torch.mean((total_labels - total_predictions) ** 2)).item()
     mse = torch.mean((total_labels - total_predictions) ** 2).item()
 
-    evaluation_metrics = {
+    evaluation_results = {
         "mae": mae,
         "mse": mse,
         "rmse": rmse,
     }
-    return evaluation_metrics
+    return evaluation_results
+
+

@@ -75,14 +75,8 @@ def main(args):
     devices = ast.literal_eval(args.devices)
     num_devices = len(devices) if not isinstance(devices, int) else 1
     # adjust intended total batch size is the same regarlless of the number of devices
-    if args.root == "multi_task":
-        assert args.batch_size % 4 == 0, "batch size should be multiple of 4"
-        args.batch_size = args.batch_size // 4
-    assert (
-        args.batch_size % num_devices == 0
-    ), "batch size should be multiple of num_devices"
-    args.batch_size = args.batch_size // num_devices
-    print(f"batch size per device: {args.batch_size}")
+    adjustBatchSize(args, num_devices)
+
     if args.root.lower().find("chebi") >= 0:
         dm = Stage2CheBIDM(
             args.mode,
@@ -112,7 +106,7 @@ def main(args):
         monitoring_metric = "total_loss"
         callbacks.append(
             ModelCheckpoint(
-                dirpath="MolCA/all_checkpoints/" + args.filename + "/",
+                dirpath=os.path.join(args.checkpoint_save_dir, args.filename),
                 filename="{step:05d}-{total_loss:.3f}",
                 every_n_train_steps=args.every_n_train_steps,
                 save_last=True,
@@ -184,6 +178,24 @@ def main(args):
             args=args, outputs=outputs, task_names=dm.train_data.get_task_names()
         )
 
+def adjustBatchSize(args, num_devices):
+    if args.root == "multi_task":
+        assert args.batch_size % 4 == 0, "batch size should be multiple of 4"
+        assert args.inference_batch_size % 4 == 0, "batch size should be multiple of 4"
+        args.batch_size = args.batch_size // 4
+        args.inference_batch_size = args.inference_batch_size // 4
+        
+    assert (
+        args.batch_size % num_devices == 0
+    ), "batch size should be multiple of num_devices"
+    assert (
+        args.inference_batch_size % num_devices == 0
+    ), "batch size should be multiple of num_devices"
+    args.batch_size = args.batch_size // num_devices
+    args.inference_batch_size = args.inference_batch_size // num_devices
+    print(f"batch size per device: {args.batch_size}")
+    print(f"inference batch size per device: {args.inference_batch_size}")
+
 
 def update_result_csv(args, outputs, task_names):
     # first, read the content in result_csv file
@@ -219,8 +231,11 @@ def update_result_csv(args, outputs, task_names):
         with open(args.result_file, "w") as f:
             json.dump(results_dict, f, indent=4)
         print(f"Updated the result file {args.result_file}")
+    elif args.root == "multi_task":
+        with open(args.result_file, "w") as f:
+            json.dump(outputs, f, indent=4)
     else:
-        pass
+        raise NotImplementedError()
 
 
 class SaveLoRAModelCallback(Callback):
@@ -272,6 +287,7 @@ def get_args():
     parser.add_argument("--neptune_project", type=str, default="chless/text-mol")
     parser.add_argument("--result_file", type=str, default="MolCA/results/debug.json")
     parser.add_argument("--not_save_model", action="store_true", default=False)
+    parser.add_argument("--checkpoint_save_dir", type=str, default="MolCA/all_checkpoints/")
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)

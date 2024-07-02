@@ -248,7 +248,7 @@ TEXT2MOL_BENCHMARKS = [
     "description_guided_molecule_design",
 ]
 
-REACTION_BENCHAMRKS = [
+REACTION_BENCHMARKS = [
     "forward_reaction_prediction",
     # "reagent_prediction", # TODO: deal with two molecule in input
     "retrosynthesis",
@@ -299,6 +299,7 @@ class Stage3DM(LightningDataModule):
                     self.concat_datasets[task][split] = InstructionInMemoryDataset(
                         root=self.args.raw_data_root,
                         filename=f"{task}_{split}",
+                        debug=self.debug,
                     )
 
         elif root in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
@@ -372,7 +373,7 @@ class Stage3DM(LightningDataModule):
         ]
 
         total_benchmarks = (
-            REACTION_BENCHAMRKS
+            REACTION_BENCHMARKS
             + MOL2TEXT_BENCHMARKS
             + TEXT2MOL_BENCHMARKS
             + CLASSIFICATION_BENCHMARKS
@@ -419,7 +420,7 @@ class Stage3DM(LightningDataModule):
                     subtask_idx=subtask_idx,
                     debug=self.debug,
                 )
-            elif task_name in REACTION_BENCHAMRKS:
+            elif task_name in REACTION_BENCHMARKS:
                 train_dataset = MolInstructionDatset(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
@@ -512,7 +513,7 @@ class Stage3DM(LightningDataModule):
                 concat_datasets["translation"]["train"].append(self.train_dataset[i])
                 concat_datasets["translation"]["val"].append(self.val_dataset[i])
                 concat_datasets["translation"]["test"].append(self.test_dataset[i])
-            elif task_name in REACTION_BENCHAMRKS:
+            elif task_name in REACTION_BENCHMARKS:
                 concat_datasets["reaction"]["train"].append(self.train_dataset[i])
                 concat_datasets["reaction"]["val"].append(self.val_dataset[i])
                 concat_datasets["reaction"]["test"].append(self.test_dataset[i])
@@ -553,7 +554,7 @@ class Stage3DM(LightningDataModule):
 
             test_dataset = dataset.filter(lambda x: "test" in x["metadata"])
             tasks = [root]
-        elif root in REACTION_BENCHAMRKS:
+        elif root in REACTION_BENCHMARKS:
             mol_instruction_dataset = load_dataset(
                 "zjunlp/Mol-Instructions", "Molecule-oriented Instructions"
             )
@@ -799,7 +800,7 @@ def wrap_label(label, task):
         label_tokens = FLOAT_TOKENS
     elif task in MOL2TEXT_BENCHMARKS:
         label_tokens = DESCRIPTION_TOKENS
-    elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHAMRKS:
+    elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS:
         label_tokens = SMILES_TOKENS
     else:
         raise NotImplementedError
@@ -811,7 +812,7 @@ def wrap_label(label, task):
             return label_tokens[0] + "False" + label_tokens[1]
     elif task in REGRESSION_BENCHMARKS:
         return label_tokens[0] + str(label) + label_tokens[1]
-    elif task in REACTION_BENCHAMRKS + MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
+    elif task in REACTION_BENCHMARKS + MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
         return label_tokens[0] + label + label_tokens[1]
     else:
         raise NotImplementedError
@@ -1054,7 +1055,7 @@ class InstructionInMemoryDataset(InMemoryDataset):
         super(InstructionInMemoryDataset, self).__init__(root, transform, pre_transform)
         self.load(self.processed_paths[0])
         if debug:
-            self.reduce_dataset_size(100)
+            self.reduce_dataset_size(2000)
 
     def reduce_dataset_size(self, new_size):
         # Check if new size is smaller than the current size
