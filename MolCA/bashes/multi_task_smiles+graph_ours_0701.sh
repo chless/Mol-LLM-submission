@@ -7,7 +7,7 @@ python3 MolCA/stage3.py \
 --devices $gpus \
 --root multi_task \
 --mode ft \
---filename instruction_tuning_string+graph_molca_galac_0630 \
+--filename instruction_tuning_string+graph_ours_galac_0701 \
 --stage2_path '/home/chanhui-lee/text-mol/MolCA/all_checkpoints/ft-llava-tunegnn-authorcode/epoch=99.ckpt' \
 --opt_model 'facebook/galactica-1.3b' \
 --prompt '[START_I_SMILES]{}[END_I_SMILES].' \
@@ -19,6 +19,6 @@ python3 MolCA/stage3.py \
 --max_epochs 10 \
 --mol_representation string+graph \
 --num_beam 1 \
---result_file MolCA/results/instruction_tuning_sting+graph_molca_galac_0630.csv \
+--result_file MolCA/results/instruction_tuning_sting+graph_ours_galac_0701.csv \
 --save_every_n_epochs 1 \
 --raw_data_root MolCA/data/multi_task_dataset
