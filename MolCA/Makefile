@@ -5,7 +5,7 @@ init-env:
 	conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia -y
 	conda install pyg -c pyg -y
 	pip install git+https://github.com/thunlp/OpenDelta.git
-	pip install rouge_score nltk ogb peft rdkit salesforce-lavis selfies deepchem
+	pip install rouge_score nltk ogb peft rdkit salesforce-lavis selfies deepchem Levenshtein evaluate
 	pip install -U transformers==4.40.1 pytorch-lightning
 	pip install deepspeed
 	pip install torch_geometric
