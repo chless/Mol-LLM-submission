@@ -1,15 +1,15 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus='4,5,6,7'
 batch_size=32
-inference_batch_size=3200
+inference_batch_size=3040
 
 python3 MolCA/stage3.py \
 --devices $gpus \
 --root multi_task \
 --mode test \
 --filename instruction_tuning_string_only_galac_0628 \
---stage2_path 'MolCA/instruction_tuning_string_only_galac_0628/last-v2.ckpt' \
---result_file MolCA/instruction_tuning_string_only_galac_0628/benchmark_performance.json \
+--stage2_path 'MolCA/all_checkpoints/instruction_tuning_string_only_galac_0628/last-v2.ckpt' \
+--result_file MolCA/all_checkpoints/instruction_tuning_string_only_galac_0628/benchmark_performance.json \
 --opt_model 'facebook/galactica-1.3b' \
 --prompt '[START_I_SMILES]{}[END_I_SMILES].' \
 --tune_gnn \

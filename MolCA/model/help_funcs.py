@@ -81,69 +81,6 @@ def caption_evaluate(predictions, targets, tokenizer, text_trunc_length):
     }
     return evaluation_results
 
-def caption_evaluate(predictions, targets, tokenizer, text_trunc_length):
-    meteor_scores = []
-    references = []
-    hypotheses = []
-    for gt, out in tqdm(zip(targets, predictions)):
-        gt_tokens = tokenizer.tokenize(
-            gt, truncation=True, max_length=text_trunc_length, padding="max_length"
-        )
-        gt_tokens = list(filter(("[PAD]").__ne__, gt_tokens))
-        gt_tokens = list(filter(("[CLS]").__ne__, gt_tokens))
-        gt_tokens = list(filter(("[SEP]").__ne__, gt_tokens))
-
-        out_tokens = tokenizer.tokenize(
-            out, truncation=True, max_length=text_trunc_length, padding="max_length"
-        )
-        out_tokens = list(filter(("[PAD]").__ne__, out_tokens))
-        out_tokens = list(filter(("[CLS]").__ne__, out_tokens))
-        out_tokens = list(filter(("[SEP]").__ne__, out_tokens))
-
-        references.append([gt_tokens])
-        hypotheses.append(out_tokens)
-
-        mscore = meteor_score([gt_tokens], out_tokens)
-        meteor_scores.append(mscore)
-
-    bleu2 = corpus_bleu(references, hypotheses, weights=(0.5, 0.5))
-    bleu4 = corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25))
-    bleu2 *= 100
-    bleu4 *= 100
-
-    print("BLEU-2 score:", bleu2)
-    print("BLEU-4 score:", bleu4)
-    _meteor_score = np.mean(meteor_scores)
-    _meteor_score *= 100
-    print("Average Meteor score:", _meteor_score)
-
-    scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"])
-
-    rouge_scores = []
-
-    references = []
-    hypotheses = []
-
-    for gt, out in tqdm(zip(targets, predictions)):
-        rs = scorer.score(out, gt)
-        rouge_scores.append(rs)
-
-    print("ROUGE score:")
-    rouge_1 = np.mean([rs["rouge1"].fmeasure for rs in rouge_scores]) * 100
-    rouge_2 = np.mean([rs["rouge2"].fmeasure for rs in rouge_scores]) * 100
-    rouge_l = np.mean([rs["rougeL"].fmeasure for rs in rouge_scores]) * 100
-    print("rouge1:", rouge_1)
-    print("rouge2:", rouge_2)
-    print("rougeL:", rouge_l)
-    evaluation_results = {
-        "bleu2": bleu2,
-        "bleu4": bleu4,
-        "rouge1": rouge_1,
-        "rouge2": rouge_2,
-        "rougeL": rouge_l,
-        "meteor": _meteor_score,
-    }
-    return evaluation_results
 
 from rdkit import Chem
 from rdkit.Chem import MACCSkeys
@@ -151,6 +88,7 @@ from rdkit import DataStructs
 from rdkit.Chem import AllChem
 from rdkit import RDLogger
 import selfies
+
 
 def molecule_evaluate(predictions, targets, tokenizer, text_trunc_length, morgan_r=2):
     MACCS_sims = []
@@ -165,9 +103,17 @@ def molecule_evaluate(predictions, targets, tokenizer, text_trunc_length, morgan
         target = targets[i]
         prediction = predictions[i]
         # <REFACTOR> after re preprocessing molinstrunction reaction prediction dataset, prediction would be smiles.
-        target_selfies = target.replace(tokenizer.pad_token, "").replace("[START_I_SMILES]", "").replace("[END_I_SMILES]", "")
-        prediction_selfies = prediction.replace(tokenizer.pad_token, "").replace("[START_I_SMILES]", "").replace("[END_I_SMILES]", "")
-        
+        target_selfies = (
+            target.replace(tokenizer.pad_token, "")
+            .replace("[START_I_SMILES]", "")
+            .replace("[END_I_SMILES]", "")
+        )
+        prediction_selfies = (
+            prediction.replace(tokenizer.pad_token, "")
+            .replace("[START_I_SMILES]", "")
+            .replace("[END_I_SMILES]", "")
+        )
+
         try:
             target_smiles = selfies.decoder(target_selfies)
             prediction_smiles = selfies.decoder(prediction_selfies)
@@ -182,23 +128,31 @@ def molecule_evaluate(predictions, targets, tokenizer, text_trunc_length, morgan
             else:
                 exact_matches.append(False)
 
-
         except:
             failure_idxs.append(i)
             continue
-            
-        MACCS_sims.append(DataStructs.FingerprintSimilarity(
-        MACCSkeys.GenMACCSKeys(target_mol), 
-        MACCSkeys.GenMACCSKeys(prediction_mol), 
-        metric=DataStructs.TanimotoSimilarity))
-        RDK_sims.append(DataStructs.FingerprintSimilarity(
-        Chem.RDKFingerprint(target_mol), 
-        Chem.RDKFingerprint(prediction_mol), 
-        metric=DataStructs.TanimotoSimilarity))
-        morgan_sims.append(DataStructs.TanimotoSimilarity(
-        AllChem.GetMorganFingerprint(target_mol,morgan_r), 
-        AllChem.GetMorganFingerprint(prediction_mol, morgan_r)))
-    
+
+        MACCS_sims.append(
+            DataStructs.FingerprintSimilarity(
+                MACCSkeys.GenMACCSKeys(target_mol),
+                MACCSkeys.GenMACCSKeys(prediction_mol),
+                metric=DataStructs.TanimotoSimilarity,
+            )
+        )
+        RDK_sims.append(
+            DataStructs.FingerprintSimilarity(
+                Chem.RDKFingerprint(target_mol),
+                Chem.RDKFingerprint(prediction_mol),
+                metric=DataStructs.TanimotoSimilarity,
+            )
+        )
+        morgan_sims.append(
+            DataStructs.TanimotoSimilarity(
+                AllChem.GetMorganFingerprint(target_mol, morgan_r),
+                AllChem.GetMorganFingerprint(prediction_mol, morgan_r),
+            )
+        )
+
     validity_ratio = 1 - len(failure_idxs) / len(predictions)
     MACCS_sim = np.mean(MACCS_sims)
     RDK_sim = np.mean(RDK_sims)
@@ -212,7 +166,6 @@ def molecule_evaluate(predictions, targets, tokenizer, text_trunc_length, morgan
         "exact_match_ratio": exact_match_ratio,
     }
     return results, failure_idxs
-
 
 
 class AttrDict(dict):
@@ -253,6 +206,7 @@ def pad_and_concat(tensor_list, fill_value=0):
         return out
     raise NotImplementedError()
 
+
 def get_task_specific_list(predictions, targets, tasks, probs):
     unique_tasks = list(set(tasks))
     task_specific_predictions = {t: [] for t in unique_tasks}
@@ -273,16 +227,15 @@ def task_specifically_evaluate(
     unique_tasks = list(set(tasks))
     evaluation_results = {task: dict() for task in unique_tasks}
 
-    task_specific_predictions, task_specific_targets, task_specific_probs = get_task_specific_list(
-        predictions, targets, tasks, probs
+    task_specific_predictions, task_specific_targets, task_specific_probs = (
+        get_task_specific_list(predictions, targets, tasks, probs)
     )
-
 
     for t in task_specific_predictions.keys():
         task_predictions = task_specific_predictions[t]
         task_targets = task_specific_targets[t]
         task_probs = task_specific_probs[t]
-        if t.split('/')[0] in CLASSIFICATION_BENCHMARKS:
+        if t.split("/")[0] in CLASSIFICATION_BENCHMARKS:
             results = classification_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
@@ -290,22 +243,32 @@ def task_specifically_evaluate(
                 tokenizer=tokenizer,
                 text_trunc_length=text_trunc_length,
             )
-        elif t.split('/')[0] in REGRESSION_BENCHMARKS:
+        elif t.split("/")[0] in REGRESSION_BENCHMARKS:
             results = regression_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
                 tokenizer=tokenizer,
                 text_trunc_length=text_trunc_length,
             )
-        elif t.split('/')[0] in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS: # output is a molecule
+        elif (
+            t.split("/")[0] in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS
+        ):  # output is a molecule
             results, failure_idxs = molecule_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
                 tokenizer=tokenizer,
                 text_trunc_length=text_trunc_length,
             )
-            _task_predictions = [task_predictions[i] for i in range(len(task_predictions)) if i not in failure_idxs]
-            _task_targets = [task_targets[i] for i in range(len(task_targets)) if i not in failure_idxs]
+            _task_predictions = [
+                task_predictions[i]
+                for i in range(len(task_predictions))
+                if i not in failure_idxs
+            ]
+            _task_targets = [
+                task_targets[i]
+                for i in range(len(task_targets))
+                if i not in failure_idxs
+            ]
 
             caption_results = caption_evaluate(
                 predictions=_task_predictions,
@@ -314,7 +277,7 @@ def task_specifically_evaluate(
                 text_trunc_length=text_trunc_length,
             )
             results.update(caption_results)
-        elif t.split('/')[0] in MOL2TEXT_BENCHMARKS:
+        elif t.split("/")[0] in MOL2TEXT_BENCHMARKS:
             results = caption_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
@@ -324,7 +287,6 @@ def task_specifically_evaluate(
         else:
             raise NotImplementedError("Task not implemented")
         evaluation_results[t] = results
-
 
     return evaluation_results
 
@@ -357,9 +319,7 @@ def convert_logit2binary_prob(logits, tokenizer):
     return total_probs
 
 
-def classification_evaluate(
-    predictions, targets, probs, tokenizer, text_trunc_length
-):
+def classification_evaluate(predictions, targets, probs, tokenizer, text_trunc_length):
 
     total_labels = torch.zeros(len(predictions), dtype=torch.long)
 
@@ -408,7 +368,10 @@ def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
     for i in range(len(predictions)):
         label = targets[i]
         label = ast.literal_eval(
-            targets[i].replace(FLOAT_TOKENS[0], "").replace(FLOAT_TOKENS[1], "").replace(tokenizer.pad_token, "")
+            targets[i]
+            .replace(FLOAT_TOKENS[0], "")
+            .replace(FLOAT_TOKENS[1], "")
+            .replace(tokenizer.pad_token, "")
         )
         _total_labels.append(label)
     _total_labels = np.array(_total_labels)
@@ -420,9 +383,12 @@ def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
 
         try:
             label = ast.literal_eval(
-                targets[i].replace(FLOAT_TOKENS[0], "").replace(FLOAT_TOKENS[1], "").replace(tokenizer.pad_token, "")
+                targets[i]
+                .replace(FLOAT_TOKENS[0], "")
+                .replace(FLOAT_TOKENS[1], "")
+                .replace(tokenizer.pad_token, "")
             )
-            prediction = re.search('\d*?[.]?\d+(?=</FLOAT>)', prediction).group()
+            prediction = re.search("\d*?[.]?\d+(?=</FLOAT>)", prediction).group()
             prediction = float(prediction)
 
             if prediction > label_max_abs * 10:
@@ -451,5 +417,3 @@ def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
         "tens_order_failure_rate": tens_order_failure_count / len(predictions),
     }
     return evaluation_results
-
-

@@ -443,7 +443,7 @@ class Stage3DM(LightningDataModule):
                     debug=self.debug,
                 )
             elif task_name in MOL2TEXT_BENCHMARKS:
-                train_dataset = MolInstructionDatset(
+                train_dataset = x(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
                     prompt=self.prompt,
@@ -1016,10 +1016,9 @@ class MolInstructionDatset(Dataset):
             graph = smiles2data(smiles)
 
             # TODO: reprocess training data. currently reaction data input smiles and output selfies
-            output_selfies = label 
+            output_selfies = label
             output_smiles = convert_selfies2smiles(output_selfies)
             label = output_smiles
-
 
         else:
             # one smiles in input
