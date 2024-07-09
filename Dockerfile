@@ -1,5 +1,5 @@
 # Use the official Python base image
-FROM python:3.8
+FROM python:3.10
 
 # Create a new conda environment
 RUN conda create -n molca python=3.10
