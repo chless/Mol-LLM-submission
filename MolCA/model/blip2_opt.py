@@ -146,6 +146,7 @@ class Blip2OPT(Blip2Base):
     ):
         super().__init__()
         self.args = args
+        self.peft_dir = peft_dir
 
         self.graph_encoder, self.ln_graph = self.init_graph_encoder(
             gin_num_layers, gin_hidden_dim, gin_drop_ratio, args
@@ -187,6 +188,13 @@ class Blip2OPT(Blip2Base):
         self.opt_tokenizer.add_tokens("</BOOLEAN>")
         self.opt_tokenizer.add_tokens("<FLOAT>")
         self.opt_tokenizer.add_tokens("</FLOAT>")
+
+        if self.args.add_reg_tokens:
+            for i in range(10):
+                self.opt_tokenizer.add_tokens(f"<|{i}|>")
+            self.opt_tokenizer.add_tokens("<|+|>")
+            self.opt_tokenizer.add_tokens("<|-|>")
+            self.opt_tokenizer.add_tokens("<|.|>")
 
         self.mol_token = "<mol>"
         self.opt_tokenizer.mol_token_id = self.opt_tokenizer(
@@ -256,6 +264,38 @@ class Blip2OPT(Blip2Base):
         # prompt_tokens = self.opt_tokenizer(self.prompt, return_tensors="pt")
         # self.prompt_length = prompt_tokens.attention_mask.sum(1)
 
+    def merge_and_initialize_lora(self):
+        self.model.blip2opt.opt_model.merge_and_unload(progressbar=True)
+
+        if self.llm_tune == "lora":
+            if self.peft_dir:
+                self.opt_model = PeftModel.from_pretrained(
+                    self.opt_model, self.peft_dir, is_trainable=True
+                )
+            else:
+                if self.args.peft_config:
+                    peft_config = LoraConfig(
+                        **LoraConfig.from_json_file(self.args.peft_config)
+                    )
+                else:
+                    peft_config = LoraConfig(
+                        task_type=TaskType.CAUSAL_LM,
+                        inference_mode=False,
+                        r=self.args.lora_r,
+                        lora_alpha=self.args.lora_alpha,
+                        lora_dropout=self.args.lora_dropout,
+                    )
+                self.peft_config = peft_config
+                self.opt_model = get_peft_model(self.opt_model, peft_config)
+                self.opt_model.print_trainable_parameters()
+        elif self.llm_tune == "freeze":
+            for name, param in self.opt_model.named_parameters():
+                param.requires_grad = False
+        elif self.llm_tune == "full":
+            pass
+        else:
+            raise NotImplementedError()
+
     def forward_old(self, batch):
         graphs, text_tokens, prompt_lens = batch
         graph_embeds, graph_masks = self.graph_encoder(graphs)
@@ -318,6 +358,7 @@ class Blip2OPT(Blip2Base):
         # Prompt_embeds takes 139 tokens, but the model only takes 8 tokens.
         # Though we use original setting of MolCA, this is unecessary context length comsumption.
         if "graph" in self.args.mol_representation:
+            # TODO: run two times of graph encoder inference, for reagent prediction. also work same for generate
             graph_embeds, graph_masks = self.graph_encoder(graphs)
             if not self.tune_gnn:
                 graph_embeds = graph_embeds.detach()
@@ -350,59 +391,46 @@ class Blip2OPT(Blip2Base):
         results.update({"loss": loss})
         return results
 
-    def forward_reaction(self, batch):
-        reaction_tokens, notes_tokens, graphs = batch
-        graph_embeds, graph_masks = self.graph_encoder(graphs)
-        if not self.tune_gnn:
-            graph_embeds = graph_embeds.detach()
-        graph_embeds = self.ln_graph(graph_embeds, graph_masks)
-        device = graph_embeds.device
-        query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-        query_output = self.Qformer.bert(
-            query_embeds=query_tokens,
-            encoder_hidden_states=graph_embeds,
-            encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
-            return_dict=True,
-        )
-        mol_tokens = self.opt_proj(
-            query_output.last_hidden_state
-        )  # shape = [mol_num, num_query_token, D]
+    def forward_reagent_prediction(self, batch):
+        # graph, smiles tokens, molecule description tokens
+        graphs, prompt_tokens, text_tokens = batch
+        device = prompt_tokens.input_ids.device
 
-        if False:
-            if self.llm_tune:
-                react_embeds = self.opt_model.model.get_decoder().embed_tokens(
-                    reaction_tokens.input_ids
-                )  # shape = [B, max_len, D]
-                notes_embeds = self.opt_model.model.get_decoder().embed_tokens(
-                    notes_tokens.input_ids
-                )
-            else:
-                react_embeds = self.opt_model.model.decoder.embed_tokens(
-                    reaction_tokens.input_ids
-                )  # shape = [B, max_len, D]
-                notes_embeds = self.opt_model.model.decoder.embed_tokens(
-                    notes_tokens.input_ids
-                )  # shape = [B, max_len, D]
-        else:
-            react_embeds = self.opt_model.get_input_embeddings()(
-                reaction_tokens.input_ids
-            )
-            notes_embeds = self.opt_model.get_input_embeddings()(notes_tokens.input_ids)
-
-        react_embeds[reaction_tokens.is_ph_token] = mol_tokens.flatten(0, 1)
-        inputs_embeds = torch.cat((react_embeds, notes_embeds), dim=1)
-
-        targets = notes_tokens.input_ids.masked_fill(
-            notes_tokens.input_ids == self.opt_tokenizer.pad_token_id, -100
-        )
         empty_targets = (
-            torch.ones(reaction_tokens.attention_mask.shape, dtype=torch.long)
+            torch.ones(prompt_tokens.attention_mask.shape, dtype=torch.long)
             .to(device)
             .fill_(-100)
         )
+        targets = text_tokens.input_ids.masked_fill(
+            text_tokens.input_ids == self.opt_tokenizer.pad_token_id, -100
+        )
         targets = torch.cat([empty_targets, targets], dim=1)
+
+        # TODO: complete this
+        # TODO: use this function in training_step and evaluation_step
+        prompt_embeds = self.opt_model.get_input_embeddings()(prompt_tokens.input_ids)
+        # Prompt_embeds takes 139 tokens, but the model only takes 8 tokens.
+        # Though we use original setting of MolCA, this is unecessary context length comsumption.
+        if "graph" in self.args.mol_representation:
+            for g in graphs:
+                graph_embeds, graph_masks = self.graph_encoder(g)
+                if not self.tune_gnn:
+                    graph_embeds = graph_embeds.detach()
+                graph_embeds = self.ln_graph(graph_embeds, graph_masks)
+                query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
+                query_output = self.Qformer.bert(
+                    query_embeds=query_tokens,
+                    encoder_hidden_states=graph_embeds,
+                    encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
+                    return_dict=True,
+                )
+                mol_tokens = self.opt_proj(query_output.last_hidden_state)
+                prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
+
+        inputs_embeds = self.opt_model.get_input_embeddings()(text_tokens.input_ids)
+        inputs_embeds = torch.cat((prompt_embeds, inputs_embeds), dim=1)
         attention_mask = torch.cat(
-            [reaction_tokens.attention_mask, notes_tokens.attention_mask], dim=1
+            [prompt_tokens.attention_mask, text_tokens.attention_mask], dim=1
         )
 
         outputs = self.opt_model(
@@ -412,7 +440,10 @@ class Blip2OPT(Blip2Base):
             labels=targets,
         )
         loss = outputs.loss
-        return {"loss": loss}
+        results = {"ce_loss": loss}
+
+        results.update({"loss": loss})
+        return results
 
     @torch.no_grad()
     def generate_old(
@@ -547,7 +578,8 @@ class Blip2OPT(Blip2Base):
             temperature=temperature,
             num_beams=num_beams,
             max_length=max_length,
-            min_length=min_length,
+            # min_length=min_length,
+            min_new_tokens=min_length,  # TODO: change to min_new_tokens for all layered methods
             # pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
             repetition_penalty=repetition_penalty,

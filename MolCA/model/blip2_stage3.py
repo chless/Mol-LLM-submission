@@ -360,11 +360,8 @@ class Blip2Stage3(pl.LightningModule):
         self.list_targets.append(targets)
         self.list_tasks.append(tasks)
         # TODO: implement exception for tasks other than classification
-        probs = convert_logit2binary_prob(
-            outputs.logits, self.blip2opt.opt_tokenizer
-        )
+        probs = convert_logit2binary_prob(outputs.logits, self.blip2opt.opt_tokenizer)
         self.list_probs.append(probs)
-
 
         batch_size = texts.input_ids.shape[0]
         loss = self.blip2opt(batch[:-1])  # omit tasks when inputting to the model
@@ -522,4 +519,5 @@ class Blip2Stage3(pl.LightningModule):
             default="string+graph",
             choices=["string_only", "graph_only", "string+graph"],
         )
+        parser.add_argument("--add_reg_tokens", type=bool, default=True)
         return parent_parser
