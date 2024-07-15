@@ -25,16 +25,14 @@ def caption_evaluate(predictions, targets, tokenizer, text_trunc_length):
         gt_tokens = tokenizer.tokenize(
             gt, truncation=True, max_length=text_trunc_length, padding="max_length"
         )
-        gt_tokens = list(filter(("[PAD]").__ne__, gt_tokens))
-        gt_tokens = list(filter(("[CLS]").__ne__, gt_tokens))
-        gt_tokens = list(filter(("[SEP]").__ne__, gt_tokens))
+
+        gt_tokens = list(filter((tokenizer.pad_token).__ne__, gt_tokens))
 
         out_tokens = tokenizer.tokenize(
             out, truncation=True, max_length=text_trunc_length, padding="max_length"
         )
-        out_tokens = list(filter(("[PAD]").__ne__, out_tokens))
-        out_tokens = list(filter(("[CLS]").__ne__, out_tokens))
-        out_tokens = list(filter(("[SEP]").__ne__, out_tokens))
+
+        out_tokens = list(filter((tokenizer.pad_token).__ne__, out_tokens))
 
         references.append([gt_tokens])
         hypotheses.append(out_tokens)
@@ -340,12 +338,15 @@ def classification_evaluate(predictions, targets, probs, tokenizer, text_trunc_l
     f1 = f1_score(y_true=total_labels_np, y_pred=total_preds_np)
     prec = precision_score(y_true=total_labels_np, y_pred=total_preds_np)
     rec = recall_score(y_true=total_labels_np, y_pred=total_preds_np)
-    roc_auc = roc_auc_score(
-        y_true=total_labels_np,
-        y_score=total_probs[
-            :, 1
-        ].numpy(),  # Use y_score here because roc_auc_score expects probability scores
-    )
+    try:
+        roc_auc = roc_auc_score(
+            y_true=total_labels_np,
+            y_score=total_probs[
+                :, 1
+            ].numpy(),  # Use y_score here because roc_auc_score expects probability scores
+        )
+    except:
+        roc_auc = -1.0
 
     evaluation_results = {
         "accuracy": acc,
@@ -363,6 +364,12 @@ def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
     total_predictions = []
     failure_count = 0
     tens_order_failure_count = 0
+
+    # reg tokens added
+    if "<|" in targets[0]:
+        for i in range(len(targets)):
+            targets[i] = targets[i].replace("<|", "").replace("|>", "")
+            predictions[i] = predictions[i].replace("<|", "").replace("|>", "")
 
     _total_labels = []
     for i in range(len(predictions)):
