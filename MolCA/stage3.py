@@ -149,7 +149,7 @@ def main(args):
         "accelerator": args.accelerator,
         "devices": args.devices,
         "precision": args.precision,
-        "check_val_every_n_epoch": args.check_val_every_n_epoch,
+        "val_check_interval": args.val_check_interval,
         "callbacks": callbacks,
         "strategy": strategy,
         "logger": [logger, tb_logger],
@@ -176,8 +176,10 @@ def main(args):
 
     if args.result_file is not None:
         update_result_csv(
-            args=args, outputs=outputs,
+            args=args,
+            outputs=outputs,
         )
+
 
 def adjustBatchSize(args, num_devices):
     if args.root == "multi_task":
@@ -185,7 +187,7 @@ def adjustBatchSize(args, num_devices):
         assert args.inference_batch_size % 4 == 0, "batch size should be multiple of 4"
         args.batch_size = args.batch_size // 4
         args.inference_batch_size = args.inference_batch_size // 4
-        
+
     assert (
         args.batch_size % num_devices == 0
     ), "batch size should be multiple of num_devices"
@@ -235,13 +237,22 @@ def update_result_csv(args, outputs, task_names=None):
     elif args.root == "multi_task":
         # task average of output
         final_output = dict()
-        tasks = list(set(list(outputs[0].keys()) + list(outputs[1].keys()) + list(outputs[2].keys()) + list(outputs[3].keys())))
+        tasks = list(
+            set(
+                list(outputs[0].keys())
+                + list(outputs[1].keys())
+                + list(outputs[2].keys())
+                + list(outputs[3].keys())
+            )
+        )
         for task in tasks:
-                final_output[task] = []
-                for output in outputs:
-                    if task in output:
-                        final_output[task].append(output[task])
-                final_output[task] = final_output[task][0] # identical, just replicated 4 dataloader
+            final_output[task] = []
+            for output in outputs:
+                if task in output:
+                    final_output[task].append(output[task])
+            final_output[task] = final_output[task][
+                0
+            ]  # identical, just replicated 4 dataloader
 
         with open(args.result_file, "w") as f:
             json.dump(final_output, f, indent=4)
@@ -290,7 +301,7 @@ def get_args():
     parser.add_argument("--max_epochs", type=int, default=10)
     parser.add_argument("--max_steps", type=int, default=-1)
     parser.add_argument("--accumulate_grad_batches", type=int, default=1)
-    parser.add_argument("--check_val_every_n_epoch", type=int, default=1)
+    parser.add_argument("--check_val_every_n_epoch", type=int, default=None)
     parser.add_argument("--every_n_train_steps", type=int, default=1000)
     parser.add_argument("--task", type=str, default=None)
     parser.add_argument("--val_check_interval", type=float, default=0.1)
@@ -298,7 +309,9 @@ def get_args():
     parser.add_argument("--neptune_project", type=str, default="chless/text-mol")
     parser.add_argument("--result_file", type=str, default="MolCA/results/debug.json")
     parser.add_argument("--not_save_model", action="store_true", default=False)
-    parser.add_argument("--checkpoint_save_dir", type=str, default="MolCA/all_checkpoints/")
+    parser.add_argument(
+        "--checkpoint_save_dir", type=str, default="MolCA/all_checkpoints/"
+    )
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)
