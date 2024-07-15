@@ -8,7 +8,7 @@ RUN conda create -n molca python=3.10
 RUN conda activate molca
 
 # Install PyTorch and related packages
-RUN conda install pytorch torchvision torchaudio pytorch-cuda -c pytorch -c nvidia
+RUN conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
 
 # Install PyG
 RUN conda install pyg -c pyg
