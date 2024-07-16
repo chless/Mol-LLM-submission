@@ -142,7 +142,7 @@ def main(args):
     """
     tb_logger = TensorBoardLogger(
         f"./MolCA/all_checkpoints/tensorboard/",
-        name=args.result_file.split("/")[-1].split(".")[0],
+        name=args.filename,
     )
 
     trainer_args = {
