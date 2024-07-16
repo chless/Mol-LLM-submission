@@ -1,10 +1,14 @@
 # Use the official Python base image
 FROM python:3.10
 
-# Create a new conda environment
-RUN conda create -n molca python=3.10 -y
+RUN apt update && apt upgrade -y
+RUN apt install -y wget
+RUN mkdir -p ~/miniconda3
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
+RUN bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
+RUN rm -rf ~/miniconda3/miniconda.sh
 
-# Activate the conda environment
+RUN conda create -n molca python=3.10 -y
 RUN conda activate molca
 
 # Install PyTorch and related packages
