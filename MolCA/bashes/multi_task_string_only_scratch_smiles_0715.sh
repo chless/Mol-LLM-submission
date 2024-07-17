@@ -7,7 +7,6 @@ python3 MolCA/stage3.py \
 --devices $gpus \
 --root multi_task \
 --mode ft \
---filename instruction_tuning_string_only_scratch_smiles_galac_0715 \
 --opt_model 'facebook/galactica-1.3b' \
 --prompt '[START_I_SMILES]{}[END_I_SMILES].' \
 --tune_gnn \
@@ -20,6 +19,7 @@ python3 MolCA/stage3.py \
 --num_beam 1 \
 --max_len=512 \
 --text_max_len=256 \
---result_file MolCA/results/instruction_tuning_sting_only_scratch_smiles_galac_0715.csv \
 --save_every_n_epochs 1 \
+--filename instruction_tuning_string_only_scratch_smiles_galac_0715 \
+--result_file MolCA/results/instruction_tuning_sting_only_scratch_smiles_galac_0715.csv \
 --raw_data_root MolCA/data/multi_task_dataset_0715_smiles \

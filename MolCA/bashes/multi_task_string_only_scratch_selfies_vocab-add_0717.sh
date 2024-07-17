@@ -14,12 +14,13 @@ python3 MolCA/stage3.py \
 --batch_size $batch_size \
 --inference_batch_size $inference_batch_size \
 --val_check_interval 5000 \
---max_epochs 10 \
+--max_epochs 20 \
 --mol_representation string_only \
 --num_beam 1 \
 --max_len=512 \
 --text_max_len=256 \
 --save_every_n_epochs 1 \
---filename instruction_tuning_string_only_scratch_selfies_galac_0715 \
---result_file MolCA/results/instruction_tuning_string_only_scratch_selfies_galac_0715.csv \
+--filename instruction_tuning_string_only_scratch_selfies_galac_0716 \
+--result_file MolCA/results/instruction_tuning_string_only_scratch_selfies_galac_0716.csv \
 --raw_data_root MolCA/data/multi_task_dataset_0715_selfies \
+--add_selfies_tokens
