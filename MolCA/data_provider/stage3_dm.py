@@ -269,7 +269,7 @@ class Stage3DM(LightningDataModule):
                         root=self.args.raw_data_root,
                         filename=f"{task}_{split}",
                         prompt=self.prompt,
-                        resize=2400 if split == "val" else None,
+                        resize=4800 if split == "val" else None,
                         mol_string_conversion=self.args.mol_string_conversion,
                     )
 

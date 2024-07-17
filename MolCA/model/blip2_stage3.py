@@ -20,6 +20,7 @@ from model.help_funcs import (
 )
 from transformers import Adafactor
 import ast
+import json
 
 
 def load_ignore_unexpected(model, state_dict):
@@ -209,16 +210,26 @@ class Blip2Stage3(pl.LightningModule):
     def save_predictions(self, predictions, targets, tasks):
         assert len(predictions) == len(targets)
         assert len(predictions) == len(tasks)
-        with open(
-            os.path.join(self.logger.log_dir, "predictions.txt"), "w", encoding="utf8"
-        ) as f:
-            for i in range(len(predictions)):
-                line = {
+        instances = []
+        for i in range(len(predictions)):
+            instances.append(
+                {
+                    "task": tasks[i],
                     "prediction": predictions[i],
                     "target": targets[i],
+                }
+            )
+        with open(os.path.join(self.logger.log_dir, "predictions.json"), "w") as f:
+            """
+            for i in range(len(predictions)):
+                line = {
                     "task": tasks[i],
+                    "prediction": predictions[i],
+                    "target": targets[i],
                 }
                 f.write(json.dumps(line, ensure_ascii=True) + "\n")
+            """
+            json.dump(instances, f, ensure_ascii=False, indent=4)
 
     def on_test_epoch_start(self) -> None:
         self.on_evaluation_epoch_start()
@@ -520,4 +531,8 @@ class Blip2Stage3(pl.LightningModule):
             choices=["string_only", "graph_only", "string+graph"],
         )
         parser.add_argument("--add_reg_tokens", type=bool, default=True)
+        parser.add_argument("--add_selfies_tokens", action="store_true", default=False)
+        parser.add_argument(
+            "--selfies_token_path", type=str, default="MolCA/model/selfies_dict.txt"
+        )
         return parent_parser
