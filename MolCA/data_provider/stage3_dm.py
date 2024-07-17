@@ -1262,21 +1262,18 @@ class InstructionInMemoryDataset(InMemoryDataset):
                     task_subtask_pair=task_subtask_pair,
                     prompt=self.prompt,
                     subtask_idx=subtask_idx,
-                    debug=self.debug,
                 )
                 valid_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
                     prompt=self.prompt,
                     subtask_idx=subtask_idx,
-                    debug=self.debug,
                 )
                 test_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
                     prompt=self.prompt,
                     subtask_idx=subtask_idx,
-                    debug=self.debug,
                 )
             # qm9 in regression benchmark is processed via MolInstructionDataset
             elif (
@@ -1290,19 +1287,16 @@ class InstructionInMemoryDataset(InMemoryDataset):
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
                     prompt=self.prompt,
-                    debug=self.debug,
                 )
                 valid_dataset = MolInstructionDatset(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
                     prompt=self.prompt,
-                    debug=self.debug,
                 )
                 test_dataset = MolInstructionDatset(
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
                     prompt=self.prompt,
-                    debug=self.debug,
                 )
 
             train_datasets.append(train_dataset)
