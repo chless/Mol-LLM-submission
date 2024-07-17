@@ -190,11 +190,17 @@ class Blip2OPT(Blip2Base):
         self.opt_tokenizer.add_tokens("</FLOAT>")
 
         if self.args.add_reg_tokens:
-            for i in range(10):
-                self.opt_tokenizer.add_tokens(f"<|{i}|>")
-            self.opt_tokenizer.add_tokens("<|+|>")
-            self.opt_tokenizer.add_tokens("<|-|>")
-            self.opt_tokenizer.add_tokens("<|.|>")
+            reg_tokens = [f"<|{i}|>" for i in range(10)]
+            reg_tokens.extend(["<|+|>", "<|-|>", "<|.|>"])
+            self.opt_tokenizer.add_tokens(reg_tokens)
+
+        if self.args.add_selfies_tokens:
+            # Read txt from selfies_token_path
+            with open(self.args.selfies_token_path, "r") as f:
+                selfies_tokens = f.readlines()
+                selfies_tokens = [token.strip() for token in selfies_tokens]
+            self.opt_tokenizer.add_tokens(selfies_tokens)
+            print(f"Added {len(selfies_tokens)} selfies tokens to the tokenizer")
 
         self.mol_token = "<mol>"
         self.opt_tokenizer.mol_token_id = self.opt_tokenizer(
