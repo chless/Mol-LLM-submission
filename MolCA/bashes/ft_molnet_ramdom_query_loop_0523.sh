@@ -23,5 +23,5 @@ do
     --batch_size 64 \
     --num_beam 1 \
     --num_random_query_embedding $rq \
-    --result_file MolCA/results/molnet_task-specific_rq${rq}_0530.csv 
+    
 done

@@ -19,6 +19,6 @@ python3 MolCA/stage3.py \
 --max_epochs 10 \
 --mol_representation string_only \
 --num_beam 1 \
---result_file MolCA/results/instruction_tuning_sting_only_galac_0628.csv \
+
 --save_every_n_epochs 1 \
 --raw_data_root MolCA/data/multi_task_dataset_0630-2.pth

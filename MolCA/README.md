@@ -126,7 +126,7 @@ python MolCA/stage3.py
                 "--num_beam=1",
                 "--num_random_query_embedding=0",
                 "--gnn_jk=layer",
-                "--result_file=MolCA/results/molnet_task-specific_0530.csv",
+                "
 ```
 
 * root: task name like qm9

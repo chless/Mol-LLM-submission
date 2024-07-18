@@ -19,7 +19,7 @@ python3 MolCA/stage3.py \
 --max_epochs 10 \
 --mol_representation string_only \
 --num_beam 1 \
---result_file MolCA/results/instruction_tuning_sting_only_galac_0630.csv \
+
 --save_every_n_epochs 1 \
 --every_n_train_steps 2000 \
 --num_workers 0 \

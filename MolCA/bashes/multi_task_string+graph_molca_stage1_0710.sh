@@ -19,7 +19,7 @@ python3 MolCA/stage3.py \
 --max_epochs 10 \
 --mol_representation string+graph \
 --num_beam 1 \
---result_file MolCA/results/instruction_tuning_sting+graph_molca_galac_0710.csv \
+
 --save_every_n_epochs 1 \
 --raw_data_root MolCA/data/multi_task_dataset \
 --get_raw_data

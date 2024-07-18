@@ -21,6 +21,6 @@ python3 MolCA/stage3.py \
 --num_beam 1 \
 --max_len=512 \
 --text_max_len=256 \
---result_file MolCA/all_checkpoints/instruction_tuning_string_only_scratch_selfies_galac_0716/benchmark_performance.json \
+
 --save_every_n_epochs 1 \
 --raw_data_root MolCA/data/multi_task_dataset_0715_selfies \

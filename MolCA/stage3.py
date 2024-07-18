@@ -310,7 +310,6 @@ def get_args():
     parser.add_argument("--val_check_interval", type=float, default=0.1)
     parser.add_argument("--save_top_k", type=int, default=10)
     parser.add_argument("--neptune_project", type=str, default="chless/text-mol")
-    parser.add_argument("--result_file", type=str, default="MolCA/results/debug.json")
     parser.add_argument("--not_save_model", action="store_true", default=False)
     parser.add_argument(
         "--checkpoint_save_dir", type=str, default="MolCA/all_checkpoints/"

@@ -9,7 +9,6 @@ python3 MolCA/stage3.py \
 --mode test \
 --filename instruction_tuning_string+graph_ours_galac_0701 \
 --stage2_path 'MolCA/all_checkpoints/instruction_tuning_string+graph_ours_galac_0701/step=109000-total_loss=0.990.ckpt' \
---result_file MolCA/all_checkpoints/instruction_tuning_string+graph_ours_galac_0701/benchmark_performance.json \
 --opt_model 'facebook/galactica-1.3b' \
 --prompt '[START_I_SMILES]{}[END_I_SMILES].' \
 --tune_gnn \

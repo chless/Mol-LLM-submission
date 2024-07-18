@@ -22,5 +22,5 @@ python3 MolCA/stage3.py \
 --save_every_n_epochs 1 \
 --stage2_path '/home/chanhui-lee/text-mol/MolCA/all_checkpoints/instruction_tuning_string_only_scratch_selfies_galac_0716/last-v3.ckpt' \
 --filename instruction_tuning_string_only_scratch_selfies_galac_0716 \
---result_file MolCA/results/instruction_tuning_string_only_scratch_selfies_galac_0716.csv \
+
 --raw_data_root MolCA/data/multi_task_dataset_0715_selfies \

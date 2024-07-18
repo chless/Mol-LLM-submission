@@ -21,6 +21,6 @@ python3 MolCA/stage3.py \
 --text_max_len=256 \
 --save_every_n_epochs 1 \
 --filename instruction_tuning_string_only_scratch_galac_selfies_vocab_add_0717 \
---result_file MolCA/results/instruction_tuning_string_only_scratch_galac_selfies_vocab_add_0717.csv \
+
 --raw_data_root MolCA/data/multi_task_dataset_0715_selfies \
 --add_selfies_tokens
