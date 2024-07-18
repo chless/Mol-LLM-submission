@@ -177,6 +177,7 @@ def main(args):
     if args.filename is not None:
         update_result_csv(
             args=args,
+            logger_dir=trainer.logger.log_dir,
             outputs=outputs,
         )
 
@@ -200,7 +201,7 @@ def adjustBatchSize(args, num_devices):
     print(f"inference batch size per device: {args.inference_batch_size}")
 
 
-def update_result_csv(args, outputs, task_names=None):
+def update_result_csv(args, outputs, logger_dir, task_names=None):
     # first, read the content in result_csv file
     single_tasks = (
         REGRESSION_BENCHMARKS
@@ -208,9 +209,7 @@ def update_result_csv(args, outputs, task_names=None):
         + MOL2TEXT_BENCHMARKS
         + TEXT2MOL_BENCHMARKS
     )
-    performance_result_path = (
-        f"MolCA/all_checkpoints/{args.filename}/benchmark_performance.json"
-    )
+    performance_result_path = os.path.join(logger_dir, "benchmark_performance.json")
 
     os.makedirs(os.path.dirname(performance_result_path), exist_ok=True)
     if args.root in single_tasks:
