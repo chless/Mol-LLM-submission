@@ -133,13 +133,13 @@ def main(args):
         args.devices = [eval(args.devices)]
     # logger setting
     logger = CSVLogger(save_dir=f"./MolCA/all_checkpoints/{args.filename}/")
-    """
+
     neptune_logger = NeptuneLogger(
         api_key=os.environ.get("NEPTUNE_API_TOKEN"),
         project=args.neptune_project,
-        log_model_checkpoints=False
+        log_model_checkpoints=False,
     )
-    """
+
     tb_logger = TensorBoardLogger(
         f"./MolCA/all_checkpoints/tensorboard/",
         name=args.filename,
@@ -152,7 +152,7 @@ def main(args):
         "val_check_interval": args.val_check_interval,
         "callbacks": callbacks,
         "strategy": strategy,
-        "logger": [logger, tb_logger],
+        "logger": [logger, neptune_logger, tb_logger],
     }
     if args.max_steps > 0:
         trainer_args["max_steps"] = args.max_steps
