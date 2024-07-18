@@ -174,7 +174,7 @@ def main(args):
     else:
         raise NotImplementedError()
 
-    if args.result_file is not None:
+    if args.filename is not None:
         update_result_csv(
             args=args,
             outputs=outputs,
@@ -208,11 +208,15 @@ def update_result_csv(args, outputs, task_names=None):
         + MOL2TEXT_BENCHMARKS
         + TEXT2MOL_BENCHMARKS
     )
-    os.makedirs(os.path.dirname(args.result_file), exist_ok=True)
+    performance_result_path = (
+        f"MolCA/all_checkpoints/{args.filename}/benchmark_performance.json"
+    )
+
+    os.makedirs(os.path.dirname(performance_result_path), exist_ok=True)
     if args.root in single_tasks:
         assert task_names is not None
-        if os.path.exists(args.result_file):
-            results_dict = json.load(open(args.result_file, "r"))
+        if os.path.exists(performance_result_path):
+            results_dict = json.load(open(performance_result_path, "r"))
         else:
             results_dict = dict()
 
@@ -230,9 +234,9 @@ def update_result_csv(args, outputs, task_names=None):
                 if k not in results_dict[args.root][subtask]:
                     results_dict[args.root][subtask][k] = output[k]
         # finally, save the updated results_dict
-        with open(args.result_file, "w") as f:
+        with open(performance_result_path, "w") as f:
             json.dump(results_dict, f, indent=4)
-        print(f"Updated the result file {args.result_file}")
+        print(f"Updated the result file {performance_result_path}")
 
     elif args.root == "multi_task":
         # task average of output
@@ -254,7 +258,7 @@ def update_result_csv(args, outputs, task_names=None):
                 0
             ]  # identical, just replicated 4 dataloader
 
-        with open(args.result_file, "w") as f:
+        with open(performance_result_path, "w") as f:
             json.dump(final_output, f, indent=4)
     else:
         raise NotImplementedError()

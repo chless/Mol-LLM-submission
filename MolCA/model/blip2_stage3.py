@@ -531,7 +531,7 @@ class Blip2Stage3(pl.LightningModule):
             choices=["string_only", "graph_only", "string+graph"],
         )
         parser.add_argument("--add_reg_tokens", type=bool, default=True)
-        parser.add_argument("--add_selfies_tokens", action="store_true", default=False)
+        parser.add_argument("--add_selfies_tokens", action="store_true", default=True)
         parser.add_argument(
             "--selfies_token_path", type=str, default="MolCA/model/selfies_dict.txt"
         )
