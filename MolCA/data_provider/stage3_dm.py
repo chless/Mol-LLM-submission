@@ -21,63 +21,73 @@ from data_provider import instructions
 import numpy as np
 import selfies
 from tqdm import tqdm
+import model.added_tokens as added_tokens
 
 # we split individual characters inside special tokens like [START_DNA]
 # TODO: change this ugly I_SMILES things to regular special token, and add the special token to vocab whichever LLM
-CUSTOM_SEQ_RE = re.compile(r"(\[START_(DNA|SMILES|I_SMILES|AMINO)])(.*?)(\[END_\2])")
+# CUSTOM_SEQ_RE = re.compile(r"(\[START_(DNA|SMILES|I_SMILES|AMINO)])(.*?)(\[END_\2])")
+CUSTOM_SEQ_RE = re.compile(r"(<MOL_1D>)(.*?)(</MOL_1D>)")
 
 # token added to implement a custom sequence tokenization. This token is added at
 # corpus cleaning step and removed in pretokenization. The digits are added to increase the chance
 # that they do not occur in the corpus. The digits are escaped so that the token does not appear
 # literally in the source code in case we ever include it in the training data.
 
-BOOL_TOKENS = ["<BOOLEAN>", "</BOOLEAN>"]
-FLOAT_TOKENS = ["<FLOAT>", "</FLOAT>"]
-DESCRIPTION_TOKENS = ["<DESCRIPTION>", "</DESCRIPTION>"]
 
+# TODO: fix this, currently the pattern is not matched, because the special token [START_I_SMILES] is not appended
+def prepare_llm_prompt(
+    mol_string, instruction, mol_ph, mol_representation, model="llama"
+):
+    if CUSTOM_SEQ_RE.match(mol_string) is None:
+        mol_string = added_tokens.MOL_1D[0] + mol_string + added_tokens.MOL_1D[1]
 
-def smiles_handler(text, mol_ph, mol_representation, model="llama"):
-    smiles_list = []
-    for match in CUSTOM_SEQ_RE.finditer(text):
-        smiles = match.group(3)
-        smiles_list.append(smiles)
+    mol_ph = added_tokens.MOL_2D[0] + mol_ph + added_tokens.MOL_2D[1]
 
     # graph embedding without smiles tokens
     # '<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
     if mol_representation == "graph_only":
-        text = CUSTOM_SEQ_RE.sub(r"%s" % (mol_ph), text)
+        mol_string = CUSTOM_SEQ_RE.sub(r"%s" % (mol_ph), mol_string)
     # smiles tokens without graph embedding
     # \1, \4 corresponds to the special tokens for string (\2 is the special token, which included in the nest of \1)
     # \3 corresponds to the content of the smiles token
     # '<Molecule>[H]N([H])C(=O)C([H])([H])[H]</Molecule>'
     elif mol_representation == "string_only":
-        text = CUSTOM_SEQ_RE.sub(r"\1\3\4", text)
+        mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3", mol_string)
     # smiles tokens with graph embedding
     # '<Molecule>[H]N([H])C(=O)C([H])([H])[H]</Molecule><mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
     elif mol_representation == "string+graph":
-        text = CUSTOM_SEQ_RE.sub(r"\1\3\4%s" % (mol_ph), text)
+        mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3%s" % (mol_ph), mol_string)
     # smiles tokens with graph tokens without special tokens
     # '[H]N([H])C(=O)C([H])([H])[H]<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
     else:
-        text = CUSTOM_SEQ_RE.sub(r"\3%s" % (mol_ph), text)
+        raise NotImplementedError("mol_representation should be one of the options")
     # for reagent prediction, double the mol_ph with >> to separate reactant and product
-    if ">>" in text:
-        text += ">>" + mol_ph
-    return text, smiles_list
+    if ">>" in mol_string:
+        mol_string += ">>" + mol_ph
+
+    llm_prompt = (
+        mol_string
+        + added_tokens.INSTRUCTION[0]
+        + instruction
+        + added_tokens.INSTRUCTION[1]
+    )
+    return llm_prompt
 
 
 class TrainCollater:
     def __init__(
         self,
         tokenizer,
-        text_max_len,
+        prompt_max_len,
+        label_max_len,
         mol_ph,
         mol_token_id,
         mol_representation=True,
         multi_task=False,
         model=None,
     ):
-        self.text_max_len = text_max_len
+        self.prompt_max_len = prompt_max_len
+        self.label_max_len = label_max_len
         self.tokenizer = tokenizer
         self.collater = Collater([], [])
         self.mol_ph = mol_ph
@@ -102,20 +112,19 @@ class TrainCollater:
 
         ## deal with prompt
         smiles_prompt = [
-            smiles_handler(p, self.mol_ph, self.mol_representation, self.model)[0]
-            for p in smiles_prompt
+            prepare_llm_prompt(
+                p, instruction, self.mol_ph, self.mol_representation, self.model
+            )
+            for p, instruction in zip(smiles_prompt, instructions)
         ]
-
-        for i in range(len(texts)):
-            smiles_prompt[i] += " " + instructions[i]
 
         self.tokenizer.padding_side = "left"
         smiles_prompt_tokens = self.tokenizer(
             text=smiles_prompt,
             truncation=True,
-            padding="longest",
+            padding="max_length",
             add_special_tokens=True,
-            max_length=self.text_max_len,
+            max_length=self.prompt_max_len,
             return_tensors="pt",
             return_attention_mask=True,
         )
@@ -127,9 +136,9 @@ class TrainCollater:
         text_tokens = self.tokenizer(
             text=texts,
             truncation=True,
-            padding="longest",
+            padding="max_length",
             add_special_tokens=True,
-            max_length=self.text_max_len,
+            max_length=self.label_max_len,
             return_tensors="pt",
             return_attention_mask=True,
         )
@@ -140,14 +149,16 @@ class InferenceCollater:
     def __init__(
         self,
         tokenizer,
-        text_max_len,
+        prompt_max_len,
+        label_max_len,
         mol_ph,
         mol_token_id,
         mol_representation=True,
         multi_task=False,
         model=None,
     ):
-        self.text_max_len = text_max_len
+        self.prompt_max_len = prompt_max_len
+        self.label_max_len = label_max_len
         self.tokenizer = tokenizer
         self.collater = Collater([], [])
         self.mol_ph = mol_ph
@@ -162,13 +173,13 @@ class InferenceCollater:
         else:
             graphs, texts, smiles_prompt, tasks = zip(*batch)
         graphs = self.collater(graphs)
-        smiles_prompt = [
-            smiles_handler(p, self.mol_ph, self.mol_representation, self.model)[0]
-            for p in smiles_prompt
-        ]
 
-        for i in range(len(texts)):
-            smiles_prompt[i] += " " + instructions[i]
+        smiles_prompt = [
+            prepare_llm_prompt(
+                p, instruction, self.mol_ph, self.mol_representation, self.model
+            )
+            for p, instruction in zip(smiles_prompt, instructions)
+        ]
 
         ## deal with prompt
         self.tokenizer.padding_side = "left"
@@ -176,18 +187,20 @@ class InferenceCollater:
             smiles_prompt,
             return_tensors="pt",
             add_special_tokens=True,
-            max_length=self.text_max_len,
-            padding="longest",
+            max_length=self.prompt_max_len,
+            padding="max_length",
             truncation=True,
             return_attention_mask=True,
         )
+
+        self.tokenizer.padding_side = "right"
         texts = self.tokenizer(
             text=texts,
             return_tensors="pt",
             add_special_tokens=True,
-            max_length=self.text_max_len,
+            max_length=self.label_max_len,
             truncation=True,
-            padding="longest",
+            padding="max_length",
             return_attention_mask=True,
         )
 
@@ -237,7 +250,8 @@ class Stage3DM(LightningDataModule):
         num_workers: int = 0,
         batch_size: int = 256,
         root: str = "data/",
-        text_max_len: int = 128,
+        prompt_max_len: int = 512,
+        label_max_len: int = 512,
         tokenizer=None,
         args=None,
     ):
@@ -247,8 +261,8 @@ class Stage3DM(LightningDataModule):
         self.batch_size = batch_size
         self.inference_batch_size = args.inference_batch_size
         self.num_workers = num_workers
-        self.text_max_len = text_max_len
-        self.prompt = args.prompt
+        self.prompt_max_len = prompt_max_len
+        self.label_max_len = label_max_len
         self.debug = args.debug
         self.args = args
         self.root = root
@@ -268,50 +282,11 @@ class Stage3DM(LightningDataModule):
                     self.concat_datasets[task][split] = InstructionInMemoryDataset(
                         root=self.args.raw_data_root,
                         filename=f"{task}_{split}",
-                        prompt=self.prompt,
                         resize=2400 if split == "val" else None,
                         mol_string_conversion=self.args.mol_string_conversion,
                     )
-
-        elif root in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
-            self.tasks, self.train_data, self.val_data, self.test_data = (
-                self.get_dataset(root)
-            )
-            self.tasks = [f"{root}/{t}" for t in self.tasks]
-            self.train_dataset = MoleculeNetDatasetDeepChem(
-                data=self.train_data,
-                tasks=self.tasks,
-                prompt=self.prompt,
-                subtask_idx=args.subtask_idx,
-                debug=self.debug,
-            )
-            self.val_dataset = MoleculeNetDatasetDeepChem(
-                data=self.val_data,
-                tasks=self.tasks,
-                prompt=self.prompt,
-                subtask_idx=args.subtask_idx,
-                debug=self.debug,
-            )
-            self.test_dataset = MoleculeNetDatasetDeepChem(
-                data=self.test_data,
-                tasks=self.tasks,
-                prompt=self.prompt,
-                subtask_idx=args.subtask_idx,
-                debug=self.debug,
-            )
         else:
-            self.pretrain_dataset = MoleculeCaptionV2(
-                root + f"pretrain.pt", text_max_len, self.prompt, debug=self.debug
-            )
-            self.train_dataset = MoleculeCaptionV2(
-                root + f"train.pt", text_max_len, self.prompt, debug=self.debug
-            )
-            self.val_dataset = MoleculeCaptionV2(
-                root + f"valid.pt", text_max_len, self.prompt, debug=self.debug
-            )
-            self.test_dataset = MoleculeCaptionV2(
-                root + f"test.pt", text_max_len, self.prompt, debug=self.debug
-            )
+            raise NotImplementedError
 
         self.init_tokenizer(tokenizer)
         self.mol_ph_token = "<mol>" * self.args.num_query_token
@@ -373,21 +348,18 @@ class Stage3DM(LightningDataModule):
                 train_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     subtask_idx=subtask_idx,
                     debug=self.debug,
                 )
                 valid_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     subtask_idx=subtask_idx,
                     debug=self.debug,
                 )
                 test_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     subtask_idx=subtask_idx,
                     debug=self.debug,
                 )
@@ -395,57 +367,48 @@ class Stage3DM(LightningDataModule):
                 train_dataset = MolInstructionDatset(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     debug=self.debug,
                 )
                 valid_dataset = MolInstructionDatset(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     debug=self.debug,
                 )
                 test_dataset = MolInstructionDatset(
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     debug=self.debug,
                 )
             elif task_name in MOL2TEXT_BENCHMARKS:
                 train_dataset = MolInstructionDatset(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     debug=self.debug,
                 )
                 valid_dataset = MolInstructionDatset(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     debug=self.debug,
                 )
                 test_dataset = MolInstructionDatset(
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     debug=self.debug,
                 )
             elif task_name in TEXT2MOL_BENCHMARKS:
                 train_dataset = MolInstructionDatset(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     debug=self.debug,
                 )
                 valid_dataset = MolInstructionDatset(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     debug=self.debug,
                 )
                 test_dataset = MolInstructionDatset(
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     debug=self.debug,
                 )
 
@@ -562,7 +525,8 @@ class Stage3DM(LightningDataModule):
                 persistent_workers=True,
                 collate_fn=TrainCollater(
                     self.tokenizer,
-                    self.text_max_len,
+                    self.prompt_max_len,
+                    self.label_max_len,
                     self.mol_ph_token,
                     self.mol_token_id,
                     self.mol_representation,
@@ -582,7 +546,12 @@ class Stage3DM(LightningDataModule):
                         persistent_workers=True,
                         collate_fn=TrainCollater(
                             self.tokenizer,
-                            self.text_max_len,
+                            self.prompt_max_len,
+                            (
+                                self.label_max_len
+                                if task not in ["regression", "classification"]
+                                else 9
+                            ),
                             self.mol_ph_token,
                             self.mol_token_id,
                             self.mol_representation,
@@ -608,7 +577,8 @@ class Stage3DM(LightningDataModule):
                     persistent_workers=True,
                     collate_fn=TrainCollater(
                         self.tokenizer,
-                        self.text_max_len,
+                        self.prompt_max_len,
+                        self.label_max_len,
                         self.mol_ph_token,
                         self.mol_token_id,
                         self.mol_representation,
@@ -631,7 +601,8 @@ class Stage3DM(LightningDataModule):
                 persistent_workers=True,
                 collate_fn=TrainCollater(
                     self.tokenizer,
-                    self.text_max_len,
+                    self.prompt_max_len,
+                    self.label_max_len,
                     self.mol_ph_token,
                     self.mol_token_id,
                     self.mol_representation,
@@ -648,7 +619,8 @@ class Stage3DM(LightningDataModule):
                 persistent_workers=True,
                 collate_fn=InferenceCollater(
                     self.tokenizer,
-                    self.text_max_len,
+                    self.prompt_max_len,
+                    self.label_max_len,
                     self.mol_ph_token,
                     self.mol_token_id,
                     self.mol_representation,
@@ -668,7 +640,12 @@ class Stage3DM(LightningDataModule):
                     persistent_workers=True,
                     collate_fn=InferenceCollater(
                         self.tokenizer,
-                        self.text_max_len,
+                        self.prompt_max_len,
+                        (
+                            self.label_max_len
+                            if task not in ["regression", "classification"]
+                            else 9
+                        ),
                         self.mol_ph_token,
                         self.mol_token_id,
                         self.mol_representation,
@@ -692,7 +669,8 @@ class Stage3DM(LightningDataModule):
                 persistent_workers=True,
                 collate_fn=InferenceCollater(
                     self.tokenizer,
-                    self.text_max_len,
+                    self.prompt_max_len,
+                    self.label_max_len,
                     self.mol_ph_token,
                     self.mol_token_id,
                     self.mol_representation,
@@ -712,7 +690,12 @@ class Stage3DM(LightningDataModule):
                     persistent_workers=True,
                     collate_fn=InferenceCollater(
                         self.tokenizer,
-                        self.text_max_len,
+                        self.prompt_max_len,
+                        (
+                            self.label_max_len
+                            if task not in ["regression", "classification"]
+                            else 9
+                        ),
                         self.mol_ph_token,
                         self.mol_token_id,
                         self.mol_representation,
@@ -731,12 +714,13 @@ class Stage3DM(LightningDataModule):
         parser.add_argument("--inference_batch_size", type=int, default=4)
         parser.add_argument("--use_smiles", action="store_true", default=False)
         parser.add_argument("--root", type=str, default="data/PubChemDataset_v4")
-        parser.add_argument("--text_max_len", type=int, default=128)
+        parser.add_argument("--prompt_max_len", type=int, default=512)
+        parser.add_argument("--label_max_len", type=int, default=256)
         parser.add_argument(
             "--prompt",
             type=str,
             default="[START_I_SMILES]{}[END_I_SMILES]",
-        )
+        )  # not used at all in stage 3
         parser.add_argument("--filtered_cid_path", type=str, default=None)
 
         # moleculenet dataset
@@ -758,16 +742,16 @@ from tqdm import tqdm
 from rdkit import Chem
 
 
-def wrap_label(label, task, mol_special_tokens):
+def wrap_label(label, task):
 
     if task in CLASSIFICATION_BENCHMARKS:
-        label_tokens = BOOL_TOKENS
+        label_tokens = added_tokens.BOOL
     elif task in REGRESSION_BENCHMARKS:
-        label_tokens = FLOAT_TOKENS
+        label_tokens = added_tokens.FLOAT
     elif task in MOL2TEXT_BENCHMARKS:
-        label_tokens = DESCRIPTION_TOKENS
+        label_tokens = added_tokens.DESCRIPTION
     elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS:
-        label_tokens = mol_special_tokens
+        label_tokens = added_tokens.MOL_1D
     else:
         raise NotImplementedError
 
@@ -808,8 +792,6 @@ class MoleculeNetDatasetDeepChem(Dataset):
         self.subtask_idx = subtask_idx
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
-        self.prompt = prompt
-        self.mol_special_tokens = self.prompt.replace(".", "").split("{}")
 
         if self.task in CLASSIFICATION_BENCHMARKS:
             if self.task in ["clintox"]:
@@ -818,10 +800,10 @@ class MoleculeNetDatasetDeepChem(Dataset):
                 )
             else:
                 self.instruction_list = getattr(instructions, self.task)
-            self.label_tokens = BOOL_TOKENS
+            self.label_tokens = added_tokens.BOOL
         elif self.task in REGRESSION_BENCHMARKS:
             self.instruction_list = getattr(instructions, self.task)
-            self.label_tokens = FLOAT_TOKENS
+            self.label_tokens = added_tokens.FLOAT
         else:
             raise NotImplementedError
 
@@ -833,18 +815,12 @@ class MoleculeNetDatasetDeepChem(Dataset):
     def get_necessary_data(self, index):
         smiles = self.smiles_list[index]
         label = self.label_list[index]
-        label = wrap_label(label, self.task, self.mol_special_tokens)
+        label = wrap_label(label, self.task)
         graph = smiles2data(smiles)
         # randomly select one instruction from list
         instruction = self.instruction_list[
             np.random.choice(len(self.instruction_list))
         ]
-
-        if self.prompt.find("{}") >= 0:
-            smiles_prompt = self.prompt.format(smiles)
-        else:
-            smiles_prompt = self.prompt
-
         return graph, label, smiles_prompt, instruction
 
     def set_necessary_data(self):
@@ -919,8 +895,6 @@ class MolInstructionDatset(Dataset):
     def __init__(self, data, task_subtask_pair, prompt=None, debug=False):
         self.debug = debug
         self.data = data
-        self.prompt = prompt
-        self.mol_special_tokens = self.prompt.replace(".", "").split("{}")
         # TODO: implement conversion to smiles or selfies controlled by this attribute
         # currently, only smiles is supported
         self.task_subtask_pair = task_subtask_pair
@@ -1032,12 +1006,7 @@ class MolInstructionDatset(Dataset):
             smiles = selfies.decoder(selfies)
             graph = smiles2data(smiles)
 
-        label = wrap_label(label, self.task, self.mol_special_tokens)
-
-        if self.prompt.find("{}") >= 0:
-            smiles_prompt = self.prompt.format(smiles)
-        else:
-            smiles_prompt = self.prompt
+        label = wrap_label(label, self.task)
 
         return graph, label, smiles_prompt, instruction
 
@@ -1073,13 +1042,12 @@ class InstructionInMemoryDataset(InMemoryDataset):
         filename,
         transform=None,
         pre_transform=None,
-        prompt=None,
         resize=None,
         mol_string_conversion=False,
     ):
         self.filename = filename  # raw_file_names and processed_file_names use this
-        self.prompt = prompt
-        self.start, self.end = self.prompt.split("{}")
+
+        self.start, self.end = added_tokens.MOL_1D
         self.resize = resize
         self.mol_string_conversion = mol_string_conversion
         print(f"Convert mol: {self.mol_string_conversion}")
@@ -1260,19 +1228,16 @@ class InstructionInMemoryDataset(InMemoryDataset):
                 train_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     subtask_idx=subtask_idx,
                 )
                 valid_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     subtask_idx=subtask_idx,
                 )
                 test_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                     subtask_idx=subtask_idx,
                 )
             # qm9 in regression benchmark is processed via MolInstructionDataset
@@ -1286,17 +1251,14 @@ class InstructionInMemoryDataset(InMemoryDataset):
                 train_dataset = MolInstructionDatset(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                 )
                 valid_dataset = MolInstructionDatset(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                 )
                 test_dataset = MolInstructionDatset(
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
-                    prompt=self.prompt,
                 )
 
             train_datasets.append(train_dataset)

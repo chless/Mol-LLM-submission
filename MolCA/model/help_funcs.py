@@ -10,8 +10,8 @@ from data_provider.stage3_dm import (
     MOL2TEXT_BENCHMARKS,
     TEXT2MOL_BENCHMARKS,
     REACTION_BENCHMARKS,
-    FLOAT_TOKENS,
 )
+import model.added_tokens as added_tokens
 import ast
 from model.save_only_metrics import Text2Mol_translation
 import re
@@ -376,8 +376,8 @@ def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
         label = targets[i]
         label = ast.literal_eval(
             targets[i]
-            .replace(FLOAT_TOKENS[0], "")
-            .replace(FLOAT_TOKENS[1], "")
+            .replace(added_tokens.FLOAT[0], "")
+            .replace(added_tokens.FLOAT[1], "")
             .replace(tokenizer.pad_token, "")
         )
         _total_labels.append(label)
@@ -391,8 +391,8 @@ def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
         try:
             label = ast.literal_eval(
                 targets[i]
-                .replace(FLOAT_TOKENS[0], "")
-                .replace(FLOAT_TOKENS[1], "")
+                .replace(added_tokens.FLOAT[0], "")
+                .replace(added_tokens.FLOAT[1], "")
                 .replace(tokenizer.pad_token, "")
             )
             prediction = re.search("\d*?[.]?\d+(?=</FLOAT>)", prediction).group()

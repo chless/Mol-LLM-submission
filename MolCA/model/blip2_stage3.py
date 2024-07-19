@@ -80,7 +80,7 @@ class Blip2Stage3(pl.LightningModule):
             args.do_sample = False
         self.do_sample = args.do_sample
         self.num_beams = args.num_beams
-        self.max_len = args.max_len
+        self.gen_max_len = args.gen_max_len
         self.min_len = args.min_len
         self.reaction_weight = args.reaction_weight
         self.llm_tune = args.llm_tune
@@ -294,7 +294,7 @@ class Blip2Stage3(pl.LightningModule):
             ) = batch
             losses = {
                 "classification": self.blip2opt(classification_batch[:-1]),
-                "regression": self.blip2opt(regression_batch[:-1]),
+                "regression": self.blip2opt(regression_batch[:-1], task="regression"),
                 "reaction": self.blip2opt(reaction_batch[:-1]),
                 "translation": self.blip2opt(translation_batch[:-1]),
             }
@@ -311,11 +311,11 @@ class Blip2Stage3(pl.LightningModule):
                     batch_size=batch_size,
                     sync_dist=True,
                 )
-
+            # TODO: refactor hardcoded loss scale
             total_loss = (
                 losses["classification"]["loss"]
-                + losses["regression"]["loss"]
-                + losses["reaction"]["loss"]
+                + 2 * losses["regression"]["loss"]
+                + 2 * losses["reaction"]["loss"]
                 + losses["translation"]["loss"]
             )
             self.log(
@@ -362,7 +362,7 @@ class Blip2Stage3(pl.LightningModule):
             samples,
             do_sample=self.do_sample,
             num_beams=self.num_beams,
-            max_length=self.max_len,
+            max_length=self.gen_max_len,
             min_length=self.min_len,
         )
         predictions = outputs.predictions
@@ -439,7 +439,7 @@ class Blip2Stage3(pl.LightningModule):
                 tasks=all_tasks,
                 probs=all_probs,
                 tokenizer=self.blip2opt.opt_tokenizer,
-                text_trunc_length=self.max_len * 2,
+                text_trunc_length=self.gen_max_len * 2,
             )
             for task_subtask_pair in evaluation_results:
                 for metric in evaluation_results[task_subtask_pair]:
@@ -468,7 +468,7 @@ class Blip2Stage3(pl.LightningModule):
         # parser.add_argument('--prompt', type=str, default='a molecule of ')
         parser.add_argument("--num_beams", type=int, default=5)
         parser.add_argument("--do_sample", action="store_true", default=False)
-        parser.add_argument("--max_len", type=int, default=256)
+        parser.add_argument("--gen_max_len", type=int, default=256)
         parser.add_argument("--min_len", type=int, default=8)
         parser.add_argument("--llm_tune", type=str, default="freeze")
         parser.add_argument("--peft_config", type=str, default=None)
@@ -531,6 +531,10 @@ class Blip2Stage3(pl.LightningModule):
             choices=["string_only", "graph_only", "string+graph"],
         )
         parser.add_argument("--add_reg_tokens", type=bool, default=True)
+        parser.add_argument(
+            "--apply_reg_order_scale", action="store_true", default=False
+        )
+        parser.add_argument("--apply_reg_label_quant", type=int, default=-1)
         parser.add_argument("--add_selfies_tokens", action="store_true", default=True)
         parser.add_argument(
             "--selfies_token_path", type=str, default="MolCA/model/selfies_dict.txt"

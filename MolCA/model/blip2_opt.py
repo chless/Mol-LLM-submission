@@ -29,6 +29,7 @@ from lavis.models.blip2_models.blip2 import (
 from model.blip2 import Blip2Base
 from transformers import AutoTokenizer
 from transformers import OPTForCausalLM
+import model.added_tokens as added_tokens
 
 # from opendelta import LoraModel
 # from opendelta.delta_models.lora import LoraConfig
@@ -66,56 +67,6 @@ def smiles2data(smiles):
 
 import re
 
-SPLIT_MARKER = f"SPL{1}T-TH{1}S-Pl3A5E"
-
-CUSTOM_SEQ_RE = re.compile(r"(\[START_(DNA|SMILES|I_SMILES|AMINO)])(.*?)(\[END_\2])")
-
-
-def _insert_split_marker(m: re.Match):
-    """
-    Applies split marker based on a regex match of special tokens such as
-    [START_DNA].
-
-    Parameters
-    ----------
-    n : str
-        Input text to split
-
-    Returns
-    ----------
-    str - the text with the split token added
-    """
-    start_token, _, sequence, end_token = m.groups()
-    sequence = re.sub(r"(.)", rf"{SPLIT_MARKER}\1", sequence, flags=re.DOTALL)
-    return f"{start_token}{sequence}{SPLIT_MARKER}{end_token}"
-
-
-def escape_custom_split_sequence(text):
-    """
-    Applies custom splitting to the text for GALILEO's tokenization
-
-    Parameters
-    ----------
-    text : str
-        Input text to split
-
-    Returns
-    ----------
-    str - the text with the split token added
-    """
-    return CUSTOM_SEQ_RE.sub(_insert_split_marker, text)
-
-
-def smiles_handler(text, mol_ph):
-    smiles_list = []
-    for match in CUSTOM_SEQ_RE.finditer(text):
-        smiles = match.group(3)
-        smiles_list.append(smiles)
-
-    text = CUSTOM_SEQ_RE.sub(r"\1\3\4%s" % (mol_ph), text)
-    text = escape_custom_split_sequence(text)
-    return text, smiles_list
-
 
 class Blip2OPT(Blip2Base):
     """
@@ -141,7 +92,7 @@ class Blip2OPT(Blip2Base):
         llm_tune="freeze",
         peft_dir="",
         opt_model="facebook/galactica-1.3b",
-        prompt="",
+        prompt="",  # TODO: remove. currently LLM classes not use prompt from args.prompt
         args=None,
     ):
         super().__init__()
@@ -180,32 +131,7 @@ class Blip2OPT(Blip2Base):
         self.opt_tokenizer = AutoTokenizer.from_pretrained(
             opt_model, use_fast=False, padding_side="right"
         )
-        self.opt_tokenizer.add_special_tokens({"pad_token": "<pad>"})
-        self.opt_tokenizer.add_tokens("<mol>")  # molecule placeholder
-
-        # added tokens for answer type, which is used for instruction tuning
-        self.opt_tokenizer.add_tokens("<BOOLEAN>")
-        self.opt_tokenizer.add_tokens("</BOOLEAN>")
-        self.opt_tokenizer.add_tokens("<FLOAT>")
-        self.opt_tokenizer.add_tokens("</FLOAT>")
-
-        if self.args.add_reg_tokens:
-            reg_tokens = [f"<|{i}|>" for i in range(10)]
-            reg_tokens.extend(["<|+|>", "<|-|>", "<|.|>"])
-            self.opt_tokenizer.add_tokens(reg_tokens)
-
-        if self.args.add_selfies_tokens:
-            # Read txt from selfies_token_path
-            with open(self.args.selfies_token_path, "r") as f:
-                selfies_tokens = f.readlines()
-                selfies_tokens = [token.strip() for token in selfies_tokens]
-            self.opt_tokenizer.add_tokens(selfies_tokens)
-            print(f"Added {len(selfies_tokens)} selfies tokens to the tokenizer")
-
-        self.mol_token = "<mol>"
-        self.opt_tokenizer.mol_token_id = self.opt_tokenizer(
-            "<mol>", add_special_tokens=False
-        ).input_ids[0]
+        self.add_necessary_tokens()
 
         self.collater = Collater([], [])
 
@@ -265,10 +191,31 @@ class Blip2OPT(Blip2Base):
             self.Qformer.config.hidden_size, self.opt_model.config.hidden_size
         )
 
-        # fixme: no prompt yet
-        self.prompt = prompt
-        # prompt_tokens = self.opt_tokenizer(self.prompt, return_tensors="pt")
-        # self.prompt_length = prompt_tokens.attention_mask.sum(1)
+    def add_necessary_tokens(self):
+        self.opt_tokenizer.add_special_tokens({"pad_token": "<pad>"})
+
+        if self.args.add_selfies_tokens:
+            # Read txt from selfies_token_path
+            with open(self.args.selfies_token_path, "r") as f:
+                selfies_tokens = f.readlines()
+                selfies_tokens = [token.strip() for token in selfies_tokens]
+            self.opt_tokenizer.add_tokens(selfies_tokens)
+            print(f"Added {len(selfies_tokens)} selfies tokens to the tokenizer")
+
+        additional_tokens = [
+            getattr(added_tokens, tokens)
+            for tokens in dir(added_tokens)
+            if not re.match("__.*__", tokens)
+        ]
+        additional_tokens = [
+            token for sublist in additional_tokens for token in sublist
+        ]
+        self.opt_tokenizer.add_tokens(additional_tokens)
+
+        self.mol_token = added_tokens.MOL_EMBEDDING[0]
+        self.opt_tokenizer.mol_token_id = self.opt_tokenizer(
+            self.mol_token, add_special_tokens=False
+        ).input_ids[0]
 
     def merge_and_initialize_lora(self):
         self.model.blip2opt.opt_model.merge_and_unload(progressbar=True)
@@ -302,50 +249,7 @@ class Blip2OPT(Blip2Base):
         else:
             raise NotImplementedError()
 
-    def forward_old(self, batch):
-        graphs, text_tokens, prompt_lens = batch
-        graph_embeds, graph_masks = self.graph_encoder(graphs)
-        if not self.tune_gnn:
-            graph_embeds = graph_embeds.detach()
-        graph_embeds = self.ln_graph(graph_embeds, graph_masks)
-        device = graph_embeds.device
-        query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-        query_output = self.Qformer.bert(
-            query_embeds=query_tokens,
-            encoder_hidden_states=graph_embeds,
-            encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
-            return_dict=True,
-        )
-        inputs_opt = self.opt_proj(query_output.last_hidden_state)
-        atts_opt = torch.ones(inputs_opt.size()[:-1], dtype=torch.long).to(device)
-        targets = text_tokens.input_ids.masked_fill(
-            text_tokens.input_ids == self.opt_tokenizer.pad_token_id, -100
-        )
-        if self.prompt:
-            targets = mask_by_len(
-                targets, prompt_lens, -100
-            )  # do not apply loss to the prompt
-            # targets[:, : self.prompt_length] = -100  # do not apply loss to the prompt
-
-        empty_targets = (
-            torch.ones(atts_opt.size(), dtype=torch.long).to(device).fill_(-100)
-        )
-        targets = torch.cat([empty_targets, targets], dim=1)
-
-        inputs_embeds = self.opt_model.get_input_embeddings()(text_tokens.input_ids)
-        inputs_embeds = torch.cat([inputs_opt, inputs_embeds], dim=1)
-        attention_mask = torch.cat([atts_opt, text_tokens.attention_mask], dim=1)
-
-        outputs = self.opt_model(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            return_dict=True,
-            labels=targets,
-        )
-        loss = outputs.loss
-        return {"loss": loss}
-
-    def forward(self, batch):
+    def forward(self, batch, task=None):
         # graph, smiles tokens, molecule description tokens
         graphs, prompt_tokens, text_tokens = batch
         device = prompt_tokens.input_ids.device
@@ -391,7 +295,28 @@ class Blip2OPT(Blip2Base):
             return_dict=True,
             labels=targets,
         )
-        loss = outputs.loss
+
+        if self.args.apply_reg_order_scale and task == "regression":
+            logits = outputs.logits
+            # calculate ce loss using logits and targets
+            ce_loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)), targets.view(-1), reduction="none"
+            )
+            ce_loss = ce_loss.view(targets.size())
+            order_scale = torch.ones(size=ce_loss.shape, device=ce_loss.device)
+            order_scale[
+                :, self.args.prompt_max_len : self.args.prompt_max_len + 5
+            ] *= 10
+            order_scale[
+                :, self.args.prompt_max_len + 5 : self.args.prompt_max_len + 6
+            ] *= 5
+            ce_loss = ce_loss * order_scale
+            ce_loss_gathered_by_non_pad = ce_loss[targets != -100].sum()
+            loss = ce_loss_gathered_by_non_pad / (targets != -100).sum()
+
+        else:
+            loss = outputs.loss
+
         results = {"ce_loss": loss}
 
         results.update({"loss": loss})
@@ -583,7 +508,7 @@ class Blip2OPT(Blip2Base):
             top_p=top_p,
             temperature=temperature,
             num_beams=num_beams,
-            max_length=max_length,
+            max_new_tokens=max_length,
             # min_length=min_length,
             min_new_tokens=min_length,  # TODO: change to min_new_tokens for all layered methods
             # pad_token_id=self.pad_token_id,
@@ -618,255 +543,3 @@ class Blip2OPT(Blip2Base):
         output_text = [text.strip() for text in output_text]
         outputs.predictions = output_text
         return outputs
-
-    @torch.no_grad()
-    def blip_qa(
-        self,
-        samples,
-        do_sample=False,
-        num_beams=5,
-        max_length=128,
-        min_length=1,
-        top_p=0.9,
-        repetition_penalty=1.0,
-        length_penalty=1.0,
-        num_captions=1,
-        temperature=1,
-        output_scores=False,
-    ):
-
-        device = next(self.parameters()).device
-
-        # data processing
-        prompts = samples["prompts"]  # assume list of strings
-        prepared_prompts = []
-        mol_list = []
-        for p in prompts:
-            text, smiles = smiles_handler(p, self.mol_token * self.num_query_token)
-            prepared_prompts.append(text)
-            mol_list.extend([smiles2data(s) for s in smiles])
-
-        prompt_tokens = self.opt_tokenizer(
-            prepared_prompts,
-            truncation=False,
-            padding="longest",
-            add_special_tokens=True,
-            #    max_length=self.args.max_len[],
-            return_tensors="pt",
-            return_attention_mask=True,
-        ).to(device)
-
-        # forward function
-        prompt_embeds = self.opt_model.get_input_embeddings()(prompt_tokens.input_ids)
-
-        if len(mol_list) > 0:
-            graphs = self.collater(mol_list).to(device)
-            is_mol_token = (
-                prompt_tokens.input_ids == self.mol_token
-            )  # shape = [B, max_len]
-            # graph forward
-            graph_embeds, graph_masks = self.graph_encoder(graphs)
-            graph_embeds = self.ln_graph(graph_embeds, graph_masks)
-            query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=graph_embeds,
-                encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
-                return_dict=True,
-            )
-            mol_tokens = self.opt_proj(
-                query_output.last_hidden_state
-            )  # shape = [mol_num, num_query_token, D]
-            # replace mol tokens
-            prompt_embeds[is_mol_token] = mol_tokens.flatten(0, 1)
-
-        if output_scores:
-            outputs = self.opt_model.generate(
-                inputs_embeds=prompt_embeds,
-                attention_mask=prompt_tokens.attention_mask,
-                do_sample=do_sample,
-                top_p=top_p,
-                temperature=temperature,
-                num_beams=num_beams,
-                max_length=max_length,
-                min_length=min_length,
-                # pad_token_id=self.pad_token_id,
-                eos_token_id=self.eos_token_id,
-                repetition_penalty=repetition_penalty,
-                length_penalty=length_penalty,
-                num_return_sequences=num_captions,
-                output_scores=True,
-                return_dict_in_generate=True,
-                # use_cache=False,
-            )
-            return outputs
-        else:
-            outputs = self.opt_model.generate(
-                inputs_embeds=prompt_embeds,
-                attention_mask=prompt_tokens.attention_mask,
-                do_sample=do_sample,
-                top_p=top_p,
-                temperature=temperature,
-                num_beams=num_beams,
-                max_length=max_length,
-                min_length=min_length,
-                # pad_token_id=self.pad_token_id,
-                eos_token_id=self.eos_token_id,
-                repetition_penalty=repetition_penalty,
-                length_penalty=length_penalty,
-                num_return_sequences=num_captions,
-                # use_cache=False,
-            )
-            output_text = self.opt_tokenizer.batch_decode(
-                outputs, skip_special_tokens=True
-            )
-            output_text = [text.strip() for text in output_text]
-            return output_text
-
-    @torch.no_grad()
-    def opt_qa(
-        self,
-        samples,
-        do_sample=False,
-        num_beams=5,
-        max_length=128,
-        min_length=1,
-        top_p=0.9,
-        repetition_penalty=1.0,
-        length_penalty=1.0,
-        num_captions=1,
-        temperature=1,
-        output_scores=False,
-    ):
-
-        device = next(self.parameters()).device
-        # data processing
-        prompts = samples["prompts"]  # assume list of strings
-        prompts = [escape_custom_split_sequence(p) for p in prompts]
-
-        prompt_tokens = self.opt_tokenizer(
-            prompts,
-            truncation=False,
-            padding="longest",
-            add_special_tokens=True,
-            #    max_length=self.args.max_len[],
-            return_tensors="pt",
-            return_attention_mask=True,
-        ).to(device)
-
-        prompt_embeds = self.opt_model.get_input_embeddings()(prompt_tokens.input_ids)
-
-        if output_scores:
-            # forward function
-            outputs = self.opt_model.generate(
-                inputs_embeds=prompt_embeds,
-                attention_mask=prompt_tokens.attention_mask,
-                do_sample=do_sample,
-                top_p=top_p,
-                temperature=temperature,
-                num_beams=num_beams,
-                max_length=max_length,
-                min_length=min_length,
-                # pad_token_id=self.pad_token_id,
-                eos_token_id=self.eos_token_id,
-                repetition_penalty=repetition_penalty,
-                length_penalty=length_penalty,
-                num_return_sequences=num_captions,
-                # use_cache=False,
-                output_scores=True,
-                return_dict_in_generate=True,
-            )
-            return outputs
-        else:
-            # forward function
-            outputs = self.opt_model.generate(
-                inputs_embeds=prompt_embeds,
-                attention_mask=prompt_tokens.attention_mask,
-                do_sample=do_sample,
-                top_p=top_p,
-                temperature=temperature,
-                num_beams=num_beams,
-                max_length=max_length,
-                min_length=min_length,
-                # pad_token_id=self.pad_token_id,
-                eos_token_id=self.eos_token_id,
-                repetition_penalty=repetition_penalty,
-                length_penalty=length_penalty,
-                num_return_sequences=num_captions,
-                # use_cache=False,
-            )
-            output_text = self.opt_tokenizer.batch_decode(
-                outputs, skip_special_tokens=True
-            )
-            output_text = [text.strip() for text in output_text]
-            return output_text
-
-    @torch.no_grad()
-    def probe_qformer(
-        self,
-        batch,
-        do_sample=False,
-        num_beams=5,
-        max_length=128,
-        min_length=1,
-        top_p=0.9,
-        repetition_penalty=1.0,
-        length_penalty=1.0,
-        num_captions=1,
-        temperature=1,
-    ):
-        with self.maybe_autocast():
-            device = next(self.parameters()).device
-
-            graphs, smiles_prompt_tokens, texts = batch
-            graphs = graphs.to(device)
-            # graph forward
-            graph_embeds, graph_masks = self.graph_encoder(graphs)
-            graph_embeds = self.ln_graph(graph_embeds, graph_masks)
-            query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=graph_embeds,
-                encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
-                return_dict=True,
-            )
-            mol_tokens = self.opt_proj(
-                query_output.last_hidden_state
-            )  # shape = [mol_num, num_query_token, D]
-            B, num_q, D = mol_tokens.shape
-
-            #
-            embed_func = self.opt_model.get_input_embeddings()
-            embed_weight = embed_func.weight  # shape = [vocab_size, D]
-
-            dis_metric = "cos"
-            topk = 10
-            if dis_metric == "cos":
-                mol_tokens = F.normalize(mol_tokens, dim=-1, p=2)
-                embed_weight = F.normalize(embed_weight, dim=-1, p=2)
-                sim = (
-                    mol_tokens.flatten(0, 1) @ embed_weight.T
-                )  # shape = [mol_num * num_query_token, vocab_size]
-            elif dis_metric == "euc":
-                sim = -torch.cdist(mol_tokens.flatten(0, 1), embed_weight, p=2)
-                assert sim.shape == (B * num_q, embed_weight.shape[0])
-            else:
-                raise NotImplementedError()
-            _, topk_ids = torch.topk(
-                sim, k=topk, dim=-1
-            )  # shape = [mol_num * num_query_token, k]
-            knn_decode_strings = self.opt_tokenizer.batch_decode(topk_ids.flatten())
-            knn_decode_strings = (
-                np.asarray(knn_decode_strings).reshape(B, num_q, topk).tolist()
-            )  # shape = [mol_num, num_query_token, topk]
-            knn_decode_strings = [
-                [" ".join(ii) for ii in i] for i in knn_decode_strings
-            ]  # shape = [mol_num, num_query_token]
-            if False:
-                ## print for presentation
-                assert len(knn_decode_strings) == len(texts)
-                for predict, text in zip(knn_decode_strings, texts):
-                    print("----------------------------")
-                    print(predict)
-                    print(text)
-            return knn_decode_strings

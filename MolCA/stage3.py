@@ -78,26 +78,16 @@ def main(args):
     # adjust intended total batch size is the same regarlless of the number of devices
     adjustBatchSize(args, num_devices)
 
-    if args.root.lower().find("chebi") >= 0:
-        dm = Stage2CheBIDM(
-            args.mode,
-            args.num_workers,
-            args.batch_size,
-            args.root,
-            args.text_max_len,
-            tokenizer,
-            args,
-        )
-    else:
-        dm = Stage3DM(
-            args.mode,
-            args.num_workers,
-            args.batch_size,
-            args.root,
-            args.text_max_len,
-            tokenizer,
-            args,
-        )
+    dm = Stage3DM(
+        args.mode,
+        args.num_workers,
+        args.batch_size,
+        args.root,
+        args.prompt_max_len,
+        args.label_max_len,
+        tokenizer,
+        args,
+    )
 
     # callbacks to save model parameters
     callbacks = []
