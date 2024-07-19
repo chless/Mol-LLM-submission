@@ -9,9 +9,7 @@ from pytorch_lightning.loggers import CSVLogger
 from data_provider.stage2_dm import Stage2DM
 from data_provider.iupac_dm import IupacDM
 from data_provider.stage2_chebi_dm import Stage2CheBIDM
-from data_provider.stage2_regression_dm import Stage2RegressionDM
 from model.blip2_stage2 import Blip2Stage2
-from model.blip2_regression import Blip2Regression
 
 import neptune
 from pytorch_lightning.loggers import NeptuneLogger
