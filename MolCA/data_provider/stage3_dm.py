@@ -85,6 +85,8 @@ class TrainCollater:
         mol_representation=True,
         multi_task=False,
         model=None,
+        truncation=True,
+        padding="max_length",
     ):
         self.prompt_max_len = prompt_max_len
         self.label_max_len = label_max_len
@@ -95,6 +97,8 @@ class TrainCollater:
         self.mol_representation = mol_representation
         self.multi_task = multi_task
         self.model = model
+        self.truncation = truncation
+        self.padding = padding
 
     def __call__(self, batch):
         # in multi-task, perdevice  batch size should be multiple of 4: classificaiton, regression, translation, reaction
@@ -121,8 +125,8 @@ class TrainCollater:
         self.tokenizer.padding_side = "left"
         smiles_prompt_tokens = self.tokenizer(
             text=smiles_prompt,
-            truncation=True,
-            padding="max_length",
+            truncation=True if self.truncation else False,
+            padding=self.padding,
             add_special_tokens=True,
             max_length=self.prompt_max_len,
             return_tensors="pt",
@@ -135,8 +139,8 @@ class TrainCollater:
         self.tokenizer.padding_side = "right"
         text_tokens = self.tokenizer(
             text=texts,
-            truncation=True,
-            padding="max_length",
+            truncation=True if self.truncation else False,
+            padding=self.padding,
             add_special_tokens=True,
             max_length=self.label_max_len,
             return_tensors="pt",
@@ -156,6 +160,8 @@ class InferenceCollater:
         mol_representation=True,
         multi_task=False,
         model=None,
+        truncation=True,
+        padding="max_length",
     ):
         self.prompt_max_len = prompt_max_len
         self.label_max_len = label_max_len
@@ -166,6 +172,8 @@ class InferenceCollater:
         self.mol_representation = mol_representation
         self.multi_task = multi_task
         self.model = model
+        self.truncation = truncation
+        self.padding = padding
 
     def __call__(self, batch):
         if self.multi_task:
@@ -188,8 +196,8 @@ class InferenceCollater:
             return_tensors="pt",
             add_special_tokens=True,
             max_length=self.prompt_max_len,
-            padding="max_length",
-            truncation=True,
+            padding=self.padding,
+            truncation=True if self.truncation else False,
             return_attention_mask=True,
         )
 
@@ -199,8 +207,8 @@ class InferenceCollater:
             return_tensors="pt",
             add_special_tokens=True,
             max_length=self.label_max_len,
-            truncation=True,
-            padding="max_length",
+            truncation=True if self.truncation else False,
+            padding=self.padding,
             return_attention_mask=True,
         )
 
@@ -514,26 +522,7 @@ class Stage3DM(LightningDataModule):
         # self.tokenizer.mol_token_id = tokenizer("<mol>", add_special_tokens=False).input_ids[0]
 
     def train_dataloader(self):
-        if self.mode == "pretrain":
-            loader = DataLoader(
-                self.pretrain_dataset,
-                batch_size=self.batch_size,
-                shuffle=True,
-                num_workers=self.num_workers,
-                pin_memory=True,
-                drop_last=True,
-                persistent_workers=True,
-                collate_fn=TrainCollater(
-                    self.tokenizer,
-                    self.prompt_max_len,
-                    self.label_max_len,
-                    self.mol_ph_token,
-                    self.mol_token_id,
-                    self.mol_representation,
-                    model=self.args.opt_model,
-                ),
-            )
-        elif self.mode == "ft":
+        if self.mode == "ft":
             if self.root == "multi_task":
                 loader = [
                     DataLoader(
@@ -545,18 +534,20 @@ class Stage3DM(LightningDataModule):
                         drop_last=True,
                         persistent_workers=True,
                         collate_fn=TrainCollater(
-                            self.tokenizer,
-                            self.prompt_max_len,
-                            (
+                            tokenizer=self.tokenizer,
+                            prompt_max_len=self.prompt_max_len,
+                            label_max_len=(
                                 self.label_max_len
                                 if task not in ["regression", "classification"]
                                 else 9
                             ),
-                            self.mol_ph_token,
-                            self.mol_token_id,
-                            self.mol_representation,
+                            mol_ph=self.mol_ph_token,
+                            mol_token_id=self.mol_token_id,
+                            mol_representation=self.mol_representation,
                             multi_task=True,
                             model=self.args.opt_model,
+                            truncation=self.args.truncation,
+                            padding=self.args.padding,
                         ),
                     )
                     for task in [
@@ -576,13 +567,20 @@ class Stage3DM(LightningDataModule):
                     drop_last=True,
                     persistent_workers=True,
                     collate_fn=TrainCollater(
-                        self.tokenizer,
-                        self.prompt_max_len,
-                        self.label_max_len,
-                        self.mol_ph_token,
-                        self.mol_token_id,
-                        self.mol_representation,
+                        tokenizer=self.tokenizer,
+                        prompt_max_len=self.prompt_max_len,
+                        label_max_len=(
+                            self.label_max_len
+                            if task not in ["regression", "classification"]
+                            else 9
+                        ),
+                        mol_ph=self.mol_ph_token,
+                        mol_token_id=self.mol_token_id,
+                        mol_representation=self.mol_representation,
+                        multi_task=True,
                         model=self.args.opt_model,
+                        truncation=self.args.truncation,
+                        padding=self.args.padding,
                     ),
                 )
         else:
@@ -590,27 +588,9 @@ class Stage3DM(LightningDataModule):
         return loader
 
     def val_dataloader(self):
-        if self.root != "multi_task":
-            val_loader = DataLoader(
-                self.val_dataset,
-                batch_size=self.batch_size,
-                shuffle=False,
-                num_workers=self.num_workers,
-                pin_memory=True,
-                drop_last=False,
-                persistent_workers=True,
-                collate_fn=TrainCollater(
-                    self.tokenizer,
-                    self.prompt_max_len,
-                    self.label_max_len,
-                    self.mol_ph_token,
-                    self.mol_token_id,
-                    self.mol_representation,
-                    model=self.args.opt_model,
-                ),
-            )
-            test_loader = DataLoader(
-                self.test_dataset,
+        loader = [
+            DataLoader(
+                self.concat_datasets[task]["val"],
                 batch_size=self.inference_batch_size,
                 shuffle=False,
                 num_workers=self.num_workers,
@@ -618,49 +598,30 @@ class Stage3DM(LightningDataModule):
                 drop_last=False,
                 persistent_workers=True,
                 collate_fn=InferenceCollater(
-                    self.tokenizer,
-                    self.prompt_max_len,
-                    self.label_max_len,
-                    self.mol_ph_token,
-                    self.mol_token_id,
-                    self.mol_representation,
+                    tokenizer=self.tokenizer,
+                    prompt_max_len=self.prompt_max_len,
+                    label_max_len=(
+                        self.label_max_len
+                        if task not in ["regression", "classification"]
+                        else 9
+                    ),
+                    mol_ph=self.mol_ph_token,
+                    mol_token_id=self.mol_token_id,
+                    mol_representation=self.mol_representation,
+                    multi_task=True,
                     model=self.args.opt_model,
+                    truncation=self.args.truncation,
+                    padding=self.args.padding,
                 ),
             )
-            return [val_loader, test_loader]
-        else:
-            loader = [
-                DataLoader(
-                    self.concat_datasets[task]["val"],
-                    batch_size=self.inference_batch_size,
-                    shuffle=False,
-                    num_workers=self.num_workers,
-                    pin_memory=True,
-                    drop_last=False,
-                    persistent_workers=True,
-                    collate_fn=InferenceCollater(
-                        self.tokenizer,
-                        self.prompt_max_len,
-                        (
-                            self.label_max_len
-                            if task not in ["regression", "classification"]
-                            else 9
-                        ),
-                        self.mol_ph_token,
-                        self.mol_token_id,
-                        self.mol_representation,
-                        multi_task=True,
-                        model=self.args.opt_model,
-                    ),
-                )
-                for task in ["classification", "regression", "reaction", "translation"]
-            ]
-            return loader
+            for task in ["classification", "regression", "reaction", "translation"]
+        ]
+        return loader
 
     def test_dataloader(self):
-        if self.root != "multi_task":
-            loader = DataLoader(
-                self.test_dataset,
+        loader = [
+            DataLoader(
+                self.concat_datasets[task]["test"],
                 batch_size=self.inference_batch_size,
                 shuffle=False,
                 num_workers=self.num_workers,
@@ -668,44 +629,25 @@ class Stage3DM(LightningDataModule):
                 drop_last=False,
                 persistent_workers=True,
                 collate_fn=InferenceCollater(
-                    self.tokenizer,
-                    self.prompt_max_len,
-                    self.label_max_len,
-                    self.mol_ph_token,
-                    self.mol_token_id,
-                    self.mol_representation,
+                    tokenizer=self.tokenizer,
+                    prompt_max_len=self.prompt_max_len,
+                    label_max_len=(
+                        self.label_max_len
+                        if task not in ["regression", "classification"]
+                        else 9
+                    ),
+                    mol_ph=self.mol_ph_token,
+                    mol_token_id=self.mol_token_id,
+                    mol_representation=self.mol_representation,
+                    multi_task=True,
                     model=self.args.opt_model,
+                    truncation=self.args.truncation,
+                    padding=self.args.padding,
                 ),
             )
-            return loader
-        else:
-            loader = [
-                DataLoader(
-                    self.concat_datasets[task]["test"],
-                    batch_size=self.inference_batch_size,
-                    shuffle=False,
-                    num_workers=self.num_workers,
-                    pin_memory=True,
-                    drop_last=False,
-                    persistent_workers=True,
-                    collate_fn=InferenceCollater(
-                        self.tokenizer,
-                        self.prompt_max_len,
-                        (
-                            self.label_max_len
-                            if task not in ["regression", "classification"]
-                            else 9
-                        ),
-                        self.mol_ph_token,
-                        self.mol_token_id,
-                        self.mol_representation,
-                        multi_task=True,
-                        model=self.args.opt_model,
-                    ),
-                )
-                for task in ["classification", "regression", "reaction", "translation"]
-            ]
-            return loader
+            for task in ["classification", "regression", "reaction", "translation"]
+        ]
+        return loader
 
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group("Data module")
@@ -716,6 +658,8 @@ class Stage3DM(LightningDataModule):
         parser.add_argument("--root", type=str, default="data/PubChemDataset_v4")
         parser.add_argument("--prompt_max_len", type=int, default=512)
         parser.add_argument("--label_max_len", type=int, default=256)
+        parser.add_argument("--truncation", default=1, type=int)
+        parser.add_argument("--padding", default="max_length", type=str)
         parser.add_argument(
             "--prompt",
             type=str,
