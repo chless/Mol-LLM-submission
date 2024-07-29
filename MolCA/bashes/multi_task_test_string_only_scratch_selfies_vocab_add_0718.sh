@@ -1,19 +1,15 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus='0,1,2,3'
-inference_batch_size=800
+inference_batch_size=128
 
 python3 MolCA/stage3.py \
 --devices $gpus \
 --root multi_task \
 --mode test \
 --opt_model 'facebook/galactica-1.3b' \
---prompt '[START_I_SMILES]{}[END_I_SMILES].' \
 --tune_gnn \
 --llm_tune lora \
---batch_size $batch_size \
 --inference_batch_size $inference_batch_size \
---val_check_interval 5000 \
---max_epochs 20 \
 --mol_representation string_only \
 --num_beam 1 \
 --max_len=512 \
