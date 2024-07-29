@@ -400,6 +400,7 @@ class Blip2Stage3(pl.LightningModule):
         return loss["loss"]
 
     def on_evaluation_epoch_end(self, mode="val") -> None:
+        print("on_evaluation_epoch_end start")
         list_predictions = self.list_predictions
         list_targets = self.list_targets
         list_tasks = self.list_tasks
@@ -409,6 +410,7 @@ class Blip2Stage3(pl.LightningModule):
         targets = [i for ii in list_targets for i in ii]
         tasks = [i for ii in list_tasks for i in ii]
         probs = [i for ii in list_probs for i in ii]
+        print(f"line 413")
 
         all_predictions = [None for _ in range(self.trainer.world_size)]
         all_targets = [None for _ in range(self.trainer.world_size)]
@@ -416,6 +418,7 @@ class Blip2Stage3(pl.LightningModule):
         all_probs = [None for _ in range(self.trainer.world_size)]
 
         if self.num_devices > 1:
+            print(f"line 421")
             dist.all_gather_object(all_predictions, predictions)
             dist.all_gather_object(all_targets, targets)
             dist.all_gather_object(all_tasks, tasks)
@@ -427,11 +430,13 @@ class Blip2Stage3(pl.LightningModule):
             all_probs[0] = probs
 
         if self.global_rank == 0:
+            print(f"line 433")
             all_predictions = [i for ii in all_predictions for i in ii]
             all_targets = [i for ii in all_targets for i in ii]
             all_tasks = [i for ii in all_tasks for i in ii]
             all_probs = [i for ii in all_probs for i in ii]
             self.save_predictions(all_predictions, all_targets, all_tasks)
+            print(f"line 439")
 
             evaluation_results = task_specifically_evaluate(
                 predictions=all_predictions,
@@ -441,6 +446,7 @@ class Blip2Stage3(pl.LightningModule):
                 tokenizer=self.blip2opt.opt_tokenizer,
                 text_trunc_length=self.gen_max_len * 2,
             )
+            print(f"line 449")
             for task_subtask_pair in evaluation_results:
                 for metric in evaluation_results[task_subtask_pair]:
                     self.log(
