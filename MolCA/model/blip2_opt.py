@@ -268,20 +268,11 @@ class Blip2OPT(Blip2Base):
         # Prompt_embeds takes 139 tokens, but the model only takes 8 tokens.
         # Though we use original setting of MolCA, this is unecessary context length comsumption.
         if "graph" in self.args.mol_representation:
-            # TODO: run two times of graph encoder inference, for reagent prediction. also work same for generate
-            graph_embeds, graph_masks = self.graph_encoder(graphs)
-            if not self.tune_gnn:
-                graph_embeds = graph_embeds.detach()
-            graph_embeds = self.ln_graph(graph_embeds, graph_masks)
-            query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=graph_embeds,
-                encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
-                return_dict=True,
+            self.inject_graph_embeds2prompt_embeds(
+                prompt_embeds=prompt_embeds,
+                prompt_tokens=prompt_tokens,
+                graphs=graphs,
             )
-            mol_tokens = self.opt_proj(query_output.last_hidden_state)
-            prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
 
         inputs_embeds = self.opt_model.get_input_embeddings()(text_tokens.input_ids)
         inputs_embeds = torch.cat((prompt_embeds, inputs_embeds), dim=1)
@@ -296,6 +287,7 @@ class Blip2OPT(Blip2Base):
             labels=targets,
         )
 
+        results = dict()
         if self.args.apply_reg_order_scale and task == "regression":
             logits = outputs.logits
             # calculate ce loss using logits and targets
@@ -317,142 +309,49 @@ class Blip2OPT(Blip2Base):
         else:
             loss = outputs.loss
 
-        results = {"ce_loss": loss}
-
         results.update({"loss": loss})
         return results
 
-    def forward_reagent_prediction(self, batch):
-        # graph, smiles tokens, molecule description tokens
-        graphs, prompt_tokens, text_tokens = batch
-        device = prompt_tokens.input_ids.device
-
-        empty_targets = (
-            torch.ones(prompt_tokens.attention_mask.shape, dtype=torch.long)
-            .to(device)
-            .fill_(-100)
-        )
-        targets = text_tokens.input_ids.masked_fill(
-            text_tokens.input_ids == self.opt_tokenizer.pad_token_id, -100
-        )
-        targets = torch.cat([empty_targets, targets], dim=1)
-
-        # TODO: complete this
-        # TODO: use this function in training_step and evaluation_step
-        prompt_embeds = self.opt_model.get_input_embeddings()(prompt_tokens.input_ids)
-        # Prompt_embeds takes 139 tokens, but the model only takes 8 tokens.
-        # Though we use original setting of MolCA, this is unecessary context length comsumption.
-        if "graph" in self.args.mol_representation:
-            for g in graphs:
-                graph_embeds, graph_masks = self.graph_encoder(g)
+    def inject_graph_embeds2prompt_embeds(self, prompt_embeds, prompt_tokens, graphs):
+        if "reactant_x" in graphs.keys():
+            mol_token_sequence = []
+            for mol in ["reactant", "product"]:
+                mol_x = graphs[f"{mol}_x"]
+                mol_edge_index = graphs[f"{mol}_edge_index"]
+                mol_edge_attr = graphs[f"{mol}_edge_attr"]
+                mol_embeds, mol_masks = self.graph_encoder(
+                    mol_x, mol_edge_index, mol_edge_attr
+                )
                 if not self.tune_gnn:
-                    graph_embeds = graph_embeds.detach()
-                graph_embeds = self.ln_graph(graph_embeds, graph_masks)
-                query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
+                    mol_embeds = mol_embeds.detach()
+                mol_embeds = self.ln_graph(mol_embeds, mol_masks)
+                query_tokens = self.query_tokens.expand(mol_embeds.shape[0], -1, -1)
                 query_output = self.Qformer.bert(
                     query_embeds=query_tokens,
-                    encoder_hidden_states=graph_embeds,
-                    encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
+                    encoder_hidden_states=mol_embeds,
+                    encoder_attention_mask=mol_masks,
                     return_dict=True,
                 )
                 mol_tokens = self.opt_proj(query_output.last_hidden_state)
-                prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
+                mol_token_sequence.append(mol_tokens)
+            mol_tokens = torch.cat(mol_token_sequence, dim=1)
+            prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
 
-        inputs_embeds = self.opt_model.get_input_embeddings()(text_tokens.input_ids)
-        inputs_embeds = torch.cat((prompt_embeds, inputs_embeds), dim=1)
-        attention_mask = torch.cat(
-            [prompt_tokens.attention_mask, text_tokens.attention_mask], dim=1
-        )
-
-        outputs = self.opt_model(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            return_dict=True,
-            labels=targets,
-        )
-        loss = outputs.loss
-        results = {"ce_loss": loss}
-
-        results.update({"loss": loss})
-        return results
-
-    @torch.no_grad()
-    def generate_old(
-        self,
-        samples,
-        do_sample=False,
-        num_beams=5,
-        max_length=128,
-        min_length=1,
-        top_p=0.9,
-        repetition_penalty=1.0,
-        length_penalty=1.0,
-        num_captions=1,
-        temperature=1,
-    ):
-        """
-        Args:
-            samples (dict): A dictionary containing the following keys:
-                - image (torch.Tensor): A tensor of shape (batch_size, 3, H, W)
-            num_beams (int): Number of beams for beam search. 1 means no beam search.
-            max_length (int): The maximum length of the sequence to be generated.
-            min_length (int): The minimum length of the sequence to be generated.
-            top_p (float): The cumulative probability for nucleus sampling.
-            repetition_penalty (float): The parameter for repetition penalty. 1.0 means no penalty.
-            num_captions (int): Number of captions to be generated for each image.
-        Returns:
-            captions (list): A list of strings of length batch_size * num_captions.
-        """
-        graphs = samples["graphs"]
-        prompt_tokens = samples["prompt_tokens"]
-        # prompt_lens = samples['prompt_lens']
-        with self.maybe_autocast():
+        else:
             graph_embeds, graph_masks = self.graph_encoder(graphs)
-            graph_embeds = self.ln_graph(graph_embeds)
-
+            if not self.tune_gnn:
+                graph_embeds = graph_embeds.detach()
+            graph_embeds = self.ln_graph(graph_embeds, graph_masks)
             query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
             query_output = self.Qformer.bert(
                 query_embeds=query_tokens,
                 encoder_hidden_states=graph_embeds,
-                encoder_attention_mask=graph_masks,
+                encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
                 return_dict=True,
             )
-
-            device = graph_embeds.device
-            inputs_opt = self.opt_proj(query_output.last_hidden_state)
-            atts_opt = torch.ones(
-                inputs_opt.size()[:-1], dtype=torch.long, device=device
-            )
-
-            attention_mask = torch.cat([atts_opt, prompt_tokens.attention_mask], dim=1)
-
-            inputs_embeds = self.opt_model.get_input_embeddings()(
-                prompt_tokens.input_ids
-            )
-            inputs_embeds = torch.cat([inputs_opt, inputs_embeds], dim=1)
-
-            outputs = self.opt_model.generate(
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                do_sample=do_sample,
-                top_p=top_p,
-                temperature=temperature,
-                num_beams=num_beams,
-                max_length=max_length,
-                min_length=min_length,
-                # pad_token_id=self.pad_token_id,
-                eos_token_id=self.eos_token_id,
-                repetition_penalty=repetition_penalty,
-                length_penalty=length_penalty,
-                num_return_sequences=num_captions,
-                # use_cache=False,
-            )
-            output_text = self.opt_tokenizer.batch_decode(
-                outputs, skip_special_tokens=True
-            )
-
-            output_text = [text.strip() for text in output_text]
-            return output_text
+            mol_tokens = self.opt_proj(query_output.last_hidden_state)
+            prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
+        return prompt_embeds
 
     @torch.no_grad()
     def generate(
@@ -488,18 +387,11 @@ class Blip2OPT(Blip2Base):
 
         prompt_embeds = self.opt_model.get_input_embeddings()(prompt_tokens.input_ids)
         if "graph" in self.args.mol_representation:
-            graph_embeds, graph_masks = self.graph_encoder(graphs)
-            graph_embeds = self.ln_graph(graph_embeds)
-
-            query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=graph_embeds,
-                encoder_attention_mask=graph_masks,
-                return_dict=True,
+            self.inject_graph_embeds2prompt_embeds(
+                prompt_embeds=prompt_embeds,
+                prompt_tokens=prompt_tokens,
+                graphs=graphs,
             )
-            mol_tokens = self.opt_proj(query_output.last_hidden_state)
-            prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
 
         outputs = self.opt_model.generate(
             inputs_embeds=prompt_embeds,

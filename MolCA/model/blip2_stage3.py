@@ -21,6 +21,14 @@ from model.help_funcs import (
 from transformers import Adafactor
 import ast
 import json
+from data_provider.stage3_dm import (
+    TOTAL_BENCHMARKS,
+    REGRESSION_BENCHMARKS,
+    CLASSIFICATION_BENCHMARKS,
+    REACTION_BENCHMARKS,
+    MOL2TEXT_BENCHMARKS,
+    TEXT2MOL_BENCHMARKS,
+)
 
 
 def load_ignore_unexpected(model, state_dict):
@@ -29,20 +37,6 @@ def load_ignore_unexpected(model, state_dict):
 
     # try to print keys that are not included
     model.load_state_dict(state_dict, strict=True)
-
-
-# def load_ignore_mismatch(model, state_dict):
-#     keys = set(model.state_dict().keys())
-#     extra_keys = set()
-#     for key in state_dict:
-#         if key not in keys:
-#             extra_keys.add(key)
-#     missing_keys = set()
-#     for key in keys:
-#         if key not in state_dict:
-#             missing_keys.add(key)
-#     # try to print keys that are not included
-#     model.load_state_dict(state_dict, strict=False)
 
 
 def get_module_state_dict(state_dict, module_name):
@@ -56,7 +50,6 @@ def get_module_state_dict(state_dict, module_name):
     return module_state_dict
 
 
-# peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
 class Blip2Stage3(pl.LightningModule):
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         # checkpoint.pop('optimizer_states')
@@ -154,13 +147,6 @@ class Blip2Stage3(pl.LightningModule):
         self.blip2opt.query_tokens.data.copy_(qs_weight)
         return self
 
-    # def load_from_stage1_checkpoint(self, path):
-    #     ckpt = torch.load(path, map_location='cpu')
-    #     state_dict = ckpt['state_dict']
-    #     state_dict = {k[13:]: v for k,v in state_dict.items()}
-    #     load_ignore_mismatch(self.blip2opt, state_dict)
-    #     return self
-
     def configure_optimizers(self):
         if self.args.optimizer == "adafactor":
             print("Using adafactor optimizer")
@@ -254,38 +240,10 @@ class Blip2Stage3(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         if self.scheduler:
             self.scheduler.step(self.trainer.current_epoch, self.trainer.global_step)
-        if isinstance(batch, list) and len(batch) == 2:
-            molecule_batch, reaction_batch = batch
-            batch_size = molecule_batch[-1].size(0)
-            ##============== molecule Loss ===================##
-            molecule_loss = self.blip2opt(molecule_batch)["loss"]
-            self.log(
-                "molecule loss",
-                float(molecule_loss),
-                batch_size=batch_size,
-                sync_dist=True,
-            )
 
-            ##============== reaction Loss ===================##
-            reaction_loss = self.blip2opt.forward_reaction(reaction_batch)["loss"]
-            self.log(
-                "reaction loss",
-                float(reaction_loss),
-                batch_size=batch_size,
-                sync_dist=True,
-            )
-
-            self.log(
-                "lr",
-                self.trainer.optimizers[0].param_groups[0]["lr"],
-                batch_size=batch_size,
-                sync_dist=True,
-            )
-            return molecule_loss + self.reaction_weight * reaction_loss
-        elif isinstance(batch, list) and len(batch) == 4:
+        if isinstance(batch, list) and len(batch) == 4:
             batch_size = len(batch) * batch[0][1].input_ids.shape[0]  #
             ##============== Overall Loss ===================##
-            # TODO: figure out why batches from different tasks are mixed up
             (
                 classification_batch,
                 regression_batch,
@@ -314,8 +272,8 @@ class Blip2Stage3(pl.LightningModule):
             # TODO: refactor hardcoded loss scale
             total_loss = (
                 losses["classification"]["loss"]
-                + 2 * losses["regression"]["loss"]
-                + 2 * losses["reaction"]["loss"]
+                + losses["regression"]["loss"]
+                + losses["reaction"]["loss"]
                 + losses["translation"]["loss"]
             )
             self.log(
@@ -342,8 +300,10 @@ class Blip2Stage3(pl.LightningModule):
         self.list_targets = []
         self.list_tasks = []
         self.list_probs = []
-        self.total_loss = 0.0
+        self.total_avg_loss = 0.0
+        self.total_seen_data_size = 0
         self.batch_losses = []
+        self.dict_task_losses = {}
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
         if dataloader_idx == 0:
@@ -384,18 +344,12 @@ class Blip2Stage3(pl.LightningModule):
                 batch_size=batch_size,
                 sync_dist=True,
             )
-        # calculate moving average of total_loss
-        # TODO: need to check and revise if necessary
-        self.batch_losses.append(loss["loss"])
-        if len(self.batch_losses) >= 64:
-            self.total_loss = sum(self.batch_losses) / len(self.batch_losses)
-            self.log(
-                f"{mode}/total_loss",
-                float(self.total_loss),
-                batch_size=batch_size,
-                sync_dist=True,
-            )
-            self.batch_losses.pop(0)
+
+        new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
+        self.total_avg_loss += (
+            loss["loss"].item() - self.total_avg_loss
+        ) * new_data_weight
+        self.total_seen_data_size += batch_size
 
         return loss["loss"]
 
@@ -410,7 +364,6 @@ class Blip2Stage3(pl.LightningModule):
         targets = [i for ii in list_targets for i in ii]
         tasks = [i for ii in list_tasks for i in ii]
         probs = [i for ii in list_probs for i in ii]
-        print(f"line 413")
 
         all_predictions = [None for _ in range(self.trainer.world_size)]
         all_targets = [None for _ in range(self.trainer.world_size)]
@@ -418,7 +371,6 @@ class Blip2Stage3(pl.LightningModule):
         all_probs = [None for _ in range(self.trainer.world_size)]
 
         if self.num_devices > 1:
-            print(f"line 421")
             dist.all_gather_object(all_predictions, predictions)
             dist.all_gather_object(all_targets, targets)
             dist.all_gather_object(all_tasks, tasks)
@@ -430,13 +382,13 @@ class Blip2Stage3(pl.LightningModule):
             all_probs[0] = probs
 
         if self.global_rank == 0:
-            print(f"line 433")
+            self.log(f"{mode}/total_loss", self.total_avg_loss, sync_dist=False)
+
             all_predictions = [i for ii in all_predictions for i in ii]
             all_targets = [i for ii in all_targets for i in ii]
             all_tasks = [i for ii in all_tasks for i in ii]
             all_probs = [i for ii in all_probs for i in ii]
             self.save_predictions(all_predictions, all_targets, all_tasks)
-            print(f"line 439")
 
             evaluation_results = task_specifically_evaluate(
                 predictions=all_predictions,
@@ -446,7 +398,6 @@ class Blip2Stage3(pl.LightningModule):
                 tokenizer=self.blip2opt.opt_tokenizer,
                 text_trunc_length=self.gen_max_len * 2,
             )
-            print(f"line 449")
             for task_subtask_pair in evaluation_results:
                 for metric in evaluation_results[task_subtask_pair]:
                     self.log(

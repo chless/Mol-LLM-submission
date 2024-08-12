@@ -19,7 +19,7 @@ from torch.utils.data import ConcatDataset
 from datasets import load_dataset
 from data_provider import instructions
 import numpy as np
-import selfies
+import selfies as sf
 from tqdm import tqdm
 import model.added_tokens as added_tokens
 
@@ -34,42 +34,40 @@ CUSTOM_SEQ_RE = re.compile(r"(<MOL_1D>)(.*?)(</MOL_1D>)")
 # literally in the source code in case we ever include it in the training data.
 
 
-# TODO: fix this, currently the pattern is not matched, because the special token [START_I_SMILES] is not appended
 def prepare_llm_prompt(
-    mol_string, instruction, mol_ph, mol_representation, model="llama"
+    mol_string,
+    instruction,
+    mol_ph,
+    mol_representation,
 ):
     if CUSTOM_SEQ_RE.match(mol_string) is None:
         mol_string = added_tokens.MOL_1D[0] + mol_string + added_tokens.MOL_1D[1]
 
     mol_ph = added_tokens.MOL_2D[0] + mol_ph + added_tokens.MOL_2D[1]
 
-    # graph embedding without smiles tokens
-    # '<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
     if mol_representation == "graph_only":
         mol_string = CUSTOM_SEQ_RE.sub(r"%s" % (mol_ph), mol_string)
-    # smiles tokens without graph embedding
-    # \1, \4 corresponds to the special tokens for string (\2 is the special token, which included in the nest of \1)
-    # \3 corresponds to the content of the smiles token
-    # '<Molecule>[H]N([H])C(=O)C([H])([H])[H]</Molecule>'
+        # reagent prediction has reaction direction token and second molecule
+        if added_tokens.REACTION_DIRECTION[0] in mol_string:
+            mol_string += added_tokens.REACTION_DIRECTION[0] + mol_ph
+
     elif mol_representation == "string_only":
         mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3", mol_string)
-    # smiles tokens with graph embedding
-    # '<Molecule>[H]N([H])C(=O)C([H])([H])[H]</Molecule><mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
+
     elif mol_representation == "string+graph":
         mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3%s" % (mol_ph), mol_string)
-    # smiles tokens with graph tokens without special tokens
-    # '[H]N([H])C(=O)C([H])([H])[H]<mol><mol><mol><mol><mol><mol><mol><mol>.' + TEXT
+        # reagent prediction has reaction direction token and second molecule
+        if added_tokens.REACTION_DIRECTION[0] in mol_string:
+            mol_string += added_tokens.REACTION_DIRECTION[0] + mol_ph
+
     else:
         raise NotImplementedError("mol_representation should be one of the options")
-    # for reagent prediction, double the mol_ph with >> to separate reactant and product
-    if ">>" in mol_string:
-        mol_string += ">>" + mol_ph
 
     llm_prompt = (
-        mol_string
-        + added_tokens.INSTRUCTION[0]
+        added_tokens.INSTRUCTION[0]
         + instruction
         + added_tokens.INSTRUCTION[1]
+        + mol_string
     )
     return llm_prompt
 
@@ -103,28 +101,21 @@ class TrainCollater:
     def __call__(self, batch):
         # in multi-task, perdevice  batch size should be multiple of 4: classificaiton, regression, translation, reaction
         if self.multi_task:
-            graphs, texts, smiles_prompt, tasks, instructions = zip(*batch)
+            graphs, label_text, input_mol_string, tasks, instructions = zip(*batch)
         else:
-            graphs, texts, smiles_prompt, tasks = zip(*batch)
-
-        try:
-            graphs = self.collater(graphs)
-        except:
-            print(graphs)
-            raise
-        # graphs = self.collater(graphs)
+            graphs, label_text, input_mol_string, tasks = zip(*batch)
+        graphs = self.collater(graphs)
+        # TODO: onlt receive graphs from __getitem__ and prepare the rest in __call__
 
         ## deal with prompt
-        smiles_prompt = [
-            prepare_llm_prompt(
-                p, instruction, self.mol_ph, self.mol_representation, self.model
-            )
-            for p, instruction in zip(smiles_prompt, instructions)
+        input_texts = [
+            prepare_llm_prompt(p, instruction, self.mol_ph, self.mol_representation)
+            for p, instruction in zip(input_mol_string, instructions)
         ]
 
         self.tokenizer.padding_side = "left"
-        smiles_prompt_tokens = self.tokenizer(
-            text=smiles_prompt,
+        input_tokens = self.tokenizer(
+            text=input_texts,
             truncation=True if self.truncation else False,
             padding=self.padding,
             add_special_tokens=True,
@@ -133,12 +124,12 @@ class TrainCollater:
             return_attention_mask=True,
         )
 
-        is_mol_token = smiles_prompt_tokens.input_ids == self.mol_token_id
-        smiles_prompt_tokens["is_mol_token"] = is_mol_token
+        is_mol_token = input_tokens.input_ids == self.mol_token_id
+        input_tokens["is_mol_token"] = is_mol_token
 
         self.tokenizer.padding_side = "right"
-        text_tokens = self.tokenizer(
-            text=texts,
+        label_tokens = self.tokenizer(
+            text=label_text,
             truncation=True if self.truncation else False,
             padding=self.padding,
             add_special_tokens=True,
@@ -146,7 +137,7 @@ class TrainCollater:
             return_tensors="pt",
             return_attention_mask=True,
         )
-        return graphs, smiles_prompt_tokens, text_tokens, tasks
+        return graphs, input_tokens, label_tokens, tasks
 
 
 class InferenceCollater:
@@ -177,22 +168,20 @@ class InferenceCollater:
 
     def __call__(self, batch):
         if self.multi_task:
-            graphs, texts, smiles_prompt, tasks, instructions = zip(*batch)
+            graphs, label_texts, input_mol_string, tasks, instructions = zip(*batch)
         else:
-            graphs, texts, smiles_prompt, tasks = zip(*batch)
+            graphs, label_texts, input_mol_string, tasks = zip(*batch)
         graphs = self.collater(graphs)
 
-        smiles_prompt = [
-            prepare_llm_prompt(
-                p, instruction, self.mol_ph, self.mol_representation, self.model
-            )
-            for p, instruction in zip(smiles_prompt, instructions)
+        input_texts = [
+            prepare_llm_prompt(p, instruction, self.mol_ph, self.mol_representation)
+            for p, instruction in zip(input_mol_string, instructions)
         ]
 
         ## deal with prompt
         self.tokenizer.padding_side = "left"
-        smiles_prompt_tokens = self.tokenizer(
-            smiles_prompt,
+        input_tokens = self.tokenizer(
+            input_texts,
             return_tensors="pt",
             add_special_tokens=True,
             max_length=self.prompt_max_len,
@@ -202,8 +191,8 @@ class InferenceCollater:
         )
 
         self.tokenizer.padding_side = "right"
-        texts = self.tokenizer(
-            text=texts,
+        label_tokens = self.tokenizer(
+            text=label_texts,
             return_tensors="pt",
             add_special_tokens=True,
             max_length=self.label_max_len,
@@ -212,9 +201,9 @@ class InferenceCollater:
             return_attention_mask=True,
         )
 
-        is_mol_token = smiles_prompt_tokens.input_ids == self.mol_token_id
-        smiles_prompt_tokens["is_mol_token"] = is_mol_token
-        return graphs, smiles_prompt_tokens, texts, tasks
+        is_mol_token = input_tokens.input_ids == self.mol_token_id
+        input_tokens["is_mol_token"] = is_mol_token
+        return graphs, input_tokens, label_tokens, tasks
 
 
 # binary classification
@@ -288,7 +277,6 @@ class Stage3DM(LightningDataModule):
                         root=self.args.raw_data_root,
                         filename=f"{task}_{split}",
                         resize=self.args.resize if split == "val" else None,
-                        mol_string_conversion=self.args.mol_string_conversion,
                     )
         else:
             raise NotImplementedError
@@ -554,32 +542,6 @@ class Stage3DM(LightningDataModule):
                         "translation",
                     ]
                 ]
-            else:
-                loader = DataLoader(
-                    self.train_dataset,
-                    batch_size=self.batch_size,
-                    shuffle=True,
-                    num_workers=self.num_workers,
-                    pin_memory=True,
-                    drop_last=True,
-                    persistent_workers=True,
-                    collate_fn=TrainCollater(
-                        tokenizer=self.tokenizer,
-                        prompt_max_len=self.prompt_max_len,
-                        label_max_len=(
-                            self.label_max_len
-                            if task not in ["regression", "classification"]
-                            else 9
-                        ),
-                        mol_ph=self.mol_ph_token,
-                        mol_token_id=self.mol_token_id,
-                        mol_representation=self.mol_representation,
-                        multi_task=True,
-                        model=self.args.opt_model,
-                        truncation=self.args.truncation,
-                        padding=self.args.padding,
-                    ),
-                )
         else:
             raise NotImplementedError
         return loader
@@ -670,11 +632,6 @@ class Stage3DM(LightningDataModule):
         parser.add_argument(
             "--raw_data_root", type=str, default="MolCA/data/multi_task_dataset"
         )
-        parser.add_argument(
-            "--mol_string_conversion",
-            choices=[False, "smiles2selfies", "selfies2smiles"],
-            default=False,
-        )
 
         return parent_parser
 
@@ -756,6 +713,11 @@ class MoleculeNetDatasetDeepChem(Dataset):
 
     def get_necessary_data(self, index):
         smiles = self.smiles_list[index]
+        # set molecule string representation as selfies
+        input_mol_string = sf.encoder(smiles)
+        input_mol_string = (
+            added_tokens.MOL_1D[0] + input_mol_string + added_tokens.MOL_1D[1]
+        )
         label = self.label_list[index]
         label = wrap_label(label, self.task)
         graph = smiles2data(smiles)
@@ -763,7 +725,7 @@ class MoleculeNetDatasetDeepChem(Dataset):
         instruction = self.instruction_list[
             np.random.choice(len(self.instruction_list))
         ]
-        return graph, label, smiles_prompt, instruction
+        return graph, label, input_mol_string, instruction
 
     def set_necessary_data(self):
         self.mol_list = self.data.X
@@ -795,7 +757,7 @@ class MoleculeNetDatasetDeepChem(Dataset):
             self.smiles_list.append(Chem.MolToSmiles(mol))
 
         label_list = []
-        smiles_prompt_list = []
+        input_mol_string_list = []
         graph_list = []
         instruction_list = []
 
@@ -806,9 +768,9 @@ class MoleculeNetDatasetDeepChem(Dataset):
         )
         for i in iter_bar:
             try:
-                graph, label, smiles_prompt, instruction = self.get_necessary_data(i)
+                graph, label, input_mol_string, instruction = self.get_necessary_data(i)
                 label_list.append(label)
-                smiles_prompt_list.append(smiles_prompt)
+                input_mol_string_list.append(input_mol_string)
                 graph_list.append(graph)
                 instruction_list.append(instruction)
             except Exception as e:
@@ -820,17 +782,17 @@ class MoleculeNetDatasetDeepChem(Dataset):
             )
 
         self.label_list = label_list
-        self.smiles_prompt_list = smiles_prompt_list
+        self.input_mol_string_list = input_mol_string_list
         self.graph_list = graph_list
         self.instruction_list = instruction_list
 
     def __getitem__(self, index):
         graph = self.graph_list[index]
         label = self.label_list[index]
-        smiles_prompt = self.smiles_prompt_list[index]
+        input_mol_string = self.input_mol_string_list[index]
         instruction = self.instruction_list[index]
 
-        return graph, label, smiles_prompt, self.task_subtask_pair, instruction
+        return graph, label, input_mol_string, self.task_subtask_pair, instruction
 
 
 class MolInstructionDatset(Dataset):
@@ -876,7 +838,7 @@ class MolInstructionDatset(Dataset):
 
         input_list = []
         label_list = []
-        smiles_prompt_list = []
+        input_mol_string_list = []
         graph_list = []
         instruction_list = []
 
@@ -886,10 +848,10 @@ class MolInstructionDatset(Dataset):
         )
         for i in iter_bar:
             try:
-                graph, label, smiles_prompt, instruction = self.get_necessary_data(i)
+                graph, label, input_mol_string, instruction = self.get_necessary_data(i)
                 input_list.append(self.input_list[i])
                 label_list.append(label)
-                smiles_prompt_list.append(smiles_prompt)
+                input_mol_string_list.append(input_mol_string)
                 graph_list.append(graph)
                 instruction_list.append(instruction)
             except Exception as e:
@@ -902,7 +864,7 @@ class MolInstructionDatset(Dataset):
 
         self.input_list = input_list
         self.label_list = label_list
-        self.smiles_prompt_list = smiles_prompt_list
+        self.input_mol_string_list = input_mol_string_list
         self.graph_list = graph_list
         self.instruction_list = instruction_list
 
@@ -911,55 +873,57 @@ class MolInstructionDatset(Dataset):
 
     def get_necessary_data(self, index):
         instruction = self.instruction_list[index]
-        input = self.input_list[index]
-        label = self.label_list[index]
+        input = self.input_list[index]  # if mol_string, representation is selfies
+        label = self.label_list[index]  # if mol_string, representation is selfies
         # one smiles in output
         if self.task in TEXT2MOL_BENCHMARKS:
-            selfies = label  # label in mol-instruction dataset is annotated as selfies
-            smiles = selfies.decoder(label)  # molca task smiles instead of selfies
-            label = smiles
             # output smiles do not need to be converted to graph
-            # but assign graph = None retrieve error in torch_geometric, so assign arbitral graph
+            # but assign graph = None retrieve error in torch_geometric, so assign graph label intended as null graph
+
             graph = smiles2data(
-                "C"
+                sf.decoder(label)
             )  # output smiles do not need to be converted to graph
+            input_mol_string = "<None>"  # no input molstring in text2mol
         elif self.task in REACTION_BENCHMARKS:
             # two smiles in input
             if self.task in ["reagent_prediction"]:
-                two_selfies = input
-                list_selfies = two_selfies.split(">>")
-                list_smiles = [selfies.decoder(s) for s in list_selfies]
-                smiles = (">>").join(list_smiles)
+                assert ">>" in input
+                list_selfies = input.split(
+                    ">>"
+                )  # reagent prediction has two selfies in input
+                input_mol_string = input.replace(
+                    ">>",
+                    f"{added_tokens.MOL_1D[1]}{added_tokens.REACTION_DIRECTION[0]}{added_tokens.MOL_1D[0]}",
+                )
+                list_smiles = [sf.decoder(s) for s in list_selfies]
                 graph = [smiles2data(s) for s in list_smiles]
             # one smiles in input and one smiles in output
             else:
-                input_selfies = input
-                smiles = selfies.decoder(input_selfies)
+                input_mol_string = input
+                smiles = sf.decoder(input_mol_string)
                 graph = smiles2data(smiles)
 
-            # TODO: reprocess training data. currently reaction data input smiles and output selfies
-            output_selfies = label
-            output_smiles = selfies.decoder(output_selfies)
-            label = output_smiles
-
         else:
-            # one smiles in input
-            selfies = input
-            smiles = selfies.decoder(selfies)
+            # one selfies in input
+            input_mol_string = input
+            smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
 
         label = wrap_label(label, self.task)
+        input_mol_string = (
+            added_tokens.MOL_1D[0] + input_mol_string + added_tokens.MOL_1D[1]
+        )
 
-        return graph, label, smiles_prompt, instruction
+        return graph, label, input_mol_string, instruction
 
     # LLM input order: <instruction><qformer_output><smiles_tokens>
     def __getitem__(self, index):
         graph = self.graph_list[index]
         label = self.label_list[index]
-        smiles_prompt = self.smiles_prompt_list[index]
+        input_mol_string = self.input_mol_string_list[index]
         instruction = self.instruction_list[index]
 
-        return graph, label, smiles_prompt, self.task_subtask_pair, instruction
+        return graph, label, input_mol_string, self.task_subtask_pair, instruction
 
 
 from ogb.utils import smiles2graph
@@ -976,6 +940,16 @@ def smiles2data(smiles):
     return data
 
 
+# torch_geometric.data.Data variants for paired graph data, i.e. reagent prediction
+class PairData(Data):
+    def __inc__(self, key, value, *args, **kwargs):
+        if key == "reactant_edge_index":
+            return self.reactant_x.size(0)
+        if key == "product_edge_index":
+            return self.product_x.size(0)
+        return super().__inc__(key, value, *args, **kwargs)
+
+
 # Initialize with the data_list from ConcatDataset
 class InstructionInMemoryDataset(InMemoryDataset):
     def __init__(
@@ -985,14 +959,10 @@ class InstructionInMemoryDataset(InMemoryDataset):
         transform=None,
         pre_transform=None,
         resize=None,
-        mol_string_conversion=False,
     ):
         self.filename = filename  # raw_file_names and processed_file_names use this
-
         self.start, self.end = added_tokens.MOL_1D
         self.resize = resize
-        self.mol_string_conversion = mol_string_conversion
-        print(f"Convert mol: {self.mol_string_conversion}")
         super(InstructionInMemoryDataset, self).__init__(root, transform, pre_transform)
         self.load(self.processed_paths[0])
         if self.resize:
@@ -1027,7 +997,10 @@ class InstructionInMemoryDataset(InMemoryDataset):
             end = self.slices[key][-1].item()
             reduced_data[key] = item[start:end]
 
-        self.data = Data(**reduced_data)
+        # though most datasets use Data class, some datasets use PairData class
+        # the miss instantiation of PairData class results in error when collate, due to malfunctioning of __inc__
+        data_class = type(self._data)
+        self.data = data_class(**reduced_data)
         print(f"Dataset size reduced to {new_size}")
 
     @property
@@ -1228,60 +1201,6 @@ class InstructionInMemoryDataset(InMemoryDataset):
 
         print("Saved dataset for task: ", self.task)
 
-    # instance = [Data, label, smiles_prompt, task_subtask_pair, instruction]
-    def convert_mol_string(self, instance):
-        if self.mol_string_conversion == "smiles2selfies":
-            convert = selfies.encoder
-        elif self.mol_string_conversion == "selfies2smiles":
-            convert = selfies.decoder
-        else:
-            return instance  # no conversion
-
-        # start string representation conversion
-        task = instance[3].split("/")[0]
-
-        # convert output
-        if (
-            task
-            in MOL2TEXT_BENCHMARKS + REGRESSION_BENCHMARKS + CLASSIFICATION_BENCHMARKS
-        ):
-            label = instance[1]
-        elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS:
-            mol_label = instance[1].split(self.start)[1].split(self.end)[0]
-            label = convert(mol_label)
-        else:
-            raise NotImplementedError
-
-        # convert input
-        if task in "reagent_prediction":
-            mol_strings = (
-                instance[2].split(self.start)[1].split(self.end)[0].split(">>")
-            )
-            input_mol_string = ">>".join([convert(mol) for mol in mol_strings])
-        elif task in TEXT2MOL_BENCHMARKS:
-            input_mol_string = instance[2]
-        elif (
-            task
-            in REACTION_BENCHMARKS
-            + CLASSIFICATION_BENCHMARKS
-            + REGRESSION_BENCHMARKS
-            + MOL2TEXT_BENCHMARKS
-        ):
-            mol_string = instance[2].split(self.start)[1].split(self.end)[0]
-            input_mol_string = convert(mol_string)
-        else:
-            raise NotImplementedError
-
-        converted_instance = (
-            instance[0],
-            label,
-            input_mol_string,
-            instance[3],
-            instance[4],
-        )
-
-        return converted_instance
-
     def process(self):
         # Process data_list and store in `self.data` and `self.slices`
         raw_data_list = list(torch.load(self.raw_paths[0]))
@@ -1295,47 +1214,31 @@ class InstructionInMemoryDataset(InMemoryDataset):
             )
             instance = raw_data_list[i]
             try:
-                instance = self.convert_mol_string(instance)
-
                 if isinstance(instance[0], list):
                     # reagent prediction dataset
                     # input string: reactant>>product / output string: reagent
-                    data = Data(
-                        x=instance[0][0].x,
-                        edge_index=instance[0][0].edge_index,
-                        edge_attr=instance[0][0].edge_attr,
+                    data = PairData(
+                        reactant_x=instance[0][0].x,
+                        reactant_edge_index=instance[0][0].edge_index,
+                        reactant_edge_attr=instance[0][0].edge_attr,
+                        product_x=instance[0][1].x,
+                        product_edge_index=instance[0][1].edge_index,
+                        product_edge_attr=instance[0][1].edge_attr,
                         y=instance[1],
-                        smiles_prompt=instance[2],
+                        input_mol_string=instance[2],
                         task_subtask_pair=instance[3],
                         instruction=instance[4],
                     )
-                    # ~_{i} are for additional molecules, such as reagent prediction
-                    """
-                    # TODO: temporally remove, just to run string_only learning now.
-                    # later, we need to implement the multi-graph learning with proper manner
-                    data.__setattr__(f"x_1", instance[0][1])
-                    data.__setattr__(f"edge_index_1", instance[0][1].edge_index)
-                    data.__setattr__(f"edge_attr_1", instance[0][1].edge_attr)
-                    """
                 else:
                     data = Data(
                         x=instance[0].x,
                         edge_index=instance[0].edge_index,
                         edge_attr=instance[0].edge_attr,
                         y=instance[1],
-                        smiles_prompt=instance[2],
+                        input_mol_string=instance[2],
                         task_subtask_pair=instance[3],
                         instruction=instance[4],
                     )
-                    # save dummy data for additional molecules, due to collate method sanity
-                    if "reaction" in self.filename:
-                        pass
-                        """
-                        data.__setattr__("x_1", instance[0].x)
-                        data.__setattr__("edge_index_1", instance[0].edge_index)
-                        data.__setattr__("edge_attr_1", instance[0].edge_attr)
-                        """
-
                 data_list.append(data)
             except:
                 count_fail_conversion += 1
@@ -1347,11 +1250,14 @@ class InstructionInMemoryDataset(InMemoryDataset):
     def __getitem__(self, index):
         data = self.get(index)
         label = data.y
-        smiles_prompt = data.smiles_prompt
+        if hasattr(data, "smiles_prompt"):
+            input_mol_string = data.smiles_prompt
+        else:
+            input_mol_string = data.input_mol_string
         task_subtask_pair = data.task_subtask_pair
         instruction = data.instruction
 
-        return data, label, smiles_prompt, task_subtask_pair, instruction
+        return data, label, input_mol_string, task_subtask_pair, instruction
 
 
 if __name__ == "__main__":
