@@ -281,6 +281,7 @@ def get_args():
     parser.add_argument("--not_save_model", action="store_true", default=False)
     parser.add_argument("--skip_sanity_check", action="store_true", default=False)
     parser.add_argument("--logging_dir", type=str, default="MolCA/all_checkpoints/")
+    parser.add_argument("--llava_style", type=int, default=0)
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)

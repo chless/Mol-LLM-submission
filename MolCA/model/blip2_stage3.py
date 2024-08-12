@@ -243,6 +243,14 @@ class Blip2Stage3(pl.LightningModule):
 
         if isinstance(batch, list) and len(batch) == 5:
             batch_sizes = [b[1].input_ids.size(0) for b in batch]
+            batch_size_dict = {
+                "classification": batch_sizes[0],
+                "regression": batch_sizes[1],
+                "reaction": batch_sizes[2],
+                "reagent": batch_sizes[3],
+                "translation": batch_sizes[4],
+            }
+            total_batch_size = sum(batch_sizes)
             ##============== Overall Loss ===================##
             (
                 classification_batch,
@@ -261,14 +269,14 @@ class Blip2Stage3(pl.LightningModule):
             self.log(
                 "lr",
                 self.trainer.optimizers[0].param_groups[0]["lr"],
-                batch_size=batch_size,
+                batch_size=total_batch_size,
                 sync_dist=True,
             )
             for key, loss in losses.items():
                 self.log(
                     f"{key}_loss",
                     float(loss["loss"]),
-                    batch_size=batch_size,
+                    batch_size=batch_size_dict[key],
                     sync_dist=True,
                 )
             # TODO: refactor hardcoded loss scale
@@ -280,7 +288,10 @@ class Blip2Stage3(pl.LightningModule):
                 + losses["translation"]["loss"] * batch_sizes[4]
             ) / sum(batch_sizes)
             self.log(
-                "total_loss", float(total_loss), batch_size=batch_size, sync_dist=True
+                "total_loss",
+                float(total_loss),
+                batch_size=total_batch_size,
+                sync_dist=True,
             )
 
             return total_loss
@@ -297,6 +308,18 @@ class Blip2Stage3(pl.LightningModule):
             for key, loss_item in loss.items():
                 self.log(key, float(loss_item), batch_size=batch_size, sync_dist=True)
             return loss["loss"]
+
+    def on_train_epoch_end(self) -> None:
+        if self.args.llava_style:
+            max_epoch = self.args.max_epochs
+            current_epoch = self.trainer.current_epoch
+            if current_epoch >= (max_epoch // 2 - 1):
+                for name, param in self.blip2opt.opt_model.named_parameters():
+                    name_split = name.split(".")
+                    if len(name_split) > 3:
+                        if name_split[-3] == "lora_A" or name_split[-3] == "lora_B":
+                            param.requires_grad = True
+                print("set lora_A and lora_B to True for next epoch")
 
     def on_evaluation_epoch_start(self):
         self.list_predictions = []

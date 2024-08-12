@@ -191,6 +191,20 @@ class Blip2OPT(Blip2Base):
             self.Qformer.config.hidden_size, self.opt_model.config.hidden_size
         )
 
+        for name, param in self.opt_model.named_parameters():
+            name_split = name.split(".")
+            if name_split[-2] == "embed_tokens" or name_split[-2] == "embed_positions":
+                param.requires_grad = True
+        print("set embed_tokens and embed_positions to trainable")
+
+        if self.args.llava_style:
+            for name, param in self.opt_model.named_parameters():
+                name_split = name.split(".")
+                if len(name_split) > 3:
+                    if name_split[-3] == "lora_A" or name_split[-3] == "lora_B":
+                        param.requires_grad = False
+            print("set lora_A and lora_B to non-trainable")
+
     def add_necessary_tokens(self):
         self.opt_tokenizer.add_special_tokens({"pad_token": "<pad>"})
 

@@ -331,7 +331,11 @@ class Stage3DM(LightningDataModule):
                         persistent_workers=True,
                         collate_fn=TrainCollater(
                             tokenizer=self.tokenizer,
-                            prompt_max_len=self.prompt_max_len,
+                            prompt_max_len=(
+                                self.prompt_max_len
+                                if task not in ["regression", "classification"]
+                                else self.prompt_max_len - 9
+                            ),
                             label_max_len=(
                                 self.label_max_len
                                 if task not in ["regression", "classification"]
@@ -364,7 +368,11 @@ class Stage3DM(LightningDataModule):
                 persistent_workers=True,
                 collate_fn=InferenceCollater(
                     tokenizer=self.tokenizer,
-                    prompt_max_len=self.prompt_max_len,
+                    prompt_max_len=(
+                        self.prompt_max_len
+                        if task not in ["regression", "classification"]
+                        else self.prompt_max_len - 9
+                    ),
                     label_max_len=(
                         self.label_max_len
                         if task not in ["regression", "classification"]
@@ -395,7 +403,11 @@ class Stage3DM(LightningDataModule):
                 persistent_workers=True,
                 collate_fn=InferenceCollater(
                     tokenizer=self.tokenizer,
-                    prompt_max_len=self.prompt_max_len,
+                    prompt_max_len=(
+                        self.prompt_max_len
+                        if task not in ["regression", "classification"]
+                        else self.prompt_max_len - 9
+                    ),
                     label_max_len=(
                         self.label_max_len
                         if task not in ["regression", "classification"]
