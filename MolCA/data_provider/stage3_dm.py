@@ -247,8 +247,13 @@ REACTION_BENCHMARKS = [
     "retrosynthesis",
 ]
 
-INSTRUCTION_CLASSIFICATION = "\n Given the molecule, you should predict {task_name} property of the molecule. The answer should be in the form {label_tokens[0]}True{label_tokens[1]} or {label_tokens[0]}False{label_tokens[1]}."
-INSTRUCTION_REGRESSION = "\n Given the molecule, you should predict {task_name} property of the molecule. The answer should be in the form {label_tokens[0]}x.xxxx{label_tokens[1]}."
+TOTAL_BENCHMARKS = (
+    REACTION_BENCHMARKS
+    + MOL2TEXT_BENCHMARKS
+    + TEXT2MOL_BENCHMARKS
+    + CLASSIFICATION_BENCHMARKS
+    + REGRESSION_BENCHMARKS
+)
 
 
 class Stage3DM(LightningDataModule):
@@ -256,41 +261,33 @@ class Stage3DM(LightningDataModule):
         self,
         mode: str = "pretrain",
         num_workers: int = 0,
-        batch_size: int = 256,
         root: str = "data/",
-        prompt_max_len: int = 512,
-        label_max_len: int = 512,
         tokenizer=None,
         args=None,
     ):
         super().__init__()
         self.args = args
         self.mode = mode
-        self.batch_size = batch_size
+        self.batch_size = args.batch_size
         self.inference_batch_size = args.inference_batch_size
         self.num_workers = num_workers
-        self.prompt_max_len = prompt_max_len
-        self.label_max_len = label_max_len
+        self.prompt_max_len = args.prompt_max_len
+        self.label_max_len = args.label_max_len
         self.debug = args.debug
         self.args = args
         self.root = root
 
         if root == "multi_task":
-            # preprocess dataset and save
-            # if self.args.get_raw_data:
-            # self.get_raw_multi_task_dataset()
-
             self.concat_datasets = {
                 task: {"train": None, "val": None, "test": None}
                 for task in ["classification", "regression", "reaction", "translation"]
             }
-
             for task in ["classification", "regression", "reaction", "translation"]:
                 for split in ["train", "val", "test"]:
                     self.concat_datasets[task][split] = InstructionInMemoryDataset(
                         root=self.args.raw_data_root,
                         filename=f"{task}_{split}",
-                        resize=2400 if split == "val" else None,
+                        resize=self.args.resize if split == "val" else None,
                         mol_string_conversion=self.args.mol_string_conversion,
                     )
         else:
@@ -660,6 +657,7 @@ class Stage3DM(LightningDataModule):
         parser.add_argument("--label_max_len", type=int, default=256)
         parser.add_argument("--truncation", default=1, type=int)
         parser.add_argument("--padding", default="max_length", type=str)
+        parser.add_argument("--resize", default=2400, type=int)
         parser.add_argument(
             "--prompt",
             type=str,

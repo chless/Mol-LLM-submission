@@ -103,13 +103,13 @@ def molecule_evaluate(predictions, targets, tokenizer, text_trunc_length, morgan
         # <REFACTOR> after re preprocessing molinstrunction reaction prediction dataset, prediction would be smiles.
         target_selfies = (
             target.replace(tokenizer.pad_token, "")
-            .replace("[START_I_SMILES]", "")
-            .replace("[END_I_SMILES]", "")
+            .replace(added_tokens.MOL_1D[0], "")
+            .replace(added_tokens.MOL_1D[1], "")
         )
         prediction_selfies = (
             prediction.replace(tokenizer.pad_token, "")
-            .replace("[START_I_SMILES]", "")
-            .replace("[END_I_SMILES]", "")
+            .replace(added_tokens.MOL_1D[0], "")
+            .replace(added_tokens.MOL_1D[1], "")
         )
 
         try:
@@ -267,14 +267,23 @@ def task_specifically_evaluate(
                 for i in range(len(task_targets))
                 if i not in failure_idxs
             ]
-
-            caption_results = caption_evaluate(
-                predictions=_task_predictions,
-                targets=_task_targets,
-                tokenizer=tokenizer,
-                text_trunc_length=text_trunc_length,
-            )
-            results.update(caption_results)
+            if len(_task_predictions) == 0:
+                caption_results = {
+                    "bleu2": None,
+                    "bleu4": None,
+                    "rouge1": None,
+                    "rouge2": None,
+                    "rougeL": None,
+                    "meteor": None,
+                }
+            else:
+                caption_results = caption_evaluate(
+                    predictions=_task_predictions,
+                    targets=_task_targets,
+                    tokenizer=tokenizer,
+                    text_trunc_length=text_trunc_length,
+                )
+                results.update(caption_results)
         elif t.split("/")[0] in MOL2TEXT_BENCHMARKS:
             results = caption_evaluate(
                 predictions=task_predictions,
@@ -363,44 +372,26 @@ def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
     total_labels = []
     total_predictions = []
     failure_count = 0
-    tens_order_failure_count = 0
 
-    # reg tokens added
-    if "<|" in targets[0]:
-        for i in range(len(targets)):
-            targets[i] = targets[i].replace("<|", "").replace("|>", "")
-            predictions[i] = predictions[i].replace("<|", "").replace("|>", "")
-
-    _total_labels = []
     for i in range(len(predictions)):
-        label = targets[i]
-        label = ast.literal_eval(
-            targets[i]
-            .replace(added_tokens.FLOAT[0], "")
+        label = targets[i].replace("<|", "").replace("|>", "")
+        label = (
+            label.replace(added_tokens.FLOAT[0], "")
             .replace(added_tokens.FLOAT[1], "")
             .replace(tokenizer.pad_token, "")
         )
-        _total_labels.append(label)
-    _total_labels = np.array(_total_labels)
-    label_max_abs = np.max(np.abs(_total_labels))
+        label = float(label)
+        prediction = predictions[i].replace("<|", "").replace("|>", "")
+        prediction = (
+            prediction.replace(added_tokens.FLOAT[0], "")
+            .replace(added_tokens.FLOAT[1], "")
+            .replace(tokenizer.pad_token, "")
+        )
 
-    for i in range(len(predictions)):
-        label = targets[i]
-        prediction = predictions[i]
-
+        # only calculate metrics if the prediction is a float
+        # else, increment the failure count
         try:
-            label = ast.literal_eval(
-                targets[i]
-                .replace(added_tokens.FLOAT[0], "")
-                .replace(added_tokens.FLOAT[1], "")
-                .replace(tokenizer.pad_token, "")
-            )
-            prediction = re.search("\d*?[.]?\d+(?=</FLOAT>)", prediction).group()
             prediction = float(prediction)
-
-            if prediction > label_max_abs * 10:
-                tens_order_failure_count += 1
-            assert prediction <= label_max_abs * 10
 
             total_labels.append(label)
             total_predictions.append(prediction)
@@ -421,6 +412,5 @@ def regression_evaluate(predictions, targets, tokenizer, text_trunc_length):
         "mse": mse,
         "rmse": rmse,
         "failure_rate": failure_rate,
-        "tens_order_failure_rate": tens_order_failure_count / len(predictions),
     }
     return evaluation_results

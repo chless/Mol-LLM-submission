@@ -12,6 +12,7 @@ from data_provider.stage3_dm import (
     REGRESSION_BENCHMARKS,
     MOL2TEXT_BENCHMARKS,
     TEXT2MOL_BENCHMARKS,
+    TOTAL_BENCHMARKS,
 )
 from data_provider.stage2_chebi_dm import Stage2CheBIDM
 from model.blip2_stage3 import Blip2Stage3
@@ -81,10 +82,7 @@ def main(args):
     dm = Stage3DM(
         args.mode,
         args.num_workers,
-        args.batch_size,
         args.root,
-        args.prompt_max_len,
-        args.label_max_len,
         tokenizer,
         args,
     )
@@ -97,7 +95,7 @@ def main(args):
         monitoring_metric = "total_loss"
         callbacks.append(
             ModelCheckpoint(
-                dirpath=os.path.join(args.checkpoint_save_dir, args.filename),
+                dirpath=os.path.join(args.logging_dir, args.filename),
                 filename="{step:05d}-{total_loss:.3f}",
                 every_n_train_steps=args.every_n_train_steps,
                 save_last=True,
@@ -108,7 +106,7 @@ def main(args):
             )
         )
         callbacks.append(
-            SaveLoRAModelCallback(f"MolCA/all_checkpoints/{args.filename}/lora")
+            SaveLoRAModelCallback(os.path.join(args.logging_dir, args.filename, "lora"))
         )
 
     if len(args.devices.split(",")) > 1:
@@ -122,7 +120,7 @@ def main(args):
         strategy = "auto"
         args.devices = [eval(args.devices)]
     # logger setting
-    logger = CSVLogger(save_dir=f"./MolCA/all_checkpoints/{args.filename}/")
+    logger = CSVLogger(save_dir=os.path.join(args.logging_dir, args.filename))
 
     neptune_logger = NeptuneLogger(
         api_key=os.environ.get("NEPTUNE_API_TOKEN"),
@@ -131,7 +129,7 @@ def main(args):
     )
 
     tb_logger = TensorBoardLogger(
-        f"./MolCA/all_checkpoints/tensorboard/",
+        os.path.join(args.logging_dir, "tensorboard"),
         name=args.filename,
     )
 
@@ -139,11 +137,17 @@ def main(args):
         "accelerator": args.accelerator,
         "devices": args.devices,
         "precision": args.precision,
-        "val_check_interval": args.val_check_interval,
         "callbacks": callbacks,
         "strategy": strategy,
         "logger": [logger, neptune_logger, tb_logger],
     }
+    if args.val_check_interval > 0:
+        trainer_args["val_check_interval"] = args.val_check_interval
+    else:
+        trainer_args["check_val_every_n_epoch"] = args.check_val_every_n_epoch
+    if args.skip_sanity_check:
+        trainer_args["num_sanity_val_steps"] = 0
+
     if args.max_steps > 0:
         trainer_args["max_steps"] = args.max_steps
     else:
@@ -227,17 +231,12 @@ def update_result_csv(args, outputs, logger_dir, task_names=None):
             json.dump(results_dict, f, indent=4)
         print(f"Updated the result file {performance_result_path}")
 
-    elif args.root == "multi_task":
+    elif args.root == "multi_task" or args.root in TOTAL_BENCHMARKS:
         # task average of output
         final_output = dict()
-        tasks = list(
-            set(
-                list(outputs[0].keys())
-                + list(outputs[1].keys())
-                + list(outputs[2].keys())
-                + list(outputs[3].keys())
-            )
-        )
+        tasks = [list(o.keys()) for o in outputs]
+        tasks = list(set([item for sublist in tasks for item in sublist]))
+
         for task in tasks:
             final_output[task] = []
             for output in outputs:
@@ -294,16 +293,15 @@ def get_args():
     parser.add_argument("--max_epochs", type=int, default=10)
     parser.add_argument("--max_steps", type=int, default=-1)
     parser.add_argument("--accumulate_grad_batches", type=int, default=1)
-    parser.add_argument("--check_val_every_n_epoch", type=int, default=None)
     parser.add_argument("--every_n_train_steps", type=int, default=1000)
     parser.add_argument("--task", type=str, default=None)
     parser.add_argument("--val_check_interval", type=float, default=0.1)
+    parser.add_argument("--check_val_every_n_epoch", type=int, default=1)
     parser.add_argument("--save_top_k", type=int, default=10)
     parser.add_argument("--neptune_project", type=str, default="chless/text-mol")
     parser.add_argument("--not_save_model", action="store_true", default=False)
-    parser.add_argument(
-        "--checkpoint_save_dir", type=str, default="MolCA/all_checkpoints/"
-    )
+    parser.add_argument("--skip_sanity_check", action="store_true", default=False)
+    parser.add_argument("--logging_dir", type=str, default="MolCA/all_checkpoints/")
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)
