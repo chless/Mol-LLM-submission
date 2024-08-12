@@ -241,19 +241,21 @@ class Blip2Stage3(pl.LightningModule):
         if self.scheduler:
             self.scheduler.step(self.trainer.current_epoch, self.trainer.global_step)
 
-        if isinstance(batch, list) and len(batch) == 4:
-            batch_size = len(batch) * batch[0][1].input_ids.shape[0]  #
+        if isinstance(batch, list) and len(batch) == 5:
+            batch_sizes = [b[1].input_ids.size(0) for b in batch]
             ##============== Overall Loss ===================##
             (
                 classification_batch,
                 regression_batch,
                 reaction_batch,
+                reagent_batch,
                 translation_batch,
             ) = batch
             losses = {
                 "classification": self.blip2opt(classification_batch[:-1]),
                 "regression": self.blip2opt(regression_batch[:-1], task="regression"),
                 "reaction": self.blip2opt(reaction_batch[:-1]),
+                "reagent": self.blip2opt(reagent_batch[:-1]),
                 "translation": self.blip2opt(translation_batch[:-1]),
             }
             self.log(
@@ -271,11 +273,12 @@ class Blip2Stage3(pl.LightningModule):
                 )
             # TODO: refactor hardcoded loss scale
             total_loss = (
-                losses["classification"]["loss"]
-                + losses["regression"]["loss"]
-                + losses["reaction"]["loss"]
-                + losses["translation"]["loss"]
-            )
+                losses["classification"]["loss"] * batch_sizes[0]
+                + losses["regression"]["loss"] * batch_sizes[1]
+                + losses["reaction"]["loss"] * batch_sizes[2]
+                + losses["reagent"]["loss"] * batch_sizes[3]
+                + losses["translation"]["loss"] * batch_sizes[4]
+            ) / sum(batch_sizes)
             self.log(
                 "total_loss", float(total_loss), batch_size=batch_size, sync_dist=True
             )
@@ -313,6 +316,8 @@ class Blip2Stage3(pl.LightningModule):
         elif dataloader_idx == 2:
             task = "reaction"
         elif dataloader_idx == 3:
+            task = "reagent"
+        elif dataloader_idx == 4:
             task = "translation"
         # TODO: figure out why batch composition is different from training_step
         graphs, prompt_tokens, texts, tasks = batch

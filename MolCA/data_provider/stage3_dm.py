@@ -63,12 +63,12 @@ def prepare_llm_prompt(
     else:
         raise NotImplementedError("mol_representation should be one of the options")
 
-    llm_prompt = (
-        added_tokens.INSTRUCTION[0]
-        + instruction
-        + added_tokens.INSTRUCTION[1]
-        + mol_string
-    )
+    if not "<None>" in mol_string:
+        llm_prompt = instruction + mol_string
+    else:
+        llm_prompt = instruction
+
+    llm_prompt = added_tokens.INSTRUCTION[0] + llm_prompt + added_tokens.INSTRUCTION[1]
     return llm_prompt
 
 
@@ -224,10 +224,14 @@ REGRESSION_BENCHMARKS = [
     "lipo",  # 1 task # llasmol
 ]
 
-MOL2TEXT_BENCHMARKS = ["molecular_description_generation"]
+MOL2TEXT_BENCHMARKS = [
+    # "molecular_description_generation",
+    "chebi-20-mol2text"
+]
 
 TEXT2MOL_BENCHMARKS = [
-    "description_guided_molecule_design",
+    # "description_guided_molecule_design",
+    "chebi-20-text2mol"
 ]
 
 REACTION_BENCHMARKS = [
@@ -257,21 +261,41 @@ class Stage3DM(LightningDataModule):
         super().__init__()
         self.args = args
         self.mode = mode
-        self.batch_size = args.batch_size
-        self.inference_batch_size = args.inference_batch_size
         self.num_workers = num_workers
         self.prompt_max_len = args.prompt_max_len
         self.label_max_len = args.label_max_len
         self.debug = args.debug
         self.args = args
         self.root = root
+        self.task_categories = [
+            "classification",
+            "regression",
+            "reaction",
+            "reagent",
+            "translation",
+        ]
+        self.batch_sizes = {
+            "classification": args.per_device_batch_size_cls,
+            "regression": args.per_device_batch_size_reg,
+            "reaction": args.per_device_batch_size_rxn,
+            "reagent": args.per_device_batch_size_rea,
+            "translation": args.per_device_batch_size_trn,
+        }
+        self.inference_batch_sizes = {
+            "classification": args.per_device_inference_batch_size_cls,
+            "regression": args.per_device_inference_batch_size_reg,
+            "reaction": args.per_device_inference_batch_size_rxn,
+            "reagent": args.per_device_inference_batch_size_rea,
+            "translation": args.per_device_inference_batch_size_trn,
+        }
 
         if root == "multi_task":
+            task_categories = self.task_categories
             self.concat_datasets = {
                 task: {"train": None, "val": None, "test": None}
-                for task in ["classification", "regression", "reaction", "translation"]
+                for task in task_categories
             }
-            for task in ["classification", "regression", "reaction", "translation"]:
+            for task in self.concat_datasets.keys():
                 for split in ["train", "val", "test"]:
                     self.concat_datasets[task][split] = InstructionInMemoryDataset(
                         root=self.args.raw_data_root,
@@ -284,219 +308,6 @@ class Stage3DM(LightningDataModule):
         self.init_tokenizer(tokenizer)
         self.mol_ph_token = "<mol>" * self.args.num_query_token
         self.mol_representation = args.mol_representation
-
-    def get_raw_multi_task_dataset(
-        self,
-    ):
-        task_subtask_lists = {
-            "reagent_prediction": [0],
-            "forward_reaction_prediction": [0],
-            "retrosynthesis": [0],
-            "bace": [0],
-            "bbbp": [0],
-            "clintox": [0, 1],
-            "toxcast": [0],
-            "sider": [0],
-            "tox21": [0],
-            "hiv": [0],
-            "qm9": [0],
-            "esol": [0],
-            "lipo": [0],
-            "description_guided_molecule_design": [0],
-            "molecular_description_generation": [0],
-        }
-        self.task_subtask_pairs = [
-            (task, subtask)
-            for task, subtasks in task_subtask_lists.items()
-            for subtask in subtasks
-        ]
-
-        total_benchmarks = (
-            REACTION_BENCHMARKS
-            + MOL2TEXT_BENCHMARKS
-            + TEXT2MOL_BENCHMARKS
-            + CLASSIFICATION_BENCHMARKS
-            + REGRESSION_BENCHMARKS
-        )
-
-        multi_task_datasets = {
-            task_name: self.get_dataset(task_name)  # {task_name: [train, val, test]
-            for task_name in total_benchmarks
-        }
-
-        self.train_dataset, self.val_dataset, self.test_dataset = [], [], []
-        for task_subtask_pair in tqdm(
-            self.task_subtask_pairs, desc="Processing task_subtask_pairs"
-        ):
-            task_name = task_subtask_pair[0]
-            subtasks = multi_task_datasets[task_name][0]
-            subtask_idx = task_subtask_pair[1]
-            task_subtask_pair = f"{task_name}/{subtasks[subtask_idx]}"
-
-            data_split = multi_task_datasets[task_name][
-                1:
-            ]  # train_set, val_set, test_set
-
-            if task_name in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
-                train_dataset = MoleculeNetDatasetDeepChem(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                    subtask_idx=subtask_idx,
-                    debug=self.debug,
-                )
-                valid_dataset = MoleculeNetDatasetDeepChem(
-                    data=data_split[1],
-                    task_subtask_pair=task_subtask_pair,
-                    subtask_idx=subtask_idx,
-                    debug=self.debug,
-                )
-                test_dataset = MoleculeNetDatasetDeepChem(
-                    data=data_split[2],
-                    task_subtask_pair=task_subtask_pair,
-                    subtask_idx=subtask_idx,
-                    debug=self.debug,
-                )
-            elif task_name in REACTION_BENCHMARKS:
-                train_dataset = MolInstructionDatset(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                    debug=self.debug,
-                )
-                valid_dataset = MolInstructionDatset(
-                    data=data_split[1],
-                    task_subtask_pair=task_subtask_pair,
-                    debug=self.debug,
-                )
-                test_dataset = MolInstructionDatset(
-                    data=data_split[2],
-                    task_subtask_pair=task_subtask_pair,
-                    debug=self.debug,
-                )
-            elif task_name in MOL2TEXT_BENCHMARKS:
-                train_dataset = MolInstructionDatset(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                    debug=self.debug,
-                )
-                valid_dataset = MolInstructionDatset(
-                    data=data_split[1],
-                    task_subtask_pair=task_subtask_pair,
-                    debug=self.debug,
-                )
-                test_dataset = MolInstructionDatset(
-                    data=data_split[2],
-                    task_subtask_pair=task_subtask_pair,
-                    debug=self.debug,
-                )
-            elif task_name in TEXT2MOL_BENCHMARKS:
-                train_dataset = MolInstructionDatset(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                    debug=self.debug,
-                )
-                valid_dataset = MolInstructionDatset(
-                    data=data_split[1],
-                    task_subtask_pair=task_subtask_pair,
-                    debug=self.debug,
-                )
-                test_dataset = MolInstructionDatset(
-                    data=data_split[2],
-                    task_subtask_pair=task_subtask_pair,
-                    debug=self.debug,
-                )
-
-            self.train_dataset.append(train_dataset)
-            self.val_dataset.append(valid_dataset)
-            self.test_dataset.append(test_dataset)
-
-        # concat datasets from each subtask into large class [classification, regression, reaction prediction, translation]
-
-        concat_datasets = {
-            task: {"train": [], "val": [], "test": []}
-            for task in ["classification", "regression", "reaction", "translation"]
-        }
-
-        for i in range(len(self.task_subtask_pairs)):
-            task_subtask_pair = self.task_subtask_pairs[i]
-            task_name = task_subtask_pair[0]
-            if task_name in CLASSIFICATION_BENCHMARKS:
-                concat_datasets["classification"]["train"].append(self.train_dataset[i])
-                concat_datasets["classification"]["val"].append(self.val_dataset[i])
-                concat_datasets["classification"]["test"].append(self.test_dataset[i])
-            elif task_name in REGRESSION_BENCHMARKS:
-                concat_datasets["regression"]["train"].append(self.train_dataset[i])
-                concat_datasets["regression"]["val"].append(self.val_dataset[i])
-                concat_datasets["regression"]["test"].append(self.test_dataset[i])
-            elif task_name in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
-                concat_datasets["translation"]["train"].append(self.train_dataset[i])
-                concat_datasets["translation"]["val"].append(self.val_dataset[i])
-                concat_datasets["translation"]["test"].append(self.test_dataset[i])
-            elif task_name in REACTION_BENCHMARKS:
-                concat_datasets["reaction"]["train"].append(self.train_dataset[i])
-                concat_datasets["reaction"]["val"].append(self.val_dataset[i])
-                concat_datasets["reaction"]["test"].append(self.test_dataset[i])
-            else:
-                raise NotImplementedError
-
-        os.makedirs(os.path.join(self.args.raw_data_root, "raw"), exist_ok=True)
-
-        for task in ["classification", "regression", "reaction", "translation"]:
-            for split in ["train", "val", "test"]:
-                concat_dataset = ConcatDataset(concat_datasets[task][split])
-                torch.save(
-                    concat_dataset,
-                    f"{self.args.raw_data_root}/raw/{task}_{split}",
-                )
-
-        return concat_datasets
-
-    def get_dataset(self, root):
-        base_path = f"dataset/{root}"
-        os.makedirs(base_path, exist_ok=True)
-        # get dataset from deepchem
-        if root == "bace":
-            loading_fn = dc.molnet.load_bace_classification
-        elif root == "esol":
-            loading_fn = dc.molnet.load_delaney
-        elif root in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
-            loading_fn = getattr(dc.molnet, f"load_{root}")
-        elif root in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
-            mol_instruction_dataset = load_dataset(
-                "zjunlp/Mol-Instructions", "Molecule-oriented Instructions"
-            )
-            dataset = mol_instruction_dataset[root]
-            train_dataset = dataset.filter(lambda x: "train" in x["metadata"])
-            split = train_dataset.train_test_split(test_size=0.1, shuffle=True)
-            train_dataset, valid_dataset = split["train"], split["test"]
-
-            test_dataset = dataset.filter(lambda x: "test" in x["metadata"])
-            tasks = [root]
-        elif root in REACTION_BENCHMARKS:
-            mol_instruction_dataset = load_dataset(
-                "zjunlp/Mol-Instructions", "Molecule-oriented Instructions"
-            )
-            dataset = mol_instruction_dataset[root]
-            train_dataset = dataset.filter(lambda x: "train" in x["metadata"])
-            split = train_dataset.train_test_split(test_size=0.1, shuffle=True)
-            train_dataset, valid_dataset = split["train"], split["test"]
-
-            test_dataset = dataset.filter(lambda x: "test" in x["metadata"])
-            tasks = [root]
-        else:
-            raise NotImplementedError
-
-        if root in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
-            tasks, datasets, transformers = loading_fn(
-                featurizer="Raw",
-                splitter="scaffold",
-                save_dir=base_path,
-                data_dir=base_path,
-                reload=True,
-            )
-            train_dataset, valid_dataset, test_dataset = datasets
-        else:
-            pass
-        return tasks, train_dataset, valid_dataset, test_dataset
 
     def init_tokenizer(self, tokenizer):
         self.tokenizer = tokenizer
@@ -512,7 +323,7 @@ class Stage3DM(LightningDataModule):
                 loader = [
                     DataLoader(
                         self.concat_datasets[task]["train"],
-                        batch_size=self.batch_size,
+                        batch_size=self.batch_sizes[task],
                         shuffle=True,
                         num_workers=self.num_workers,
                         pin_memory=True,
@@ -535,12 +346,7 @@ class Stage3DM(LightningDataModule):
                             padding=self.args.padding,
                         ),
                     )
-                    for task in [
-                        "classification",
-                        "regression",
-                        "reaction",
-                        "translation",
-                    ]
+                    for task in self.task_categories
                 ]
         else:
             raise NotImplementedError
@@ -550,7 +356,7 @@ class Stage3DM(LightningDataModule):
         loader = [
             DataLoader(
                 self.concat_datasets[task]["val"],
-                batch_size=self.inference_batch_size,
+                batch_size=self.inference_batch_sizes[task],
                 shuffle=False,
                 num_workers=self.num_workers,
                 pin_memory=True,
@@ -573,7 +379,7 @@ class Stage3DM(LightningDataModule):
                     padding=self.args.padding,
                 ),
             )
-            for task in ["classification", "regression", "reaction", "translation"]
+            for task in self.task_categories
         ]
         return loader
 
@@ -581,7 +387,7 @@ class Stage3DM(LightningDataModule):
         loader = [
             DataLoader(
                 self.concat_datasets[task]["test"],
-                batch_size=self.inference_batch_size,
+                batch_size=self.inference_batch_sizes[task],
                 shuffle=False,
                 num_workers=self.num_workers,
                 pin_memory=True,
@@ -604,15 +410,33 @@ class Stage3DM(LightningDataModule):
                     padding=self.args.padding,
                 ),
             )
-            for task in ["classification", "regression", "reaction", "translation"]
+            for task in self.task_categories
         ]
         return loader
 
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group("Data module")
         parser.add_argument("--num_workers", type=int, default=4)
-        parser.add_argument("--batch_size", type=int, default=32)
-        parser.add_argument("--inference_batch_size", type=int, default=4)
+        parser.add_argument("--per_device_batch_size_cls", type=int, default=32)
+        parser.add_argument("--per_device_batch_size_reg", type=int, default=32)
+        parser.add_argument("--per_device_batch_size_rxn", type=int, default=32)
+        parser.add_argument("--per_device_batch_size_rea", type=int, default=32)
+        parser.add_argument("--per_device_batch_size_trn", type=int, default=32)
+        parser.add_argument(
+            "--per_device_inference_batch_size_cls", type=int, default=4
+        )
+        parser.add_argument(
+            "--per_device_inference_batch_size_reg", type=int, default=4
+        )
+        parser.add_argument(
+            "--per_device_inference_batch_size_rxn", type=int, default=4
+        )
+        parser.add_argument(
+            "--per_device_inference_batch_size_rea", type=int, default=4
+        )
+        parser.add_argument(
+            "--per_device_inference_batch_size_trn", type=int, default=4
+        )
         parser.add_argument("--use_smiles", action="store_true", default=False)
         parser.add_argument("--root", type=str, default="data/PubChemDataset_v4")
         parser.add_argument("--prompt_max_len", type=int, default=512)
@@ -879,13 +703,13 @@ class MolInstructionDatset(Dataset):
         if self.task in TEXT2MOL_BENCHMARKS:
             # output smiles do not need to be converted to graph
             # but assign graph = None retrieve error in torch_geometric, so assign graph label intended as null graph
-
+            instruction += "\n" + input
             graph = smiles2data(
                 sf.decoder(label)
             )  # output smiles do not need to be converted to graph
             input_mol_string = "<None>"  # no input molstring in text2mol
         elif self.task in REACTION_BENCHMARKS:
-            # two smiles in input
+            # two smiles in input0
             if self.task in ["reagent_prediction"]:
                 assert ">>" in input
                 list_selfies = input.split(
@@ -907,6 +731,102 @@ class MolInstructionDatset(Dataset):
             # one selfies in input
             input_mol_string = input
             smiles = sf.decoder(input_mol_string)
+            graph = smiles2data(smiles)
+
+        label = wrap_label(label, self.task)
+        input_mol_string = (
+            added_tokens.MOL_1D[0] + input_mol_string + added_tokens.MOL_1D[1]
+        )
+
+        return graph, label, input_mol_string, instruction
+
+    # LLM input order: <instruction><qformer_output><smiles_tokens>
+    def __getitem__(self, index):
+        graph = self.graph_list[index]
+        label = self.label_list[index]
+        input_mol_string = self.input_mol_string_list[index]
+        instruction = self.instruction_list[index]
+
+        return graph, label, input_mol_string, self.task_subtask_pair, instruction
+
+
+class ChEBIDatset(Dataset):
+    def __init__(self, data, task_subtask_pair, prompt=None, debug=False):
+        self.debug = debug
+        self.data = data
+        # TODO: implement conversion to smiles or selfies controlled by this attribute
+        # currently, only smiles is supported
+        self.task_subtask_pair = task_subtask_pair
+        self.task, self.subtask = task_subtask_pair.split("/")
+
+        self.set_necesary_data()
+
+    def set_necesary_data(self):
+        if self.debug:
+            self.data = self.data[:100]
+        else:
+            self.data = self.data
+
+        self.description_list = self.data["description"]
+        self.selfies_list = self.data["SELFIES"]
+        self.smiles_list = self.data["SMILES"]
+        self.instruction_list = getattr(instructions, self.task.replace("-", "_"))
+
+        input_mol_string_list = []
+        graph_list = []
+        instruction_list = []
+        label_list = []
+
+        self.count_invalid_smiles = 0
+        iter_bar = tqdm(
+            range(len(self.description_list)),
+            total=len(self.description_list),
+            desc=self.task,
+        )
+        for i in iter_bar:
+            try:
+                graph, label, input_mol_string, instruction = self.get_necessary_data(i)
+                label_list.append(label)
+                input_mol_string_list.append(input_mol_string)
+                graph_list.append(graph)
+                instruction_list.append(instruction)
+            except Exception as e:
+                self.count_invalid_smiles += 1
+        if self.count_invalid_smiles > 0:
+            print(f"{self.task}: Number of invalid smiles: {self.count_invalid_smiles}")
+            print(
+                f"{self.task}: Invalid smiles ratio: {self.count_invalid_smiles/len(self.label_list)}"
+            )
+
+        self.label_list = label_list
+        self.input_mol_string_list = input_mol_string_list
+        self.graph_list = graph_list
+        self.instruction_list = instruction_list
+
+    def __len__(self):
+        return len(self.label_list)
+
+    def get_necessary_data(self, index):
+        instruction = self.instruction_list[
+            np.random.choice(len(self.instruction_list))
+        ]
+        descriptiopn = self.description_list[index]
+        selfies = self.selfies_list[index]
+        smiles = self.smiles_list[index]
+
+        if self.task in TEXT2MOL_BENCHMARKS:
+            label = selfies
+            instruction += (
+                "\n"
+                + added_tokens.DESCRIPTION[0]
+                + descriptiopn
+                + added_tokens.DESCRIPTION[1]
+            )
+            graph = smiles2data(smiles)
+            input_mol_string = "<None>"
+        elif self.task in MOL2TEXT_BENCHMARKS:
+            label = descriptiopn
+            input_mol_string = selfies
             graph = smiles2data(smiles)
 
         label = wrap_label(label, self.task)
@@ -1025,6 +945,12 @@ class InstructionInMemoryDataset(InMemoryDataset):
                 loading_fn = getattr(dc.molnet, f"load_{task_name}")
             elif task_name in CLASSIFICATION_BENCHMARKS:
                 loading_fn = getattr(dc.molnet, f"load_{task_name}")
+            elif "chebi-20" in task_name:
+                dataset = load_dataset("liupf/ChEBI-20-MM")
+                train_dataset = dataset["train"]
+                valid_dataset = dataset["validation"]
+                test_dataset = dataset["test"]
+                tasks = [task_name]
 
             # mol-instruction datasets
             elif (
@@ -1092,8 +1018,10 @@ class InstructionInMemoryDataset(InMemoryDataset):
             "hiv": [0],
             "esol": [0],
             "lipo": [0],
-            "description_guided_molecule_design": [0],
-            "molecular_description_generation": [0],
+            # "description_guided_molecule_design": [0],
+            # "molecular_description_generation": [0],
+            "chebi-20-mol2text": [0],
+            "chebi-20-text2mol": [0],
         }
 
         target_benchmarks = []
@@ -1102,7 +1030,12 @@ class InstructionInMemoryDataset(InMemoryDataset):
         elif "regression" in self.filename:
             target_benchmarks = REGRESSION_BENCHMARKS
         elif "reaction" in self.filename:
-            target_benchmarks = REACTION_BENCHMARKS
+            target_benchmarks = [
+                "forward_reaction_prediction",
+                "retrosynthesis",
+            ]
+        elif "reagent" in self.filename:
+            target_benchmarks = ["reagent_prediction"]
         elif "translation" in self.filename:
             target_benchmarks = MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS
 
@@ -1154,6 +1087,19 @@ class InstructionInMemoryDataset(InMemoryDataset):
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
                     subtask_idx=subtask_idx,
+                )
+            elif task_name in ["chebi-20-mol2text", "chebi-20-text2mol"]:
+                train_dataset = ChEBIDatset(
+                    data=data_split[0],
+                    task_subtask_pair=task_subtask_pair,
+                )
+                valid_dataset = ChEBIDatset(
+                    data=data_split[1],
+                    task_subtask_pair=task_subtask_pair,
+                )
+                test_dataset = ChEBIDatset(
+                    data=data_split[2],
+                    task_subtask_pair=task_subtask_pair,
                 )
             # qm9 in regression benchmark is processed via MolInstructionDataset
             elif (

@@ -76,8 +76,6 @@ def main(args):
 
     devices = ast.literal_eval(args.devices)
     num_devices = len(devices) if not isinstance(devices, int) else 1
-    # adjust intended total batch size is the same regarlless of the number of devices
-    adjustBatchSize(args, num_devices)
 
     dm = Stage3DM(
         args.mode,
@@ -174,25 +172,6 @@ def main(args):
             logger_dir=trainer.logger.log_dir,
             outputs=outputs,
         )
-
-
-def adjustBatchSize(args, num_devices):
-    if args.root == "multi_task":
-        assert args.batch_size % 4 == 0, "batch size should be multiple of 4"
-        assert args.inference_batch_size % 4 == 0, "batch size should be multiple of 4"
-        args.batch_size = args.batch_size // 4
-        args.inference_batch_size = args.inference_batch_size // 4
-
-    assert (
-        args.batch_size % num_devices == 0
-    ), "batch size should be multiple of num_devices"
-    assert (
-        args.inference_batch_size % num_devices == 0
-    ), "batch size should be multiple of num_devices"
-    args.batch_size = args.batch_size // num_devices
-    args.inference_batch_size = args.inference_batch_size // num_devices
-    print(f"batch size per device: {args.batch_size}")
-    print(f"inference batch size per device: {args.inference_batch_size}")
 
 
 def update_result_csv(args, outputs, logger_dir, task_names=None):
