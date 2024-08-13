@@ -117,6 +117,7 @@ class Blip2OPT(Blip2Base):
             num_query_token,
             gin_hidden_dim,
             cross_attention_freq,
+            bert_num_hidden_layers=args.bert_num_hidden_layers,
         )
 
         ## remove the unused parameters

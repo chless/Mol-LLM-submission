@@ -43,7 +43,12 @@ class Blip2Base(BaseModel):
 
     @classmethod
     def init_Qformer(
-        cls, model_name, num_query_token, graph_width, cross_attention_freq=2
+        cls,
+        model_name,
+        num_query_token,
+        graph_width,
+        cross_attention_freq=2,
+        bert_num_hidden_layers=-1,
     ):
         assert model_name == "scibert"
         print("bert load scibert")
@@ -58,6 +63,8 @@ class Blip2Base(BaseModel):
         encoder_config.add_cross_attention = True
         encoder_config.cross_attention_freq = cross_attention_freq
         encoder_config.query_length = num_query_token
+        if bert_num_hidden_layers > 0:
+            encoder_config.num_hidden_layers = bert_num_hidden_layers
 
         Qformer = BertLMHeadModel.from_pretrained(bert_name, config=encoder_config)
         query_tokens = nn.Parameter(

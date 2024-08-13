@@ -382,111 +382,120 @@ class Stage3DM(LightningDataModule):
     def train_dataloader(self):
         if self.mode == "ft":
             if self.root == "multi_task":
-                loader = [
-                    DataLoader(
-                        self.concat_datasets[task]["train"],
-                        batch_size=self.batch_sizes[task],
-                        shuffle=True,
-                        num_workers=self.num_workers,
-                        pin_memory=True,
-                        drop_last=True,
-                        persistent_workers=True,
-                        collate_fn=TrainCollater(
-                            tokenizer=self.tokenizer,
-                            prompt_max_len=(
-                                self.prompt_max_len
-                                if task not in ["regression", "classification"]
-                                else self.prompt_max_len - 9
+                loader = []
+                for task in self.task_categories:
+                    if task in ["classification", "regression"]:
+                        label_max_len = 9
+                        prompt_max_len = self.prompt_max_len - 9
+                    elif task in ["reagent"]:
+                        label_max_len = self.label_max_len
+                        prompt_max_len = self.prompt_max_len + self.args.num_query_token
+                    else:
+                        label_max_len = self.label_max_len
+                        prompt_max_len = self.prompt_max_len
+
+                    loader.append(
+                        DataLoader(
+                            self.concat_datasets[task]["train"],
+                            batch_size=self.batch_sizes[task],
+                            shuffle=True,
+                            num_workers=self.num_workers,
+                            pin_memory=True,
+                            drop_last=True,
+                            persistent_workers=True,
+                            collate_fn=TrainCollater(
+                                tokenizer=self.tokenizer,
+                                prompt_max_len=prompt_max_len,
+                                label_max_len=label_max_len,
+                                mol_ph=self.mol_ph_token,
+                                mol_token_id=self.mol_token_id,
+                                mol_representation=self.mol_representation,
+                                multi_task=True,
+                                model=self.args.opt_model,
+                                truncation=self.args.truncation,
+                                padding=self.args.padding,
+                                mol_string_ramdomization_ratio=self.args.mol_string_ramdomization_ratio,
                             ),
-                            label_max_len=(
-                                self.label_max_len
-                                if task not in ["regression", "classification"]
-                                else 9
-                            ),
-                            mol_ph=self.mol_ph_token,
-                            mol_token_id=self.mol_token_id,
-                            mol_representation=self.mol_representation,
-                            multi_task=True,
-                            model=self.args.opt_model,
-                            truncation=self.args.truncation,
-                            padding=self.args.padding,
-                            mol_string_ramdomization_ratio=self.args.mol_string_ramdomization_ratio,
-                        ),
+                        )
                     )
-                    for task in self.task_categories
-                ]
         else:
             raise NotImplementedError
         return loader
 
     def val_dataloader(self):
-        loader = [
-            DataLoader(
-                self.concat_datasets[task]["val"],
-                batch_size=self.inference_batch_sizes[task],
-                shuffle=False,
-                num_workers=self.num_workers,
-                pin_memory=True,
-                drop_last=False,
-                persistent_workers=True,
-                collate_fn=InferenceCollater(
-                    tokenizer=self.tokenizer,
-                    prompt_max_len=(
-                        self.prompt_max_len
-                        if task not in ["regression", "classification"]
-                        else self.prompt_max_len - 9
+        loader = []
+        for task in self.task_categories:
+            if task in ["classification", "regression"]:
+                label_max_len = 9
+                prompt_max_len = self.prompt_max_len - 9
+            elif task in ["reagent"]:
+                label_max_len = self.label_max_len
+                prompt_max_len = self.prompt_max_len + self.args.num_query_token
+            else:
+                label_max_len = self.label_max_len
+                prompt_max_len = self.prompt_max_len
+
+            loader.append(
+                DataLoader(
+                    self.concat_datasets[task]["val"],
+                    batch_size=self.inference_batch_sizes[task],
+                    shuffle=False,
+                    num_workers=self.num_workers,
+                    pin_memory=True,
+                    drop_last=False,
+                    persistent_workers=True,
+                    collate_fn=InferenceCollater(
+                        tokenizer=self.tokenizer,
+                        prompt_max_len=prompt_max_len,
+                        label_max_len=label_max_len,
+                        mol_ph=self.mol_ph_token,
+                        mol_token_id=self.mol_token_id,
+                        mol_representation=self.mol_representation,
+                        multi_task=True,
+                        model=self.args.opt_model,
+                        truncation=self.args.truncation,
+                        padding=self.args.padding,
                     ),
-                    label_max_len=(
-                        self.label_max_len
-                        if task not in ["regression", "classification"]
-                        else 9
-                    ),
-                    mol_ph=self.mol_ph_token,
-                    mol_token_id=self.mol_token_id,
-                    mol_representation=self.mol_representation,
-                    multi_task=True,
-                    model=self.args.opt_model,
-                    truncation=self.args.truncation,
-                    padding=self.args.padding,
-                ),
+                )
             )
-            for task in self.task_categories
-        ]
         return loader
 
     def test_dataloader(self):
-        loader = [
-            DataLoader(
-                self.concat_datasets[task]["test"],
-                batch_size=self.inference_batch_sizes[task],
-                shuffle=False,
-                num_workers=self.num_workers,
-                pin_memory=True,
-                drop_last=False,
-                persistent_workers=True,
-                collate_fn=InferenceCollater(
-                    tokenizer=self.tokenizer,
-                    prompt_max_len=(
-                        self.prompt_max_len
-                        if task not in ["regression", "classification"]
-                        else self.prompt_max_len - 9
+        loader = []
+        for task in self.task_categories:
+            if task in ["classification", "regression"]:
+                label_max_len = 9
+                prompt_max_len = self.prompt_max_len - 9
+            elif task in ["reagent"]:
+                label_max_len = self.label_max_len
+                prompt_max_len = self.prompt_max_len + self.args.num_query_token
+            else:
+                label_max_len = self.label_max_len
+                prompt_max_len = self.prompt_max_len
+
+            loader.append(
+                DataLoader(
+                    self.concat_datasets[task]["test"],
+                    batch_size=self.inference_batch_sizes[task],
+                    shuffle=False,
+                    num_workers=self.num_workers,
+                    pin_memory=True,
+                    drop_last=False,
+                    persistent_workers=True,
+                    collate_fn=InferenceCollater(
+                        tokenizer=self.tokenizer,
+                        prompt_max_len=prompt_max_len,
+                        label_max_len=label_max_len,
+                        mol_ph=self.mol_ph_token,
+                        mol_token_id=self.mol_token_id,
+                        mol_representation=self.mol_representation,
+                        multi_task=True,
+                        model=self.args.opt_model,
+                        truncation=self.args.truncation,
+                        padding=self.args.padding,
                     ),
-                    label_max_len=(
-                        self.label_max_len
-                        if task not in ["regression", "classification"]
-                        else 9
-                    ),
-                    mol_ph=self.mol_ph_token,
-                    mol_token_id=self.mol_token_id,
-                    mol_representation=self.mol_representation,
-                    multi_task=True,
-                    model=self.args.opt_model,
-                    truncation=self.args.truncation,
-                    padding=self.args.padding,
-                ),
+                )
             )
-            for task in self.task_categories
-        ]
         return loader
 
     def add_model_specific_args(parent_parser):

@@ -311,9 +311,8 @@ class Blip2Stage3(pl.LightningModule):
 
     def on_train_epoch_end(self) -> None:
         if self.args.llava_style:
-            max_epoch = self.args.max_epochs
             current_epoch = self.trainer.current_epoch
-            if current_epoch >= (max_epoch // 2 - 1):
+            if current_epoch >= self.args.second_stage_start_epoch:
                 for name, param in self.blip2opt.opt_model.named_parameters():
                     name_split = name.split(".")
                     if len(name_split) > 3:
@@ -448,7 +447,7 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--bert_name", type=str, default="scibert")
         parser.add_argument("--cross_attention_freq", type=int, default=2)
         parser.add_argument("--num_query_token", type=int, default=8)
-        parser.add_argument("--bert_num_layers", type=int, default=-1)
+        parser.add_argument("--bert_num_hidden_layers", type=int, default=-1)
         # OPT
         parser.add_argument("--opt_model", type=str, default="facebook/galactica-1.3b")
         # parser.add_argument('--prompt', type=str, default='a molecule of ')

@@ -197,6 +197,7 @@ class Blip2Qformer(Blip2Base):
             num_query_token,
             gin_hidden_dim,
             cross_attention_freq,
+            bert_num_hidden_layers=args.bert_num_hidden_layers,
         )
         self.Qformer.resize_token_embeddings(len(self.tokenizer))
         state_dict = self.Qformer.state_dict()
