@@ -322,8 +322,8 @@ class GNN(torch.nn.Module):
         ## Different implementations of Jk-concat
         if self.JK == "concat":
             node_representation = torch.cat(h_list, dim=1)
-        elif self.JK == "layer":
-            node_representation = h_list[self.args.used_gnn_layer]
+        elif self.JK == "last":
+            node_representation = h_list[-1]
         elif self.JK == "max":
             h_list = [h.unsqueeze_(0) for h in h_list]
             node_representation = torch.max(torch.cat(h_list, dim=0), dim=0)[0]
@@ -659,18 +659,27 @@ class GNN_MoleculeSTM(nn.Module):
             elif gnn_type == "gcn":
                 self.gnns.append(GCNConv(emb_dim))
 
+        self.pool = global_mean_pool
+
         ###List of batchnorms
         self.batch_norms = nn.ModuleList()
         for layer in range(num_layer):
             self.batch_norms.append(nn.BatchNorm1d(emb_dim))
+        self.num_features = emb_dim
+        self.cat_grep = True
 
     # def forward(self, x, edge_index, edge_attr):
     def forward(self, *argv):
-        if len(argv) == 3:
-            x, edge_index, edge_attr = argv[0], argv[1], argv[2]
+        if len(argv) == 4:
+            x, edge_index, edge_attr, batch = argv[0], argv[1], argv[2], argv[3]
         elif len(argv) == 1:
             data = argv[0]
-            x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
+            x, edge_index, edge_attr, batch = (
+                data.x,
+                data.edge_index,
+                data.edge_attr,
+                data.batch,
+            )
         else:
             raise ValueError("unmatched number of arguments.")
 
@@ -701,7 +710,29 @@ class GNN_MoleculeSTM(nn.Module):
             node_representation = torch.sum(torch.cat(h_list, dim=0), dim=0)[0]
         else:
             raise ValueError("not implemented.")
-        return node_representation
+
+        h_graph = self.pool(node_representation, batch)  # shape = [B, D]
+        batch_node, batch_mask = to_dense_batch(
+            node_representation, batch
+        )  # shape = [B, n_max, D],
+        batch_mask = batch_mask.bool()
+
+        if self.cat_grep:
+            batch_node = torch.cat(
+                (h_graph.unsqueeze(1), batch_node), dim=1
+            )  # shape = [B, n_max+1, D]
+            batch_mask = torch.cat(
+                [
+                    torch.ones(
+                        (batch_mask.shape[0], 1), dtype=torch.bool, device=batch.device
+                    ),
+                    batch_mask,
+                ],
+                dim=1,
+            )
+            return batch_node, batch_mask
+        else:
+            return batch_node, batch_mask, h_graph
 
 
 if __name__ == "__main__":
