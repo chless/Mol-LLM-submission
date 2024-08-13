@@ -448,6 +448,7 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--bert_name", type=str, default="scibert")
         parser.add_argument("--cross_attention_freq", type=int, default=2)
         parser.add_argument("--num_query_token", type=int, default=8)
+        parser.add_argument("--bert_num_layers", type=int, default=-1)
         # OPT
         parser.add_argument("--opt_model", type=str, default="facebook/galactica-1.3b")
         # parser.add_argument('--prompt', type=str, default='a molecule of ')
@@ -503,12 +504,15 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--stage1_path", type=str, default="")
         parser.add_argument("--stage2_path", type=str, default="")
         parser.add_argument("--init_checkpoint", type=str, default="")
+        parser.add_argument(
+            "--graph_encoder_ckpt",
+            type=str,
+            default="MolCA/gin_pretrained/graphcl_80.pth",
+        )
         parser.add_argument("--graph_decoder_ckpt", type=str, default=None)
-        parser.add_argument("--coeff_recon_loss", type=float, default=0.2)
 
         parser.add_argument("--used_gnn_layer", type=int, default=-1)
-        parser.add_argument("--gnn_jk", type=str, default="layer")
-        parser.add_argument("--num_random_query_embedding", type=int, default=0)
+        parser.add_argument("--gnn_jk", type=str, default="last")
         parser.add_argument(
             "--mol_representation",
             type=str,

@@ -50,38 +50,46 @@ def prepare_llm_prompt(
     if mol_representation == "graph_only":
         mol_string = CUSTOM_SEQ_RE.sub(r"%s" % (mol_ph), mol_string)
         # reagent prediction has reaction direction token and second molecule
-        if added_tokens.REACTION_DIRECTION[0] in mol_string:
-            mol_string += added_tokens.REACTION_DIRECTION[0] + mol_ph
 
     elif mol_representation == "string_only":
         mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3", mol_string)
 
     elif mol_representation == "string+graph":
         if mol_string_ramdomization_ratio > 0:
-            selfies = re.search(CUSTOM_SEQ_RE, mol_string).group(2)
+            mol_strings = mol_string.split(added_tokens.REACTION_DIRECTION[0])
+            replaced = []
             total_selfies_token_ids = tokenizer.selfies_token_ids
-            selfies_token_ids = tokenizer(
-                selfies, add_special_tokens=False, return_tensors="pt"
-            ).input_ids.squeeze()
-            assert tokenizer.decode(selfies_token_ids) == selfies
-            # random replace selfies_token_ids by mol_string_ramdomization_ratio, from total_selfies_token_ids
-            idxs_to_replace = np.random.choice(
-                len(selfies_token_ids),
-                int(len(selfies_token_ids) * mol_string_ramdomization_ratio),
-                replace=False,
-            )
-            selfies_token_ids[idxs_to_replace] = torch.tensor(
-                np.random.choice(total_selfies_token_ids, len(idxs_to_replace))
-            )
-            random_replaced_selfies = tokenizer.decode(selfies_token_ids)
-            mol_string = CUSTOM_SEQ_RE.sub(
-                r"\1%s\3" % (random_replaced_selfies), mol_string
-            )
+            for m in mol_strings:
+                selfies = re.search(CUSTOM_SEQ_RE, m).group(2)
+                selfies_token_ids = tokenizer(
+                    selfies, add_special_tokens=False
+                ).input_ids
+                assert tokenizer.decode(selfies_token_ids) == selfies
+                # random replace selfies_token_ids by mol_string_ramdomization_ratio, from total_selfies_token_ids
+                idxs_to_replace = np.random.choice(
+                    len(selfies_token_ids),
+                    int(len(selfies_token_ids) * mol_string_ramdomization_ratio),
+                    replace=False,
+                )
+                for i in idxs_to_replace:
+                    selfies_token_ids[i] = np.random.choice(total_selfies_token_ids)
+                random_replaced_selfies = tokenizer.decode(selfies_token_ids)
+                replaced.append(
+                    added_tokens.MOL_1D[0]
+                    + random_replaced_selfies
+                    + added_tokens.MOL_1D[1]
+                )
+
+            if len(replaced) == 2:
+                mol_string = (
+                    replaced[0] + added_tokens.REACTION_DIRECTION[0] + replaced[1]
+                )
+            elif len(replaced) == 1:
+                mol_string = replaced[0]
+            else:
+                raise NotImplementedError("mol_string should have 1 or 2 molecules")
 
         mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3%s" % (mol_ph), mol_string)
-        # reagent prediction has reaction direction token and second molecule
-        if added_tokens.REACTION_DIRECTION[0] in mol_string:
-            mol_string += added_tokens.REACTION_DIRECTION[0] + mol_ph
 
     else:
         raise NotImplementedError("mol_representation should be one of the options")
@@ -129,8 +137,30 @@ class TrainCollater:
             graphs, label_text, input_mol_string, tasks, instructions = zip(*batch)
         else:
             graphs, label_text, input_mol_string, tasks = zip(*batch)
+
+        if isinstance(graphs[0], PairData):
+            reactant_batch = torch.tensor([], dtype=torch.int64)
+            product_batch = torch.tensor([], dtype=torch.int64)
+            for i in range(len(graphs)):
+                reactant_num_nodes = graphs[i].reactant_x.size(0)
+                reactant_node_indexing_tensor = torch.tensor(
+                    [i] * reactant_num_nodes, dtype=torch.int64
+                )
+                reactant_batch = torch.cat(
+                    (reactant_batch, reactant_node_indexing_tensor), 0
+                )
+                product_num_nodes = graphs[i].product_x.size(0)
+                product_node_indexing_tensor = torch.tensor(
+                    [i] * product_num_nodes, dtype=torch.int64
+                )
+                product_batch = torch.cat(
+                    (product_batch, product_node_indexing_tensor), 0
+                )
+
         graphs = self.collater(graphs)
-        # TODO: onlt receive graphs from __getitem__ and prepare the rest in __call__
+        if isinstance(graphs, PairData):
+            graphs.reactant_batch = reactant_batch
+            graphs.product_batch = product_batch
 
         ## deal with prompt
         input_texts = [
@@ -155,9 +185,6 @@ class TrainCollater:
             return_tensors="pt",
             return_attention_mask=True,
         )
-        # TODO: let this code work
-        if self.mol_string_ramdomization_ratio > 0:
-            pass
 
         is_mol_token = input_tokens.input_ids == self.mol_token_id
         input_tokens["is_mol_token"] = is_mol_token

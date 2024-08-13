@@ -115,7 +115,7 @@ class Blip2OPT(Blip2Base):
         self.Qformer, self.query_tokens = self.init_Qformer(
             bert_name,
             num_query_token,
-            self.graph_encoder.num_features,
+            gin_hidden_dim,
             cross_attention_freq,
         )
 
@@ -339,8 +339,9 @@ class Blip2OPT(Blip2Base):
                 mol_x = graphs[f"{mol}_x"]
                 mol_edge_index = graphs[f"{mol}_edge_index"]
                 mol_edge_attr = graphs[f"{mol}_edge_attr"]
+                mol_batch = graphs[f"{mol}_batch"]
                 mol_embeds, mol_masks = self.graph_encoder(
-                    mol_x, mol_edge_index, mol_edge_attr
+                    mol_x, mol_edge_index, mol_edge_attr, mol_batch
                 )
                 if not self.tune_gnn:
                     mol_embeds = mol_embeds.detach()
@@ -355,7 +356,18 @@ class Blip2OPT(Blip2Base):
                 mol_tokens = self.opt_proj(query_output.last_hidden_state)
                 mol_token_sequence.append(mol_tokens)
             mol_tokens = torch.cat(mol_token_sequence, dim=1)
-            prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
+            for i in range(prompt_tokens.is_mol_token.shape[0]):
+                # only inject mol tokens to the prompt embeds when there is mol token in the prompt
+                if prompt_embeds[i][prompt_tokens.is_mol_token[i]].shape[0]:
+                    # there are cases that mol token is truncated, which make error in vectorized operation
+                    for j in range(
+                        prompt_embeds[i][prompt_tokens.is_mol_token[i]].shape[0]
+                    ):
+                        prompt_embeds[i][prompt_tokens.is_mol_token[i]][j] = mol_tokens[
+                            i
+                        ][j]
+
+            # prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
 
         else:
             graph_embeds, graph_masks = self.graph_encoder(graphs)
@@ -370,7 +382,16 @@ class Blip2OPT(Blip2Base):
                 return_dict=True,
             )
             mol_tokens = self.opt_proj(query_output.last_hidden_state)
-            prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
+            for i in range(prompt_tokens.is_mol_token.shape[0]):
+                # only inject mol tokens to the prompt embeds when there is mol token in the prompt
+                if prompt_embeds[i][prompt_tokens.is_mol_token[i]].shape[0]:
+                    # there are cases that mol token is truncated, which make error in vectorized operation
+                    for j in range(
+                        prompt_embeds[i][prompt_tokens.is_mol_token[i]].shape[0]
+                    ):
+                        prompt_embeds[i][prompt_tokens.is_mol_token[i]][j] = mol_tokens[
+                            i
+                        ][j]
         return prompt_embeds
 
     @torch.no_grad()

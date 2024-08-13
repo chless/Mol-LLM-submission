@@ -17,7 +17,7 @@ from lavis.common.utils import is_url
 from lavis.models.base_model import BaseModel
 from lavis.models.blip2_models.Qformer import BertConfig, BertLMHeadModel
 from transformers import BertTokenizer
-from model.gin_model import GNN
+from model.gin_model import GNN, GNN_MoleculeSTM
 
 
 class Blip2Base(BaseModel):
@@ -68,7 +68,19 @@ class Blip2Base(BaseModel):
 
     @classmethod
     def init_graph_encoder(cls, gin_num_layers, gin_hidden_dim, gin_drop_ratio, args):
-        graph_encoder = GNN(
+        ckpt = torch.load(args.graph_encoder_ckpt, map_location=torch.device("cpu"))
+
+        if "MoleculeSTM" in args.graph_encoder_ckpt:
+            gnn_class = GNN_MoleculeSTM
+            renamed_state_dict = {}
+            for k, v in ckpt.items():
+                if k.startswith("molecule_node_model."):
+                    renamed_state_dict[k.replace("molecule_node_model.", "")] = v
+            ckpt = renamed_state_dict
+        else:
+            gnn_class = GNN
+
+        graph_encoder = gnn_class(
             num_layer=gin_num_layers,
             emb_dim=gin_hidden_dim,
             gnn_type="gin",
@@ -76,10 +88,8 @@ class Blip2Base(BaseModel):
             JK=args.gnn_jk,
             args=args,
         )
-        ckpt = torch.load(
-            "MolCA/gin_pretrained/graphcl_80.pth", map_location=torch.device("cpu")
-        )
-        print("load graph encoder from MolCA/gin_pretrained/graphcl_80.pth")
+
+        print(f"load graph encoder from {args.graph_encoder_ckpt}")
         missing_keys, unexpected_keys = graph_encoder.load_state_dict(
             ckpt, strict=False
         )
@@ -87,7 +97,7 @@ class Blip2Base(BaseModel):
             print(missing_keys)
             print(unexpected_keys)
 
-        ln_graph = LayerNorm(graph_encoder.num_features)
+        ln_graph = LayerNorm(gin_hidden_dim)
 
         return graph_encoder, ln_graph
 
