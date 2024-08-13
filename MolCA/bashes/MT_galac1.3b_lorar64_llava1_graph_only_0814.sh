@@ -12,27 +12,27 @@ python3 MolCA/stage3.py \
 --per_device_batch_size_reg 15 \
 --per_device_batch_size_rxn 10 \
 --per_device_batch_size_rea 5 \
---per_device_batch_size_trn 8 \
+--per_device_batch_size_trn 5 \
 --per_device_inference_batch_size_cls 3 \
 --per_device_inference_batch_size_reg 15 \
 --per_device_inference_batch_size_rxn 10 \
 --per_device_inference_batch_size_rea 5 \
---per_device_inference_batch_size_trn 8 \
+--per_device_inference_batch_size_trn 5 \
 --val_check_interval 2500 \
 --max_epochs 15 \
 --second_stage_start_epoch 5 \
 --num_beam 1 \
+--raw_data_root ~/text-mol/MolCA/data/multi_task_dataset_0813_selfies \
 --gen_max_len 300 \
 --prompt_max_len 300 \
 --label_max_len 300 \
 --logging_dir ~/text-mol/MolCA/all_checkpoints \
 --mol_representation graph_only \
 --filename MT_galac1.3b_lorar64_llava1_graph_only_0814 \
---raw_data_root ~/text-mol/MolCA/data/multi_task_dataset_0814_selfies \
+--graph_encoder_ckpt ~/text-mol/MolCA/MoleculeSTM/molecule_model.pth \
 --resize 2400 \
 --skip_sanity_check \
 --llava_style 1 \
 --mol_string_ramdomization_ratio 0.15 \
---graph_encoder_ckpt ~/text-mol/MolCA/MoleculeSTM/molecule_model.pth \
 --num_query_token 32 \
 --bert_num_hidden_layers 5

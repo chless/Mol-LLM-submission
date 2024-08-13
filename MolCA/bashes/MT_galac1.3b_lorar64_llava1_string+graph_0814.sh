@@ -22,17 +22,17 @@ python3 MolCA/stage3.py \
 --max_epochs 15 \
 --second_stage_start_epoch 5 \
 --num_beam 1 \
+--raw_data_root ~/text-mol/MolCA/data/multi_task_dataset_0813_selfies \
 --gen_max_len 300 \
 --prompt_max_len 300 \
 --label_max_len 300 \
 --logging_dir ~/text-mol/MolCA/all_checkpoints \
 --mol_representation string+graph \
 --filename MT_galac1.3b_lorar64_llava1_string+graph_0814 \
---raw_data_root ~/text-mol/MolCA/data/multi_task_dataset_0814_selfies \
+--graph_encoder_ckpt ~/text-mol/MolCA/MoleculeSTM/molecule_model.pth \
 --resize 2400 \
 --skip_sanity_check \
 --llava_style 1 \
 --mol_string_ramdomization_ratio 0.15 \
---graph_encoder_ckpt ~/text-mol/MolCA/MoleculeSTM/molecule_model.pth \
 --num_query_token 32 \
 --bert_num_hidden_layers 5
