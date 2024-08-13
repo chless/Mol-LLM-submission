@@ -39,6 +39,8 @@ def prepare_llm_prompt(
     instruction,
     mol_ph,
     mol_representation,
+    mol_string_ramdomization_ratio=0,
+    tokenizer=None,
 ):
     if CUSTOM_SEQ_RE.match(mol_string) is None:
         mol_string = added_tokens.MOL_1D[0] + mol_string + added_tokens.MOL_1D[1]
@@ -55,6 +57,27 @@ def prepare_llm_prompt(
         mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3", mol_string)
 
     elif mol_representation == "string+graph":
+        if mol_string_ramdomization_ratio > 0:
+            selfies = re.search(CUSTOM_SEQ_RE, mol_string).group(2)
+            total_selfies_token_ids = tokenizer.selfies_token_ids
+            selfies_token_ids = tokenizer(
+                selfies, add_special_tokens=False, return_tensors="pt"
+            ).input_ids.squeeze()
+            assert tokenizer.decode(selfies_token_ids) == selfies
+            # random replace selfies_token_ids by mol_string_ramdomization_ratio, from total_selfies_token_ids
+            idxs_to_replace = np.random.choice(
+                len(selfies_token_ids),
+                int(len(selfies_token_ids) * mol_string_ramdomization_ratio),
+                replace=False,
+            )
+            selfies_token_ids[idxs_to_replace] = torch.tensor(
+                np.random.choice(total_selfies_token_ids, len(idxs_to_replace))
+            )
+            random_replaced_selfies = tokenizer.decode(selfies_token_ids)
+            mol_string = CUSTOM_SEQ_RE.sub(
+                r"\1%s\3" % (random_replaced_selfies), mol_string
+            )
+
         mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3%s" % (mol_ph), mol_string)
         # reagent prediction has reaction direction token and second molecule
         if added_tokens.REACTION_DIRECTION[0] in mol_string:
@@ -85,6 +108,7 @@ class TrainCollater:
         model=None,
         truncation=True,
         padding="max_length",
+        mol_string_ramdomization_ratio=0,
     ):
         self.prompt_max_len = prompt_max_len
         self.label_max_len = label_max_len
@@ -97,6 +121,7 @@ class TrainCollater:
         self.model = model
         self.truncation = truncation
         self.padding = padding
+        self.mol_string_ramdomization_ratio = mol_string_ramdomization_ratio
 
     def __call__(self, batch):
         # in multi-task, perdevice  batch size should be multiple of 4: classificaiton, regression, translation, reaction
@@ -109,7 +134,14 @@ class TrainCollater:
 
         ## deal with prompt
         input_texts = [
-            prepare_llm_prompt(p, instruction, self.mol_ph, self.mol_representation)
+            prepare_llm_prompt(
+                p,
+                instruction,
+                self.mol_ph,
+                self.mol_representation,
+                mol_string_ramdomization_ratio=self.mol_string_ramdomization_ratio,
+                tokenizer=self.tokenizer,
+            )
             for p, instruction in zip(input_mol_string, instructions)
         ]
 
@@ -123,6 +155,9 @@ class TrainCollater:
             return_tensors="pt",
             return_attention_mask=True,
         )
+        # TODO: let this code work
+        if self.mol_string_ramdomization_ratio > 0:
+            pass
 
         is_mol_token = input_tokens.input_ids == self.mol_token_id
         input_tokens["is_mol_token"] = is_mol_token
@@ -348,6 +383,7 @@ class Stage3DM(LightningDataModule):
                             model=self.args.opt_model,
                             truncation=self.args.truncation,
                             padding=self.args.padding,
+                            mol_string_ramdomization_ratio=self.args.mol_string_ramdomization_ratio,
                         ),
                     )
                     for task in self.task_categories
@@ -468,6 +504,7 @@ class Stage3DM(LightningDataModule):
         parser.add_argument(
             "--raw_data_root", type=str, default="MolCA/data/multi_task_dataset"
         )
+        parser.add_argument("--mol_string_ramdomization_ratio", type=float, default=-1)
 
         return parent_parser
 

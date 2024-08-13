@@ -214,6 +214,12 @@ class Blip2OPT(Blip2Base):
                 selfies_tokens = f.readlines()
                 selfies_tokens = [token.strip() for token in selfies_tokens]
             self.opt_tokenizer.add_tokens(selfies_tokens)
+            # get token id of the selfies_tokens
+            self.opt_tokenizer.selfies_token_ids = [
+                self.opt_tokenizer(token, add_special_tokens=False).input_ids[0]
+                for token in selfies_tokens
+            ]
+            self.opt_tokenizer.added_selfies_tokens = selfies_tokens
             print(f"Added {len(selfies_tokens)} selfies tokens to the tokenizer")
 
         additional_tokens = [
