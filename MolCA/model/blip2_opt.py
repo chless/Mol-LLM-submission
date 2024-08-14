@@ -30,6 +30,7 @@ from model.blip2 import Blip2Base
 from transformers import AutoTokenizer
 from transformers import OPTForCausalLM
 import model.added_tokens as added_tokens
+from data_provider.stage3_dm import CUSTOM_SEQ_RE
 
 # from opendelta import LoraModel
 # from opendelta.delta_models.lora import LoraConfig
@@ -132,6 +133,9 @@ class Blip2OPT(Blip2Base):
         self.opt_tokenizer = AutoTokenizer.from_pretrained(
             opt_model, use_fast=False, padding_side="right"
         )
+        self.opt_tokenizer.mol_string_randomization_ratio = (
+            args.mol_string_randomization_ratio
+        )
         self.add_necessary_tokens()
 
         self.collater = Collater([], [])
@@ -221,6 +225,9 @@ class Blip2OPT(Blip2Base):
                 for token in selfies_tokens
             ]
             self.opt_tokenizer.added_selfies_tokens = selfies_tokens
+            # remove '.' from the marked list for selfies token
+            self.opt_tokenizer.added_selfies_tokens.remove(".")
+            self.opt_tokenizer.selfies_token_ids.remove(36)
             print(f"Added {len(selfies_tokens)} selfies tokens to the tokenizer")
 
         additional_tokens = [
@@ -270,10 +277,38 @@ class Blip2OPT(Blip2Base):
         else:
             raise NotImplementedError()
 
+    def random_replace_mol_string(self, prompt_tokens_input_ids):
+        ids = prompt_tokens_input_ids
+        tokenizer = self.opt_tokenizer
+        mol_string_randomization_ratio = tokenizer.mol_string_randomization_ratio
+        total_selfies_token_ids = tokenizer.selfies_token_ids
+
+        selfies_min_id = min(total_selfies_token_ids)
+        selfies_max_id = max(total_selfies_token_ids)
+        # if ids are correspond to total_selfies_token_ids, replace them with random token by mol_string_randomization_ratio
+        full_random_replaced = torch.where(
+            (ids >= selfies_min_id) & (ids <= selfies_max_id),
+            torch.randint(
+                selfies_min_id, selfies_max_id + 1, ids.shape, device=ids.device
+            ),
+            ids,
+        )
+        partial_random_replaced = torch.where(
+            torch.rand(ids.shape, device=ids.device) < mol_string_randomization_ratio,
+            full_random_replaced,
+            ids,
+        )
+        return partial_random_replaced
+
     def forward(self, batch, task=None):
         # graph, smiles tokens, molecule description tokens
         graphs, prompt_tokens, text_tokens = batch
         device = prompt_tokens.input_ids.device
+
+        if self.args.mol_string_randomization_ratio > 0:
+            prompt_tokens.input_ids = self.random_replace_mol_string(
+                prompt_tokens.input_ids
+            )
 
         empty_targets = (
             torch.ones(prompt_tokens.attention_mask.shape, dtype=torch.long)

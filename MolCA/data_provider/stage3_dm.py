@@ -39,8 +39,6 @@ def prepare_llm_prompt(
     instruction,
     mol_ph,
     mol_representation,
-    mol_string_ramdomization_ratio=0,
-    tokenizer=None,
 ):
     if CUSTOM_SEQ_RE.match(mol_string) is None:
         mol_string = added_tokens.MOL_1D[0] + mol_string + added_tokens.MOL_1D[1]
@@ -55,40 +53,6 @@ def prepare_llm_prompt(
         mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3", mol_string)
 
     elif mol_representation == "string+graph":
-        if mol_string_ramdomization_ratio > 0:
-            mol_strings = mol_string.split(added_tokens.REACTION_DIRECTION[0])
-            replaced = []
-            total_selfies_token_ids = tokenizer.selfies_token_ids
-            for m in mol_strings:
-                selfies = re.search(CUSTOM_SEQ_RE, m).group(2)
-                selfies_token_ids = tokenizer(
-                    selfies, add_special_tokens=False
-                ).input_ids
-                assert tokenizer.decode(selfies_token_ids) == selfies
-                # random replace selfies_token_ids by mol_string_ramdomization_ratio, from total_selfies_token_ids
-                idxs_to_replace = np.random.choice(
-                    len(selfies_token_ids),
-                    int(len(selfies_token_ids) * mol_string_ramdomization_ratio),
-                    replace=False,
-                )
-                for i in idxs_to_replace:
-                    selfies_token_ids[i] = np.random.choice(total_selfies_token_ids)
-                random_replaced_selfies = tokenizer.decode(selfies_token_ids)
-                replaced.append(
-                    added_tokens.MOL_1D[0]
-                    + random_replaced_selfies
-                    + added_tokens.MOL_1D[1]
-                )
-
-            if len(replaced) == 2:
-                mol_string = (
-                    replaced[0] + added_tokens.REACTION_DIRECTION[0] + replaced[1]
-                )
-            elif len(replaced) == 1:
-                mol_string = replaced[0]
-            else:
-                raise NotImplementedError("mol_string should have 1 or 2 molecules")
-
         mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3%s" % (mol_ph), mol_string)
 
     else:
@@ -116,7 +80,7 @@ class TrainCollater:
         model=None,
         truncation=True,
         padding="max_length",
-        mol_string_ramdomization_ratio=0,
+        mol_string_randomization_ratio=0,
     ):
         self.prompt_max_len = prompt_max_len
         self.label_max_len = label_max_len
@@ -129,7 +93,7 @@ class TrainCollater:
         self.model = model
         self.truncation = truncation
         self.padding = padding
-        self.mol_string_ramdomization_ratio = mol_string_ramdomization_ratio
+        self.mol_string_randomization_ratio = mol_string_randomization_ratio
 
     def __call__(self, batch):
         # in multi-task, perdevice  batch size should be multiple of 4: classificaiton, regression, translation, reaction
@@ -169,8 +133,6 @@ class TrainCollater:
                 instruction,
                 self.mol_ph,
                 self.mol_representation,
-                mol_string_ramdomization_ratio=self.mol_string_ramdomization_ratio,
-                tokenizer=self.tokenizer,
             )
             for p, instruction in zip(input_mol_string, instructions)
         ]
@@ -437,7 +399,7 @@ class Stage3DM(LightningDataModule):
                                 model=self.args.opt_model,
                                 truncation=self.args.truncation,
                                 padding=self.args.padding,
-                                mol_string_ramdomization_ratio=self.args.mol_string_ramdomization_ratio,
+                                mol_string_randomization_ratio=self.args.mol_string_randomization_ratio,
                             ),
                         )
                     )
@@ -563,7 +525,7 @@ class Stage3DM(LightningDataModule):
         parser.add_argument(
             "--raw_data_root", type=str, default="MolCA/data/multi_task_dataset"
         )
-        parser.add_argument("--mol_string_ramdomization_ratio", type=float, default=-1)
+        parser.add_argument("--mol_string_randomization_ratio", type=float, default=-1)
 
         return parent_parser
 

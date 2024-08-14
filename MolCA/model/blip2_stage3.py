@@ -310,6 +310,21 @@ class Blip2Stage3(pl.LightningModule):
                 self.log(key, float(loss_item), batch_size=batch_size, sync_dist=True)
             return loss["loss"]
 
+    def on_train_epoch_start(self) -> None:
+        if self.blip2opt.opt_tokenizer.mol_string_randomization_ratio > 0:
+            # conduct mol_string_randomization_ratio annealing, so that at max epochs, it is 0
+            self.blip2opt.opt_tokenizer.mol_string_randomization_ratio = max(
+                0,
+                self.blip2opt.opt_tokenizer.mol_string_randomization_ratio
+                * (1 - self.trainer.current_epoch / self.trainer.max_epochs),
+            )
+
+        self.log(
+            "mol_string_randomization_ratio",
+            self.blip2opt.opt_tokenizer.mol_string_randomization_ratio,
+            sync_dist=False,
+        )
+
     def on_train_epoch_end(self) -> None:
         if self.args.llava_style:
             current_epoch = self.trainer.current_epoch
