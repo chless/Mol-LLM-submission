@@ -150,6 +150,9 @@ def main(args):
         trainer_args["max_steps"] = args.max_steps
     else:
         trainer_args["max_epochs"] = args.max_epochs
+    if args.accumulate_grad_batches > 1:
+        trainer_args["accumulate_grad_batches"] = args.accumulate_grad_batches
+        
     trainer = Trainer(**trainer_args)
     if args.mode in {"pretrain", "ft", "multi_task"}:
         trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
