@@ -33,6 +33,6 @@ python3 MolCA/stage3.py \
 --llava_style 1 \
 --num_query_token 32 \
 --bert_num_hidden_layers 5 \
---mol_string_ramdomization_ratio -1 \
+--mol_string_randomization_ratio -1 \
 --mol_representation string+graph \
 --filename MT_galac1.3b_lorar64_llava1_string+graph_0815 \
