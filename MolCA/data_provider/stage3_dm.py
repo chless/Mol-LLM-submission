@@ -233,7 +233,30 @@ class InferenceCollater:
             graphs, label_texts, input_mol_string, tasks, instructions = zip(*batch)
         else:
             graphs, label_texts, input_mol_string, tasks = zip(*batch)
+
+        if isinstance(graphs[0], PairData):
+            reactant_batch = torch.tensor([], dtype=torch.int64)
+            product_batch = torch.tensor([], dtype=torch.int64)
+            for i in range(len(graphs)):
+                reactant_num_nodes = graphs[i].reactant_x.size(0)
+                reactant_node_indexing_tensor = torch.tensor(
+                    [i] * reactant_num_nodes, dtype=torch.int64
+                )
+                reactant_batch = torch.cat(
+                    (reactant_batch, reactant_node_indexing_tensor), 0
+                )
+                product_num_nodes = graphs[i].product_x.size(0)
+                product_node_indexing_tensor = torch.tensor(
+                    [i] * product_num_nodes, dtype=torch.int64
+                )
+                product_batch = torch.cat(
+                    (product_batch, product_node_indexing_tensor), 0
+                )
+
         graphs = self.collater(graphs)
+        if isinstance(graphs, PairData):
+            graphs.reactant_batch = reactant_batch
+            graphs.product_batch = product_batch
 
         input_texts = [
             prepare_llm_prompt(p, instruction, self.mol_ph, self.mol_representation)
