@@ -205,6 +205,7 @@ class Blip2Stage3(pl.LightningModule):
                     "target": targets[i],
                 }
             )
+        os.makedirs(self.logger.log_dir, exist_ok=True)
         with open(os.path.join(self.logger.log_dir, "predictions.json"), "w") as f:
             """
             for i in range(len(predictions)):
