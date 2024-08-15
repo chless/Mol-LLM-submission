@@ -137,7 +137,7 @@ def main(args):
         "precision": args.precision,
         "callbacks": callbacks,
         "strategy": strategy,
-        "logger": [logger, neptune_logger, tb_logger],
+        "logger": [logger, tb_logger],
     }
     if args.val_check_interval > 0:
         trainer_args["val_check_interval"] = args.val_check_interval
@@ -152,7 +152,7 @@ def main(args):
         trainer_args["max_epochs"] = args.max_epochs
     if args.accumulate_grad_batches > 1:
         trainer_args["accumulate_grad_batches"] = args.accumulate_grad_batches
-        
+
     trainer = Trainer(**trainer_args)
     if args.mode in {"pretrain", "ft", "multi_task"}:
         trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
