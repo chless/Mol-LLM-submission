@@ -281,7 +281,7 @@ def get_args():
     parser.add_argument("--val_check_interval", type=float, default=0.1)
     parser.add_argument("--check_val_every_n_epoch", type=int, default=1)
     parser.add_argument("--save_top_k", type=int, default=10)
-    parser.add_argument("--neptune_project", type=str, default="chless/text-mol")
+    parser.add_argument("--neptune_project", type=str, default="debug")
     parser.add_argument("--not_save_model", action="store_true", default=False)
     parser.add_argument("--skip_sanity_check", action="store_true", default=False)
     parser.add_argument("--logging_dir", type=str, default="MolCA/all_checkpoints/")
