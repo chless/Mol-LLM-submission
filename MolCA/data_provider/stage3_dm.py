@@ -349,6 +349,17 @@ class Stage3DM(LightningDataModule):
                         filename=f"{task}_{split}",
                         resize=self.args.resize if split == "val" else None,
                     )
+        elif root in self.task_categories:
+            self.concat_datasets = {
+                root: {"train": None, "val": None, "test": None}
+            }
+            for task in self.concat_datasets.keys():
+                for split in ["train", "val", "test"]:
+                    self.concat_datasets[task][split] = InstructionInMemoryDataset(
+                        root=self.args.raw_data_root,
+                        filename=f"{task}_{split}",
+                        resize=self.args.resize if split == "val" else None,
+                    )
         else:
             raise NotImplementedError
 
@@ -365,51 +376,47 @@ class Stage3DM(LightningDataModule):
         # self.tokenizer.mol_token_id = tokenizer("<mol>", add_special_tokens=False).input_ids[0]
 
     def train_dataloader(self):
-        if self.mode == "ft":
-            if self.root == "multi_task":
-                loader = []
-                for task in self.task_categories:
-                    if task in ["classification", "regression"]:
-                        label_max_len = 9
-                        prompt_max_len = self.prompt_max_len - 9
-                    elif task in ["reagent"]:
-                        label_max_len = self.label_max_len
-                        prompt_max_len = self.prompt_max_len + self.args.num_query_token
-                    else:
-                        label_max_len = self.label_max_len
-                        prompt_max_len = self.prompt_max_len
+        loader = []
+        for task in self.concat_datasets.keys():
+            if task in ["classification", "regression"]:
+                label_max_len = 9
+                prompt_max_len = self.prompt_max_len - 9
+            elif task in ["reagent"]:
+                label_max_len = self.label_max_len
+                prompt_max_len = self.prompt_max_len + self.args.num_query_token
+            else:
+                label_max_len = self.label_max_len
+                prompt_max_len = self.prompt_max_len
 
-                    loader.append(
-                        DataLoader(
-                            self.concat_datasets[task]["train"],
-                            batch_size=self.batch_sizes[task],
-                            shuffle=True,
-                            num_workers=self.num_workers,
-                            pin_memory=True,
-                            drop_last=True,
-                            persistent_workers=True,
-                            collate_fn=TrainCollater(
-                                tokenizer=self.tokenizer,
-                                prompt_max_len=prompt_max_len,
-                                label_max_len=label_max_len,
-                                mol_ph=self.mol_ph_token,
-                                mol_token_id=self.mol_token_id,
-                                mol_representation=self.mol_representation,
-                                multi_task=True,
-                                model=self.args.opt_model,
-                                truncation=self.args.truncation,
-                                padding=self.args.padding,
-                                mol_string_randomization_ratio=self.args.mol_string_randomization_ratio,
-                            ),
-                        )
-                    )
-        else:
-            raise NotImplementedError
+            loader.append(
+                DataLoader(
+                    self.concat_datasets[task]["train"],
+                    batch_size=self.batch_sizes[task],
+                    shuffle=True,
+                    num_workers=self.num_workers,
+                    pin_memory=True,
+                    drop_last=True,
+                    persistent_workers=True,
+                    collate_fn=TrainCollater(
+                        tokenizer=self.tokenizer,
+                        prompt_max_len=prompt_max_len,
+                        label_max_len=label_max_len,
+                        mol_ph=self.mol_ph_token,
+                        mol_token_id=self.mol_token_id,
+                        mol_representation=self.mol_representation,
+                        multi_task=True,
+                        model=self.args.opt_model,
+                        truncation=self.args.truncation,
+                        padding=self.args.padding,
+                        mol_string_randomization_ratio=self.args.mol_string_randomization_ratio,
+                    ),
+                )
+            )
         return loader
 
     def val_dataloader(self):
         loader = []
-        for task in self.task_categories:
+        for task in self.concat_datasets.keys():
             if task in ["classification", "regression"]:
                 label_max_len = 9
                 prompt_max_len = self.prompt_max_len - 9
@@ -447,7 +454,7 @@ class Stage3DM(LightningDataModule):
 
     def test_dataloader(self):
         loader = []
-        for task in self.task_categories:
+        for task in self.concat_datasets.keys():
             if task in ["classification", "regression"]:
                 label_max_len = 9
                 prompt_max_len = self.prompt_max_len - 9

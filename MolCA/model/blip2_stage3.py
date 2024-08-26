@@ -222,7 +222,7 @@ class Blip2Stage3(pl.LightningModule):
         self.on_evaluation_epoch_start()
 
     @torch.no_grad()
-    def test_step(self, batch, batch_idx, dataloader_idx):
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
         return self.evaluation_step(batch, batch_idx, dataloader_idx, mode="test")
 
     def on_test_epoch_end(self):
@@ -232,7 +232,7 @@ class Blip2Stage3(pl.LightningModule):
         self.on_evaluation_epoch_start()
 
     @torch.no_grad()
-    def validation_step(self, batch, batch_idx, dataloader_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
         return self.evaluation_step(batch, batch_idx, dataloader_idx, mode="val")
 
     def on_validation_epoch_end(self) -> None:
@@ -296,19 +296,35 @@ class Blip2Stage3(pl.LightningModule):
             )
 
             return total_loss
-        else:
-            batch_size = batch[1].input_ids.size(0)  #
+        elif isinstance(batch, list) and len(batch) == 1:
+            batch_size = batch[0][1].input_ids.size(0)
             ##============== Overall Loss ===================##
-            loss = self.blip2opt(batch)
+
+            loss = self.blip2opt(batch[0][:-1])
             self.log(
                 "lr",
                 self.trainer.optimizers[0].param_groups[0]["lr"],
                 batch_size=batch_size,
                 sync_dist=True,
             )
-            for key, loss_item in loss.items():
-                self.log(key, float(loss_item), batch_size=batch_size, sync_dist=True)
-            return loss["loss"]
+            key = self.args.root
+
+            self.log(
+                f"{key}_loss",
+                float(loss["loss"]),
+                batch_size=batch_size,
+                sync_dist=True,
+            )
+            total_loss = loss["loss"]
+            total_batch_size = batch_size
+            self.log(
+                "total_loss",
+                float(total_loss),
+                batch_size=total_batch_size,
+                sync_dist=True,
+            )
+
+            return total_loss
 
     def on_train_epoch_start(self) -> None:
         if self.blip2opt.opt_tokenizer.mol_string_randomization_ratio > 0:
