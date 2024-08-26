@@ -188,50 +188,22 @@ def update_result_csv(args, outputs, logger_dir, task_names=None):
     performance_result_path = os.path.join(logger_dir, "benchmark_performance.json")
 
     os.makedirs(os.path.dirname(performance_result_path), exist_ok=True)
-    if args.root in single_tasks:
-        assert task_names is not None
-        if os.path.exists(performance_result_path):
-            results_dict = json.load(open(performance_result_path, "r"))
-        else:
-            results_dict = dict()
+    # task average of output
+    final_output = dict()
+    tasks = [list(o.keys()) for o in outputs]
+    tasks = list(set([item for sublist in tasks for item in sublist]))
 
-        subtask = task_names[args.subtask_idx]
-        # TODO: extend multiple dataloader, for multi-task intruction-tuning
-        # currently, len(outputs)=1
-        for idx in range(len(outputs)):
-            output = outputs[idx]
-            for k in output.keys():
-                # extend results_dict with new key
-                if args.root not in results_dict:
-                    results_dict[args.root] = dict()
-                if subtask not in results_dict[args.root]:
-                    results_dict[args.root][subtask] = dict()
-                if k not in results_dict[args.root][subtask]:
-                    results_dict[args.root][subtask][k] = output[k]
-        # finally, save the updated results_dict
-        with open(performance_result_path, "w") as f:
-            json.dump(results_dict, f, indent=4)
-        print(f"Updated the result file {performance_result_path}")
+    for task in tasks:
+        final_output[task] = []
+        for output in outputs:
+            if task in output:
+                final_output[task].append(output[task])
+        final_output[task] = final_output[task][
+            0
+        ]  # identical, just replicated 4 dataloader
 
-    elif args.root == "multi_task" or args.root in TOTAL_BENCHMARKS:
-        # task average of output
-        final_output = dict()
-        tasks = [list(o.keys()) for o in outputs]
-        tasks = list(set([item for sublist in tasks for item in sublist]))
-
-        for task in tasks:
-            final_output[task] = []
-            for output in outputs:
-                if task in output:
-                    final_output[task].append(output[task])
-            final_output[task] = final_output[task][
-                0
-            ]  # identical, just replicated 4 dataloader
-
-        with open(performance_result_path, "w") as f:
-            json.dump(final_output, f, indent=4)
-    else:
-        raise NotImplementedError()
+    with open(performance_result_path, "w") as f:
+        json.dump(final_output, f, indent=4)
 
 
 class SaveLoRAModelCallback(Callback):
