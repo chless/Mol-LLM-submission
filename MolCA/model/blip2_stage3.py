@@ -52,7 +52,6 @@ def get_module_state_dict(state_dict, module_name):
 
 class Blip2Stage3(pl.LightningModule):
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
-        # checkpoint.pop('optimizer_states')
         to_be_removed = []
         for key, value in checkpoint["state_dict"].items():
             try:
@@ -193,9 +192,10 @@ class Blip2Stage3(pl.LightningModule):
                 raise NotImplementedError()
         return optimizer
 
-    def save_predictions(self, predictions, targets, tasks):
+    def save_predictions(self, predictions, targets, tasks, prompts):
         assert len(predictions) == len(targets)
         assert len(predictions) == len(tasks)
+        assert len(predictions) == len(prompts)
         instances = []
         for i in range(len(predictions)):
             instances.append(
@@ -203,19 +203,15 @@ class Blip2Stage3(pl.LightningModule):
                     "task": tasks[i],
                     "prediction": predictions[i],
                     "target": targets[i],
+                    "prompt": prompts[i],
                 }
             )
         os.makedirs(self.logger.log_dir, exist_ok=True)
-        with open(os.path.join(self.logger.log_dir, "predictions.json"), "w") as f:
-            """
-            for i in range(len(predictions)):
-                line = {
-                    "task": tasks[i],
-                    "prediction": predictions[i],
-                    "target": targets[i],
-                }
-                f.write(json.dumps(line, ensure_ascii=True) + "\n")
-            """
+        if self.args.mode == "val":
+            filename = f"{self.args.mode}_{self.global_step}_predictions.json"
+        else:
+            filename = f"{self.args.mode}_predictions.json"
+        with open(os.path.join(self.logger.log_dir, filename), "w") as f:
             json.dump(instances, f, ensure_ascii=False, indent=4)
 
     def on_test_epoch_start(self) -> None:
@@ -355,6 +351,7 @@ class Blip2Stage3(pl.LightningModule):
     def on_evaluation_epoch_start(self):
         self.list_predictions = []
         self.list_targets = []
+        self.list_prompts = []
         self.list_tasks = []
         self.list_probs = []
         self.total_avg_loss = 0.0
@@ -380,14 +377,16 @@ class Blip2Stage3(pl.LightningModule):
         outputs = self.blip2opt.generate(
             samples,
             do_sample=self.do_sample,
-            num_beams=self.num_beams,
+            num_beams=self.num_beams if task != "classification" else 1,
             max_length=self.gen_max_len,
             min_length=self.min_len,
         )
         predictions = outputs.predictions
         targets = self.blip2opt.opt_tokenizer.batch_decode(texts.input_ids)
+        prompts = self.blip2opt.opt_tokenizer.batch_decode(prompt_tokens.input_ids, skip_special_tokens=True)
         self.list_predictions.append(predictions)
         self.list_targets.append(targets)
+        self.list_prompts.append(prompts)
         self.list_tasks.append(tasks)
         # TODO: implement exception for tasks other than classification
         probs = convert_logit2binary_prob(outputs.logits, self.blip2opt.opt_tokenizer)
@@ -418,27 +417,32 @@ class Blip2Stage3(pl.LightningModule):
         list_targets = self.list_targets
         list_tasks = self.list_tasks
         list_probs = self.list_probs
+        list_prompts = self.list_prompts
 
         predictions = [i for ii in list_predictions for i in ii]
         targets = [i for ii in list_targets for i in ii]
         tasks = [i for ii in list_tasks for i in ii]
         probs = [i for ii in list_probs for i in ii]
+        prompts = [i for ii in list_prompts for i in ii]
 
         all_predictions = [None for _ in range(self.trainer.world_size)]
         all_targets = [None for _ in range(self.trainer.world_size)]
         all_tasks = [None for _ in range(self.trainer.world_size)]
         all_probs = [None for _ in range(self.trainer.world_size)]
+        all_prompts = [None for _ in range(self.trainer.world_size)]
 
         if self.num_devices > 1:
             dist.all_gather_object(all_predictions, predictions)
             dist.all_gather_object(all_targets, targets)
             dist.all_gather_object(all_tasks, tasks)
             dist.all_gather_object(all_probs, probs)
+            dist.all_gather_object(all_prompts, prompts)
         else:
             all_predictions[0] = predictions
             all_targets[0] = targets
             all_tasks[0] = tasks
             all_probs[0] = probs
+            all_prompts[0] = prompts
 
         if self.global_rank == 0:
             self.log(f"{mode}/total_loss", self.total_avg_loss, sync_dist=False)
@@ -447,7 +451,13 @@ class Blip2Stage3(pl.LightningModule):
             all_targets = [i for ii in all_targets for i in ii]
             all_tasks = [i for ii in all_tasks for i in ii]
             all_probs = [i for ii in all_probs for i in ii]
-            self.save_predictions(all_predictions, all_targets, all_tasks)
+            all_prompts = [i for ii in all_prompts for i in ii]
+            self.save_predictions(
+                predictions=all_predictions, 
+                targets=all_targets, 
+                tasks=all_tasks,
+                prompts=all_prompts,
+                )
 
             evaluation_results = task_specifically_evaluate(
                 predictions=all_predictions,
