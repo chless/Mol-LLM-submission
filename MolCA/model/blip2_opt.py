@@ -100,34 +100,39 @@ class Blip2OPT(Blip2Base):
         self.args = args
         self.peft_dir = peft_dir
 
-        self.graph_encoder, self.ln_graph = self.init_graph_encoder(
-            gin_num_layers, gin_hidden_dim, gin_drop_ratio, args
-        )
+        if "graph" in self.args.mol_representation:
+            self.graph_encoder, self.ln_graph = self.init_graph_encoder(
+                gin_num_layers, gin_hidden_dim, gin_drop_ratio, args
+            )
 
-        self.tune_gnn = tune_gnn
-        if not tune_gnn:
-            for name, param in self.graph_encoder.named_parameters():
-                param.requires_grad = False
-            self.graph_encoder = self.graph_encoder.eval()
-            self.graph_encoder.train = disabled_train
-            logging.info("freeze graph encoder")
+            self.tune_gnn = tune_gnn
+            if not tune_gnn:
+                for name, param in self.graph_encoder.named_parameters():
+                    param.requires_grad = False
+                self.graph_encoder = self.graph_encoder.eval()
+                self.graph_encoder.train = disabled_train
+                logging.info("freeze graph encoder")
 
-        self.num_query_token = num_query_token
-        self.Qformer, self.query_tokens = self.init_Qformer(
-            bert_name,
-            num_query_token,
-            gin_hidden_dim,
-            cross_attention_freq,
-            bert_num_hidden_layers=args.bert_num_hidden_layers,
-        )
+            self.num_query_token = num_query_token
+            self.Qformer, self.query_tokens = self.init_Qformer(
+                bert_name,
+                num_query_token,
+                gin_hidden_dim,
+                cross_attention_freq,
+                bert_num_hidden_layers=args.bert_num_hidden_layers,
+            )
 
-        ## remove the unused parameters
-        self.Qformer.cls = None
-        self.Qformer.bert.embeddings.word_embeddings = None
-        self.Qformer.bert.embeddings.position_embeddings = None
-        for layer in self.Qformer.bert.encoder.layer:
-            layer.output = None
-            layer.intermediate = None
+            ## remove the unused parameters
+            self.Qformer.cls = None
+            self.Qformer.bert.embeddings.word_embeddings = None
+            self.Qformer.bert.embeddings.position_embeddings = None
+            for layer in self.Qformer.bert.encoder.layer:
+                layer.output = None
+                layer.intermediate = None
+                
+            self.opt_proj = nn.Linear(
+                self.Qformer.config.hidden_size, self.opt_model.config.hidden_size
+            )
 
         # initialize opt model
         self.opt_tokenizer = AutoTokenizer.from_pretrained(
@@ -191,10 +196,6 @@ class Blip2OPT(Blip2Base):
         self.eos_token_id = self.opt_tokenizer(
             "\n", add_special_tokens=False
         ).input_ids[0]
-
-        self.opt_proj = nn.Linear(
-            self.Qformer.config.hidden_size, self.opt_model.config.hidden_size
-        )
 
         for name, param in self.opt_model.named_parameters():
             name_split = name.split(".")
@@ -324,7 +325,7 @@ class Blip2OPT(Blip2Base):
         # Prompt_embeds takes 139 tokens, but the model only takes 8 tokens.
         # Though we use original setting of MolCA, this is unecessary context length comsumption.
         if "graph" in self.args.mol_representation:
-            self.inject_graph_embeds2prompt_embeds(
+            prompt_embeds = self.inject_graph_embeds2prompt_embeds(
                 prompt_embeds=prompt_embeds,
                 prompt_tokens=prompt_tokens,
                 graphs=graphs,
@@ -464,7 +465,7 @@ class Blip2OPT(Blip2Base):
 
         prompt_embeds = self.opt_model.get_input_embeddings()(prompt_tokens.input_ids)
         if "graph" in self.args.mol_representation:
-            self.inject_graph_embeds2prompt_embeds(
+            prompt_embeds = self.inject_graph_embeds2prompt_embeds(
                 prompt_embeds=prompt_embeds,
                 prompt_tokens=prompt_tokens,
                 graphs=graphs,
@@ -502,6 +503,7 @@ class Blip2OPT(Blip2Base):
         )
         for i in range(sequence_length):
             logits = outputs.logits[i].unsqueeze(1)
+            logits = logits.view(batch_size, num_beams, -1).max(dim=1).values.unsqueeze(1)
             logits_stacked = torch.cat([logits_stacked, logits], dim=1)
 
         outputs.logits = logits_stacked
