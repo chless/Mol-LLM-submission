@@ -4,7 +4,7 @@ gpus='0,1,2,3'
 python3 MolCA/stage3.py \
 --devices $gpus \
 --root multi_task \
---mode ft \
+--mode test \
 --opt_model facebook/galactica-1.3b \
 --llm_tune lora \
 --lora_r 64 \
@@ -22,12 +22,12 @@ python3 MolCA/stage3.py \
 --max_epochs 100 \
 --second_stage_start_epoch 1 \
 --num_beam 5 \
---raw_data_root MolCA/data/multi_task_dataset_0813_selfies \
+--raw_data_root /data/datasets/multi_task_dataset_0813_selfies \
 --gen_max_len 256 \
 --prompt_max_len 256 \
 --label_max_len 256 \
---logging_dir MolCA/all_checkpoints \
---graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
+--logging_dir /data/text-mol-logging/all_checkpoints \
+--graph_encoder_ckpt /data/ckpts/MoleculeSTM/molecule_model.pth \
 --resize 2400 \
 --skip_sanity_check \
 --llava_style 1 \
