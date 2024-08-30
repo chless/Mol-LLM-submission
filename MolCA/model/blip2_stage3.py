@@ -77,7 +77,7 @@ class Blip2Stage3(pl.LightningModule):
         self.reaction_weight = args.reaction_weight
         self.llm_tune = args.llm_tune
         if args.llm_model.find("galactica") >= 0:
-            self.blip2opt = Blip2OPT(
+            self.blip2model = Blip2OPT(
                 args.bert_name,
                 args.gin_num_layers,
                 args.gin_hidden_dim,
@@ -92,7 +92,7 @@ class Blip2Stage3(pl.LightningModule):
                 args,
             )
         elif args.llm_model.find("llama") >= 0 or args.llm_model.find("vicuna") >= 0:
-            self.blip2opt = Blip2Llama(
+            self.blip2model = Blip2Llama(
                 args.bert_name,
                 args.gin_num_layers,
                 args.gin_hidden_dim,
@@ -107,7 +107,7 @@ class Blip2Stage3(pl.LightningModule):
                 args,
             )
         elif args.llm_model.find("t5") >= 0:
-            self.blip2opt = Blip2T5(
+            self.blip2model = Blip2T5(
                 args.bert_name,
                 args.gin_num_layers,
                 args.gin_hidden_dim,
@@ -123,7 +123,7 @@ class Blip2Stage3(pl.LightningModule):
             )
         else:
             raise NotImplementedError()
-        self.tokenizer = self.blip2opt.init_tokenizer()
+        self.tokenizer = self.blip2model.init_tokenizer()
         self.num_devices = (
             1
             if isinstance(ast.literal_eval(args.devices), int)
@@ -140,10 +140,10 @@ class Blip2Stage3(pl.LightningModule):
         qformer_dict = get_module_state_dict(state_dict, "blip2qformer.Qformer")
         ln_graph_dict = get_module_state_dict(state_dict, "blip2qformer.ln_graph")
         qs_weight = get_module_state_dict(state_dict, "blip2qformer.query_tokens")
-        load_ignore_unexpected(self.blip2opt.Qformer, qformer_dict)
-        self.blip2opt.graph_encoder.load_state_dict(graph_encoder_dict)
-        self.blip2opt.ln_graph.load_state_dict(ln_graph_dict)
-        self.blip2opt.query_tokens.data.copy_(qs_weight)
+        load_ignore_unexpected(self.blip2model.Qformer, qformer_dict)
+        self.blip2model.graph_encoder.load_state_dict(graph_encoder_dict)
+        self.blip2model.ln_graph.load_state_dict(ln_graph_dict)
+        self.blip2model.query_tokens.data.copy_(qs_weight)
         return self
 
     def configure_optimizers(self):
@@ -256,11 +256,11 @@ class Blip2Stage3(pl.LightningModule):
                 translation_batch,
             ) = batch
             losses = {
-                "classification": self.blip2opt(classification_batch[:-1]),
-                "regression": self.blip2opt(regression_batch[:-1], task="regression"),
-                "reaction": self.blip2opt(reaction_batch[:-1]),
-                "reagent": self.blip2opt(reagent_batch[:-1]),
-                "translation": self.blip2opt(translation_batch[:-1]),
+                "classification": self.blip2model(classification_batch[:-1]),
+                "regression": self.blip2model(regression_batch[:-1], task="regression"),
+                "reaction": self.blip2model(reaction_batch[:-1]),
+                "reagent": self.blip2model(reagent_batch[:-1]),
+                "translation": self.blip2model(translation_batch[:-1]),
             }
             self.log(
                 "lr",
@@ -295,7 +295,7 @@ class Blip2Stage3(pl.LightningModule):
             batch_size = batch[0][1].input_ids.size(0)
             ##============== Overall Loss ===================##
 
-            loss = self.blip2opt(batch[0][:-1])
+            loss = self.blip2model(batch[0][:-1])
             self.log(
                 "lr",
                 self.trainer.optimizers[0].param_groups[0]["lr"],
@@ -322,17 +322,17 @@ class Blip2Stage3(pl.LightningModule):
             return total_loss
 
     def on_train_epoch_start(self) -> None:
-        if self.blip2opt.llm_tokenizer.mol_string_randomization_ratio > 0:
+        if self.blip2model.llm_tokenizer.mol_string_randomization_ratio > 0:
             # conduct mol_string_randomization_ratio annealing, so that at max epochs, it is 0
-            self.blip2opt.llm_tokenizer.mol_string_randomization_ratio = max(
+            self.blip2model.llm_tokenizer.mol_string_randomization_ratio = max(
                 0,
-                self.blip2opt.llm_tokenizer.mol_string_randomization_ratio
+                self.blip2model.llm_tokenizer.mol_string_randomization_ratio
                 * (1 - self.trainer.current_epoch / self.trainer.max_epochs),
             )
 
         self.log(
             "mol_string_randomization_ratio",
-            self.blip2opt.llm_tokenizer.mol_string_randomization_ratio,
+            self.blip2model.llm_tokenizer.mol_string_randomization_ratio,
             sync_dist=False,
         )
 
@@ -340,7 +340,7 @@ class Blip2Stage3(pl.LightningModule):
         if self.args.llava_style:
             current_epoch = self.trainer.current_epoch
             if current_epoch >= self.args.second_stage_start_epoch:
-                for name, param in self.blip2opt.llm_model.named_parameters():
+                for name, param in self.blip2model.llm_model.named_parameters():
                     name_split = name.split(".")
                     if len(name_split) > 3:
                         if name_split[-3] == "lora_A" or name_split[-3] == "lora_B":
@@ -390,7 +390,7 @@ class Blip2Stage3(pl.LightningModule):
             raise NotImplementedError()
 
         samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
-        outputs = self.blip2opt.generate(
+        outputs = self.blip2model.generate(
             samples,
             do_sample=self.do_sample,
             num_beams=self.num_beams if task != "classification" else 1,
@@ -398,8 +398,8 @@ class Blip2Stage3(pl.LightningModule):
             min_length=self.min_len,
         )
         predictions = outputs.predictions
-        targets = self.blip2opt.llm_tokenizer.batch_decode(texts.input_ids)
-        prompts = self.blip2opt.llm_tokenizer.batch_decode(
+        targets = self.blip2model.llm_tokenizer.batch_decode(texts.input_ids)
+        prompts = self.blip2model.llm_tokenizer.batch_decode(
             prompt_tokens.input_ids, skip_special_tokens=True
         )
         self.list_predictions.append(predictions)
@@ -407,11 +407,11 @@ class Blip2Stage3(pl.LightningModule):
         self.list_prompts.append(prompts)
         self.list_tasks.append(tasks)
         # TODO: implement exception for tasks other than classification
-        probs = convert_logit2binary_prob(outputs.logits, self.blip2opt.llm_tokenizer)
+        probs = convert_logit2binary_prob(outputs.logits, self.blip2model.llm_tokenizer)
         self.list_probs.append(probs)
 
         batch_size = texts.input_ids.shape[0]
-        loss = self.blip2opt(batch[:-1])  # omit tasks when inputting to the model
+        loss = self.blip2model(batch[:-1])  # omit tasks when inputting to the model
         ##============== Overall Loss ===================##
         for key, loss_item in loss.items():
             self.log(
@@ -488,7 +488,7 @@ class Blip2Stage3(pl.LightningModule):
                 tasks=all_tasks,
                 probs=all_probs,
                 prompts=all_prompts,
-                tokenizer=self.blip2opt.llm_tokenizer,
+                tokenizer=self.blip2model.llm_tokenizer,
             )
 
             self.save_predictions(

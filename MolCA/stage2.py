@@ -70,9 +70,9 @@ def main(args):
     print("total params:", sum(p.numel() for p in model.parameters()))
 
     if args.llm_model.find("galactica") >= 0 or args.llm_model.find("t5") >= 0:
-        tokenizer = model.blip2opt.llm_tokenizer
+        tokenizer = model.blip2model.llm_tokenizer
     elif args.llm_model.find("llama") >= 0 or args.llm_model.find("vicuna") >= 0:
-        tokenizer = model.blip2opt.llm_tokenizer
+        tokenizer = model.blip2model.llm_tokenizer
     else:
         raise NotImplementedError
     # data

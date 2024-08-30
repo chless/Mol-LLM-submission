@@ -236,7 +236,7 @@ class Blip2OPT(Blip2Base):
         ).input_ids[0]
 
     def merge_and_initialize_lora(self):
-        self.model.blip2opt.llm_model.merge_and_unload(progressbar=True)
+        self.model.blip2model.llm_model.merge_and_unload(progressbar=True)
 
         if self.llm_tune == "lora":
             if self.peft_dir:
