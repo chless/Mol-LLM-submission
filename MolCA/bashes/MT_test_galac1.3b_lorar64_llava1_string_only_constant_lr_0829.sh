@@ -1,5 +1,5 @@
 export TOKENIZERS_PARALLELISM=false;
-gpus='0,1,2,3'
+gpus='1,2'
 
 python3 MolCA/stage3.py \
 --devices $gpus \
@@ -13,11 +13,11 @@ python3 MolCA/stage3.py \
 --per_device_batch_size_rxn 10 \
 --per_device_batch_size_rea 5 \
 --per_device_batch_size_trn 5 \
---per_device_inference_batch_size_cls 14 \
---per_device_inference_batch_size_reg 14 \
---per_device_inference_batch_size_rxn 8 \
---per_device_inference_batch_size_rea 8 \
---per_device_inference_batch_size_trn 8 \
+--per_device_inference_batch_size_cls 50 \
+--per_device_inference_batch_size_reg 50 \
+--per_device_inference_batch_size_rxn 20 \
+--per_device_inference_batch_size_rea 20 \
+--per_device_inference_batch_size_trn 20 \
 --val_check_interval 2500 \
 --max_epochs 100 \
 --second_stage_start_epoch 1 \
@@ -38,3 +38,5 @@ python3 MolCA/stage3.py \
 --filename MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0822-2 \
 --stage2_path /data/ckpts/molllm-ckpt/MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0822-2/step=130000-total_loss=0.374.ckpt \
 --scheduler None \
+--truncation 0 \
+--padding longest \
