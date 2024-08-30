@@ -322,17 +322,17 @@ class Blip2Stage3(pl.LightningModule):
             return total_loss
 
     def on_train_epoch_start(self) -> None:
-        if self.blip2opt.opt_tokenizer.mol_string_randomization_ratio > 0:
+        if self.blip2opt.llm_tokenizer.mol_string_randomization_ratio > 0:
             # conduct mol_string_randomization_ratio annealing, so that at max epochs, it is 0
-            self.blip2opt.opt_tokenizer.mol_string_randomization_ratio = max(
+            self.blip2opt.llm_tokenizer.mol_string_randomization_ratio = max(
                 0,
-                self.blip2opt.opt_tokenizer.mol_string_randomization_ratio
+                self.blip2opt.llm_tokenizer.mol_string_randomization_ratio
                 * (1 - self.trainer.current_epoch / self.trainer.max_epochs),
             )
 
         self.log(
             "mol_string_randomization_ratio",
-            self.blip2opt.opt_tokenizer.mol_string_randomization_ratio,
+            self.blip2opt.llm_tokenizer.mol_string_randomization_ratio,
             sync_dist=False,
         )
 
@@ -398,8 +398,8 @@ class Blip2Stage3(pl.LightningModule):
             min_length=self.min_len,
         )
         predictions = outputs.predictions
-        targets = self.blip2opt.opt_tokenizer.batch_decode(texts.input_ids)
-        prompts = self.blip2opt.opt_tokenizer.batch_decode(
+        targets = self.blip2opt.llm_tokenizer.batch_decode(texts.input_ids)
+        prompts = self.blip2opt.llm_tokenizer.batch_decode(
             prompt_tokens.input_ids, skip_special_tokens=True
         )
         self.list_predictions.append(predictions)
@@ -407,7 +407,7 @@ class Blip2Stage3(pl.LightningModule):
         self.list_prompts.append(prompts)
         self.list_tasks.append(tasks)
         # TODO: implement exception for tasks other than classification
-        probs = convert_logit2binary_prob(outputs.logits, self.blip2opt.opt_tokenizer)
+        probs = convert_logit2binary_prob(outputs.logits, self.blip2opt.llm_tokenizer)
         self.list_probs.append(probs)
 
         batch_size = texts.input_ids.shape[0]
@@ -488,7 +488,7 @@ class Blip2Stage3(pl.LightningModule):
                 tasks=all_tasks,
                 probs=all_probs,
                 prompts=all_prompts,
-                tokenizer=self.blip2opt.opt_tokenizer,
+                tokenizer=self.blip2opt.llm_tokenizer,
             )
 
             self.save_predictions(

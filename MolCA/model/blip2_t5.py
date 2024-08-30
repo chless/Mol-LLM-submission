@@ -78,11 +78,11 @@ class Blip2T5(Blip2Base):
 
         assert llm_model == "laituan245/molt5-large"
         ## initialize opt model
-        # self.opt_tokenizer = AutoTokenizer.from_pretrained(llm_model)
-        self.opt_tokenizer = T5TokenizerFast.from_pretrained(llm_model)
-        self.opt_tokenizer.add_tokens("<mol>")  # molecule placeholder
+        # self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model)
+        self.llm_tokenizer = T5TokenizerFast.from_pretrained(llm_model)
+        self.llm_tokenizer.add_tokens("<mol>")  # molecule placeholder
         self.mol_token = "<mol>"
-        self.opt_tokenizer.mol_token_id = self.opt_tokenizer(
+        self.llm_tokenizer.mol_token_id = self.llm_tokenizer(
             "<mol>", add_special_tokens=False
         ).input_ids[0]
 
@@ -90,7 +90,7 @@ class Blip2T5(Blip2Base):
             "laituan245/molt5-large", torch_dtype=torch.float32
         )
         self.llm_model.resize_token_embeddings(
-            len(self.opt_tokenizer)
+            len(self.llm_tokenizer)
         )  ## this will cause bug when full fine-tuning the opt model
 
         self.llm_tune = llm_tune
@@ -124,10 +124,10 @@ class Blip2T5(Blip2Base):
             raise NotImplementedError()
 
         ## fixme: this is different from the original BLIP2
-        # self.eos_token_id = self.opt_tokenizer(
+        # self.eos_token_id = self.llm_tokenizer(
         #     "\n", add_special_tokens=False
         # ).input_ids[0]
-        self.eos_token_id = self.opt_tokenizer(
+        self.eos_token_id = self.llm_tokenizer(
             "</s>", add_special_tokens=False
         ).input_ids[0]
 
@@ -152,7 +152,7 @@ class Blip2T5(Blip2Base):
         mol_tokens = self.opt_proj(query_output.last_hidden_state)
 
         targets = text_tokens.input_ids.masked_fill(
-            text_tokens.input_ids == self.opt_tokenizer.pad_token_id, -100
+            text_tokens.input_ids == self.llm_tokenizer.pad_token_id, -100
         )
         with self.maybe_autocast(torch.float32):
             prompt_embeds = self.llm_model.encoder.embed_tokens(prompt_tokens.input_ids)
@@ -233,7 +233,7 @@ class Blip2T5(Blip2Base):
                 num_return_sequences=num_captions,
                 # use_cache=False,
             )
-            output_text = self.opt_tokenizer.batch_decode(
+            output_text = self.llm_tokenizer.batch_decode(
                 outputs, skip_special_tokens=True
             )
 

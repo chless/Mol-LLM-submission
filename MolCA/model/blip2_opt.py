@@ -124,10 +124,10 @@ class Blip2OPT(Blip2Base):
             )
 
         # initialize opt model
-        self.opt_tokenizer = AutoTokenizer.from_pretrained(
+        self.llm_tokenizer = AutoTokenizer.from_pretrained(
             llm_model, use_fast=False, padding_side="right"
         )
-        self.opt_tokenizer.mol_string_randomization_ratio = (
+        self.llm_tokenizer.mol_string_randomization_ratio = (
             args.mol_string_randomization_ratio
         )
         self.add_necessary_tokens()
@@ -148,7 +148,7 @@ class Blip2OPT(Blip2Base):
                     llm_model, torch_dtype=torch.float16
                 )
         self.llm_model.resize_token_embeddings(
-            len(self.opt_tokenizer)
+            len(self.llm_tokenizer)
         )  # this will cause bug when full fine-tuning the opt model
 
         self.llm_tune = llm_tune
@@ -182,7 +182,7 @@ class Blip2OPT(Blip2Base):
             raise NotImplementedError()
 
         # fixme: this is different from the original BLIP2
-        self.eos_token_id = self.opt_tokenizer(
+        self.eos_token_id = self.llm_tokenizer(
             "\n", add_special_tokens=False
         ).input_ids[0]
 
@@ -201,23 +201,23 @@ class Blip2OPT(Blip2Base):
             print("set lora_A and lora_B to non-trainable")
 
     def add_necessary_tokens(self):
-        self.opt_tokenizer.add_special_tokens({"pad_token": "<pad>"})
+        self.llm_tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
         if self.args.add_selfies_tokens:
             # Read txt from selfies_token_path
             with open(self.args.selfies_token_path, "r") as f:
                 selfies_tokens = f.readlines()
                 selfies_tokens = [token.strip() for token in selfies_tokens]
-            self.opt_tokenizer.add_tokens(selfies_tokens)
+            self.llm_tokenizer.add_tokens(selfies_tokens)
             # get token id of the selfies_tokens
-            self.opt_tokenizer.selfies_token_ids = [
-                self.opt_tokenizer(token, add_special_tokens=False).input_ids[0]
+            self.llm_tokenizer.selfies_token_ids = [
+                self.llm_tokenizer(token, add_special_tokens=False).input_ids[0]
                 for token in selfies_tokens
             ]
-            self.opt_tokenizer.added_selfies_tokens = selfies_tokens
+            self.llm_tokenizer.added_selfies_tokens = selfies_tokens
             # remove '.' from the marked list for selfies token
-            self.opt_tokenizer.added_selfies_tokens.remove(".")
-            self.opt_tokenizer.selfies_token_ids.remove(36)
+            self.llm_tokenizer.added_selfies_tokens.remove(".")
+            self.llm_tokenizer.selfies_token_ids.remove(36)
             print(f"Added {len(selfies_tokens)} selfies tokens to the tokenizer")
 
         additional_tokens = [
@@ -228,10 +228,10 @@ class Blip2OPT(Blip2Base):
         additional_tokens = [
             token for sublist in additional_tokens for token in sublist
         ]
-        self.opt_tokenizer.add_tokens(additional_tokens)
+        self.llm_tokenizer.add_tokens(additional_tokens)
 
         self.mol_token = added_tokens.MOL_EMBEDDING[0]
-        self.opt_tokenizer.mol_token_id = self.opt_tokenizer(
+        self.llm_tokenizer.mol_token_id = self.llm_tokenizer(
             self.mol_token, add_special_tokens=False
         ).input_ids[0]
 
@@ -269,7 +269,7 @@ class Blip2OPT(Blip2Base):
 
     def random_replace_mol_string(self, prompt_tokens_input_ids):
         ids = prompt_tokens_input_ids
-        tokenizer = self.opt_tokenizer
+        tokenizer = self.llm_tokenizer
         mol_string_randomization_ratio = tokenizer.mol_string_randomization_ratio
         total_selfies_token_ids = tokenizer.selfies_token_ids
 
@@ -306,7 +306,7 @@ class Blip2OPT(Blip2Base):
             .fill_(-100)
         )
         targets = text_tokens.input_ids.masked_fill(
-            text_tokens.input_ids == self.opt_tokenizer.pad_token_id, -100
+            text_tokens.input_ids == self.llm_tokenizer.pad_token_id, -100
         )
         targets = torch.cat([empty_targets, targets], dim=1)
 
@@ -498,7 +498,7 @@ class Blip2OPT(Blip2Base):
             logits_stacked = torch.cat([logits_stacked, logits], dim=1)
 
         outputs.logits = logits_stacked
-        output_text = self.opt_tokenizer.batch_decode(
+        output_text = self.llm_tokenizer.batch_decode(
             outputs.sequences, skip_special_tokens=True
         )
 

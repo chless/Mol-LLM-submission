@@ -138,7 +138,7 @@ class Blip2Llama(Blip2Base):
 
         ## fixme: no prompt yet
         self.prompt = prompt
-        # prompt_tokens = self.opt_tokenizer(self.prompt, return_tensors="pt")
+        # prompt_tokens = self.llm_tokenizer(self.prompt, return_tensors="pt")
         # self.prompt_length = prompt_tokens.attention_mask.sum(1)
 
     def forward(self, batch):
@@ -262,7 +262,7 @@ class Blip2Llama(Blip2Base):
                 )
 
                 prompt_length = prompt_tokens.input_ids.shape[1]
-                output_text = self.opt_tokenizer.batch_decode(
+                output_text = self.llm_tokenizer.batch_decode(
                     outputs[:, prompt_length:], skip_special_tokens=True
                 )
             else:
