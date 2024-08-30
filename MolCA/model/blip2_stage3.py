@@ -192,7 +192,7 @@ class Blip2Stage3(pl.LightningModule):
                 raise NotImplementedError()
         return optimizer
 
-    def save_predictions(self, predictions, targets, tasks, prompts):
+    def save_predictions(self, predictions, targets, tasks, prompts, filename="predictions.json"):
         assert len(predictions) == len(targets)
         assert len(predictions) == len(tasks)
         assert len(predictions) == len(prompts)
@@ -207,10 +207,7 @@ class Blip2Stage3(pl.LightningModule):
                 }
             )
         os.makedirs(self.logger.log_dir, exist_ok=True)
-        if self.args.mode == "val":
-            filename = f"{self.args.mode}_{self.global_step}_predictions.json"
-        else:
-            filename = f"{self.args.mode}_predictions.json"
+
         with open(os.path.join(self.logger.log_dir, filename), "w") as f:
             json.dump(instances, f, ensure_ascii=False, indent=4)
 
@@ -360,6 +357,7 @@ class Blip2Stage3(pl.LightningModule):
         self.dict_task_losses = {}
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
+        """
         if dataloader_idx == 0:
             task = "classification"
         elif dataloader_idx == 1:
@@ -370,8 +368,22 @@ class Blip2Stage3(pl.LightningModule):
             task = "reagent"
         elif dataloader_idx == 4:
             task = "translation"
+        """
         # TODO: figure out why batch composition is different from training_step
         graphs, prompt_tokens, texts, tasks = batch
+        if all(task.split('/')[0] in CLASSIFICATION_BENCHMARKS for task in tasks):
+            task = "classification"
+        elif all(task.split('/')[0] in REGRESSION_BENCHMARKS for task in tasks):
+            task = "regression"
+        elif all(task.split('/')[0] in REACTION_BENCHMARKS for task in tasks):
+            task = "reaction"
+        elif all(task.split('/')[0] in ['reagent_prediction'] for task in tasks):
+            task = "reagent"
+        elif all(task.split('/')[0] in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS for task in tasks):
+            task = "translation"
+        else:
+            raise NotImplementedError()
+            
 
         samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
         outputs = self.blip2opt.generate(
@@ -457,16 +469,27 @@ class Blip2Stage3(pl.LightningModule):
                 targets=all_targets, 
                 tasks=all_tasks,
                 prompts=all_prompts,
+                filename=f"{self.args.mode}_{self.global_step}_predictions.json" if self.args.mode == "val" else f"{self.args.mode}_predictions.json"
                 )
 
-            evaluation_results = task_specifically_evaluate(
+            evaluation_results, failed_cases = task_specifically_evaluate(
                 predictions=all_predictions,
                 targets=all_targets,
                 tasks=all_tasks,
                 probs=all_probs,
+                prompts=all_prompts,
                 tokenizer=self.blip2opt.opt_tokenizer,
-                text_trunc_length=self.gen_max_len * 2,
             )
+
+            self.save_predictions(
+                predictions=failed_cases['predictions'], 
+                targets=failed_cases['targets'],
+                tasks=failed_cases['tasks'],
+                prompts=failed_cases['prompts'],
+                filename=f"{self.args.mode}_{self.global_step}_failed_cases.json" if self.args.mode == "val" else f"{self.args.mode}_failed_cases.json"
+                )
+
+            
             for task_subtask_pair in evaluation_results:
                 for metric in evaluation_results[task_subtask_pair]:
                     self.log(
