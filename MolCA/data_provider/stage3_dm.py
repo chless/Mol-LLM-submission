@@ -350,9 +350,7 @@ class Stage3DM(LightningDataModule):
                         resize=self.args.resize if split == "val" else None,
                     )
         elif root in self.task_categories:
-            self.concat_datasets = {
-                root: {"train": None, "val": None, "test": None}
-            }
+            self.concat_datasets = {root: {"train": None, "val": None, "test": None}}
             for task in self.concat_datasets.keys():
                 for split in ["train", "val", "test"]:
                     self.concat_datasets[task][split] = InstructionInMemoryDataset(
@@ -405,7 +403,7 @@ class Stage3DM(LightningDataModule):
                         mol_token_id=self.mol_token_id,
                         mol_representation=self.mol_representation,
                         multi_task=True,
-                        model=self.args.opt_model,
+                        model=self.args.llm_model,
                         truncation=self.args.truncation,
                         padding=self.args.padding,
                         mol_string_randomization_ratio=self.args.mol_string_randomization_ratio,
@@ -444,7 +442,7 @@ class Stage3DM(LightningDataModule):
                         mol_token_id=self.mol_token_id,
                         mol_representation=self.mol_representation,
                         multi_task=True,
-                        model=self.args.opt_model,
+                        model=self.args.llm_model,
                         truncation=self.args.truncation,
                         padding=self.args.padding,
                     ),
@@ -482,7 +480,7 @@ class Stage3DM(LightningDataModule):
                         mol_token_id=self.mol_token_id,
                         mol_representation=self.mol_representation,
                         multi_task=True,
-                        model=self.args.opt_model,
+                        model=self.args.llm_model,
                         truncation=self.args.truncation,
                         padding=self.args.padding,
                     ),

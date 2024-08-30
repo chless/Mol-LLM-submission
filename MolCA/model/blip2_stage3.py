@@ -76,7 +76,7 @@ class Blip2Stage3(pl.LightningModule):
         self.min_len = args.min_len
         self.reaction_weight = args.reaction_weight
         self.llm_tune = args.llm_tune
-        if args.opt_model.find("galactica") >= 0:
+        if args.llm_model.find("galactica") >= 0:
             self.blip2opt = Blip2OPT(
                 args.bert_name,
                 args.gin_num_layers,
@@ -87,11 +87,11 @@ class Blip2Stage3(pl.LightningModule):
                 args.cross_attention_freq,
                 args.llm_tune,
                 args.peft_dir,
-                args.opt_model,
+                args.llm_model,
                 args.prompt,
                 args,
             )
-        elif args.opt_model.find("llama") >= 0 or args.opt_model.find("vicuna") >= 0:
+        elif args.llm_model.find("llama") >= 0 or args.llm_model.find("vicuna") >= 0:
             self.blip2opt = Blip2Llama(
                 args.bert_name,
                 args.gin_num_layers,
@@ -102,11 +102,11 @@ class Blip2Stage3(pl.LightningModule):
                 args.cross_attention_freq,
                 args.llm_tune,
                 args.peft_dir,
-                args.opt_model,
+                args.llm_model,
                 args.prompt,
                 args,
             )
-        elif args.opt_model.find("t5") >= 0:
+        elif args.llm_model.find("t5") >= 0:
             self.blip2opt = Blip2T5(
                 args.bert_name,
                 args.gin_num_layers,
@@ -117,7 +117,7 @@ class Blip2Stage3(pl.LightningModule):
                 args.cross_attention_freq,
                 args.llm_tune,
                 args.peft_dir,
-                args.opt_model,
+                args.llm_model,
                 args.prompt,
                 args,
             )
@@ -192,7 +192,9 @@ class Blip2Stage3(pl.LightningModule):
                 raise NotImplementedError()
         return optimizer
 
-    def save_predictions(self, predictions, targets, tasks, prompts, filename="predictions.json"):
+    def save_predictions(
+        self, predictions, targets, tasks, prompts, filename="predictions.json"
+    ):
         assert len(predictions) == len(targets)
         assert len(predictions) == len(tasks)
         assert len(predictions) == len(prompts)
@@ -338,7 +340,7 @@ class Blip2Stage3(pl.LightningModule):
         if self.args.llava_style:
             current_epoch = self.trainer.current_epoch
             if current_epoch >= self.args.second_stage_start_epoch:
-                for name, param in self.blip2opt.opt_model.named_parameters():
+                for name, param in self.blip2opt.llm_model.named_parameters():
                     name_split = name.split(".")
                     if len(name_split) > 3:
                         if name_split[-3] == "lora_A" or name_split[-3] == "lora_B":
@@ -371,19 +373,21 @@ class Blip2Stage3(pl.LightningModule):
         """
         # TODO: figure out why batch composition is different from training_step
         graphs, prompt_tokens, texts, tasks = batch
-        if all(task.split('/')[0] in CLASSIFICATION_BENCHMARKS for task in tasks):
+        if all(task.split("/")[0] in CLASSIFICATION_BENCHMARKS for task in tasks):
             task = "classification"
-        elif all(task.split('/')[0] in REGRESSION_BENCHMARKS for task in tasks):
+        elif all(task.split("/")[0] in REGRESSION_BENCHMARKS for task in tasks):
             task = "regression"
-        elif all(task.split('/')[0] in REACTION_BENCHMARKS for task in tasks):
+        elif all(task.split("/")[0] in REACTION_BENCHMARKS for task in tasks):
             task = "reaction"
-        elif all(task.split('/')[0] in ['reagent_prediction'] for task in tasks):
+        elif all(task.split("/")[0] in ["reagent_prediction"] for task in tasks):
             task = "reagent"
-        elif all(task.split('/')[0] in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS for task in tasks):
+        elif all(
+            task.split("/")[0] in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS
+            for task in tasks
+        ):
             task = "translation"
         else:
             raise NotImplementedError()
-            
 
         samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
         outputs = self.blip2opt.generate(
@@ -395,7 +399,9 @@ class Blip2Stage3(pl.LightningModule):
         )
         predictions = outputs.predictions
         targets = self.blip2opt.opt_tokenizer.batch_decode(texts.input_ids)
-        prompts = self.blip2opt.opt_tokenizer.batch_decode(prompt_tokens.input_ids, skip_special_tokens=True)
+        prompts = self.blip2opt.opt_tokenizer.batch_decode(
+            prompt_tokens.input_ids, skip_special_tokens=True
+        )
         self.list_predictions.append(predictions)
         self.list_targets.append(targets)
         self.list_prompts.append(prompts)
@@ -465,12 +471,16 @@ class Blip2Stage3(pl.LightningModule):
             all_probs = [i for ii in all_probs for i in ii]
             all_prompts = [i for ii in all_prompts for i in ii]
             self.save_predictions(
-                predictions=all_predictions, 
-                targets=all_targets, 
+                predictions=all_predictions,
+                targets=all_targets,
                 tasks=all_tasks,
                 prompts=all_prompts,
-                filename=f"{self.args.mode}_{self.global_step}_predictions.json" if self.args.mode == "val" else f"{self.args.mode}_predictions.json"
-                )
+                filename=(
+                    f"{self.args.mode}_{self.global_step}_predictions.json"
+                    if self.args.mode == "val"
+                    else f"{self.args.mode}_predictions.json"
+                ),
+            )
 
             evaluation_results, failed_cases = task_specifically_evaluate(
                 predictions=all_predictions,
@@ -482,14 +492,17 @@ class Blip2Stage3(pl.LightningModule):
             )
 
             self.save_predictions(
-                predictions=failed_cases['predictions'], 
-                targets=failed_cases['targets'],
-                tasks=failed_cases['tasks'],
-                prompts=failed_cases['prompts'],
-                filename=f"{self.args.mode}_{self.global_step}_failed_cases.json" if self.args.mode == "val" else f"{self.args.mode}_failed_cases.json"
-                )
+                predictions=failed_cases["predictions"],
+                targets=failed_cases["targets"],
+                tasks=failed_cases["tasks"],
+                prompts=failed_cases["prompts"],
+                filename=(
+                    f"{self.args.mode}_{self.global_step}_failed_cases.json"
+                    if self.args.mode == "val"
+                    else f"{self.args.mode}_failed_cases.json"
+                ),
+            )
 
-            
             for task_subtask_pair in evaluation_results:
                 for metric in evaluation_results[task_subtask_pair]:
                     self.log(
@@ -514,7 +527,7 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--num_query_token", type=int, default=8)
         parser.add_argument("--bert_num_hidden_layers", type=int, default=-1)
         # OPT
-        parser.add_argument("--opt_model", type=str, default="facebook/galactica-1.3b")
+        parser.add_argument("--llm_model", type=str, default="facebook/galactica-1.3b")
         # parser.add_argument('--prompt', type=str, default='a molecule of ')
         parser.add_argument("--num_beams", type=int, default=5)
         parser.add_argument("--do_sample", action="store_true", default=False)

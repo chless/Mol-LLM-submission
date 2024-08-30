@@ -32,17 +32,6 @@ from transformers import OPTForCausalLM
 import model.added_tokens as added_tokens
 from data_provider.stage3_dm import CUSTOM_SEQ_RE
 
-# from opendelta import LoraModel
-# from opendelta.delta_models.lora import LoraConfig
-# from opendelta.delta_configs
-
-opt_model_list = [
-    "facebook/galactica-125m",
-    "facebook/galactica-1.3b",
-    "facebook/galactica-6.7b",
-    "facebook/galactica-30b",
-]
-
 
 def mask_by_len(input, lens, fill_value=0):
     """
@@ -92,7 +81,7 @@ class Blip2OPT(Blip2Base):
         cross_attention_freq=2,
         llm_tune="freeze",
         peft_dir="",
-        opt_model="facebook/galactica-1.3b",
+        llm_model="facebook/galactica-1.3b",
         prompt="",  # TODO: remove. currently LLM classes not use prompt from args.prompt
         args=None,
     ):
@@ -129,14 +118,14 @@ class Blip2OPT(Blip2Base):
             for layer in self.Qformer.bert.encoder.layer:
                 layer.output = None
                 layer.intermediate = None
-                
+
             self.opt_proj = nn.Linear(
-                self.Qformer.config.hidden_size, self.opt_model.config.hidden_size
+                self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
             )
 
         # initialize opt model
         self.opt_tokenizer = AutoTokenizer.from_pretrained(
-            opt_model, use_fast=False, padding_side="right"
+            llm_model, use_fast=False, padding_side="right"
         )
         self.opt_tokenizer.mol_string_randomization_ratio = (
             args.mol_string_randomization_ratio
@@ -145,28 +134,28 @@ class Blip2OPT(Blip2Base):
 
         self.collater = Collater([], [])
 
-        if opt_model == "facebook/galactica-125m":
-            self.opt_model = OPTForCausalLM.from_pretrained(
-                opt_model, torch_dtype=torch.bfloat16
+        if llm_model == "facebook/galactica-125m":
+            self.llm_model = OPTForCausalLM.from_pretrained(
+                llm_model, torch_dtype=torch.bfloat16
             )
         else:
             if torch.cuda.is_bf16_supported():
-                self.opt_model = OPTForCausalLM.from_pretrained(
-                    opt_model, torch_dtype=torch.bfloat16
+                self.llm_model = OPTForCausalLM.from_pretrained(
+                    llm_model, torch_dtype=torch.bfloat16
                 )
             else:
-                self.opt_model = OPTForCausalLM.from_pretrained(
-                    opt_model, torch_dtype=torch.float16
+                self.llm_model = OPTForCausalLM.from_pretrained(
+                    llm_model, torch_dtype=torch.float16
                 )
-        self.opt_model.resize_token_embeddings(
+        self.llm_model.resize_token_embeddings(
             len(self.opt_tokenizer)
         )  # this will cause bug when full fine-tuning the opt model
 
         self.llm_tune = llm_tune
         if llm_tune == "lora":
             if peft_dir:
-                self.opt_model = PeftModel.from_pretrained(
-                    self.opt_model, peft_dir, is_trainable=True
+                self.llm_model = PeftModel.from_pretrained(
+                    self.llm_model, peft_dir, is_trainable=True
                 )
             else:
                 if self.args.peft_config:
@@ -182,10 +171,10 @@ class Blip2OPT(Blip2Base):
                         lora_dropout=args.lora_dropout,
                     )
                 self.peft_config = peft_config
-                self.opt_model = get_peft_model(self.opt_model, peft_config)
-                self.opt_model.print_trainable_parameters()
+                self.llm_model = get_peft_model(self.llm_model, peft_config)
+                self.llm_model.print_trainable_parameters()
         elif llm_tune == "freeze":
-            for name, param in self.opt_model.named_parameters():
+            for name, param in self.llm_model.named_parameters():
                 param.requires_grad = False
         elif llm_tune == "full":
             pass
@@ -197,14 +186,14 @@ class Blip2OPT(Blip2Base):
             "\n", add_special_tokens=False
         ).input_ids[0]
 
-        for name, param in self.opt_model.named_parameters():
+        for name, param in self.llm_model.named_parameters():
             name_split = name.split(".")
             if name_split[-2] == "embed_tokens" or name_split[-2] == "embed_positions":
                 param.requires_grad = True
         print("set embed_tokens and embed_positions to trainable")
 
         if self.args.llava_style:
-            for name, param in self.opt_model.named_parameters():
+            for name, param in self.llm_model.named_parameters():
                 name_split = name.split(".")
                 if len(name_split) > 3:
                     if name_split[-3] == "lora_A" or name_split[-3] == "lora_B":
@@ -247,12 +236,12 @@ class Blip2OPT(Blip2Base):
         ).input_ids[0]
 
     def merge_and_initialize_lora(self):
-        self.model.blip2opt.opt_model.merge_and_unload(progressbar=True)
+        self.model.blip2opt.llm_model.merge_and_unload(progressbar=True)
 
         if self.llm_tune == "lora":
             if self.peft_dir:
-                self.opt_model = PeftModel.from_pretrained(
-                    self.opt_model, self.peft_dir, is_trainable=True
+                self.llm_model = PeftModel.from_pretrained(
+                    self.llm_model, self.peft_dir, is_trainable=True
                 )
             else:
                 if self.args.peft_config:
@@ -268,10 +257,10 @@ class Blip2OPT(Blip2Base):
                         lora_dropout=self.args.lora_dropout,
                     )
                 self.peft_config = peft_config
-                self.opt_model = get_peft_model(self.opt_model, peft_config)
-                self.opt_model.print_trainable_parameters()
+                self.llm_model = get_peft_model(self.llm_model, peft_config)
+                self.llm_model.print_trainable_parameters()
         elif self.llm_tune == "freeze":
-            for name, param in self.opt_model.named_parameters():
+            for name, param in self.llm_model.named_parameters():
                 param.requires_grad = False
         elif self.llm_tune == "full":
             pass
@@ -321,7 +310,7 @@ class Blip2OPT(Blip2Base):
         )
         targets = torch.cat([empty_targets, targets], dim=1)
 
-        prompt_embeds = self.opt_model.get_input_embeddings()(prompt_tokens.input_ids)
+        prompt_embeds = self.llm_model.get_input_embeddings()(prompt_tokens.input_ids)
         # Prompt_embeds takes 139 tokens, but the model only takes 8 tokens.
         # Though we use original setting of MolCA, this is unecessary context length comsumption.
         if "graph" in self.args.mol_representation:
@@ -331,13 +320,13 @@ class Blip2OPT(Blip2Base):
                 graphs=graphs,
             )
 
-        inputs_embeds = self.opt_model.get_input_embeddings()(text_tokens.input_ids)
+        inputs_embeds = self.llm_model.get_input_embeddings()(text_tokens.input_ids)
         inputs_embeds = torch.cat((prompt_embeds, inputs_embeds), dim=1)
         attention_mask = torch.cat(
             [prompt_tokens.attention_mask, text_tokens.attention_mask], dim=1
         )
 
-        outputs = self.opt_model(
+        outputs = self.llm_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             return_dict=True,
@@ -463,7 +452,7 @@ class Blip2OPT(Blip2Base):
         # prompt_lens = samples['prompt_lens']
         # with self.maybe_autocast():
 
-        prompt_embeds = self.opt_model.get_input_embeddings()(prompt_tokens.input_ids)
+        prompt_embeds = self.llm_model.get_input_embeddings()(prompt_tokens.input_ids)
         if "graph" in self.args.mol_representation:
             prompt_embeds = self.inject_graph_embeds2prompt_embeds(
                 prompt_embeds=prompt_embeds,
@@ -471,7 +460,7 @@ class Blip2OPT(Blip2Base):
                 graphs=graphs,
             )
 
-        outputs = self.opt_model.generate(
+        outputs = self.llm_model.generate(
             inputs_embeds=prompt_embeds,
             attention_mask=prompt_tokens.attention_mask,
             do_sample=do_sample,
@@ -498,12 +487,14 @@ class Blip2OPT(Blip2Base):
         logits_stacked = torch.zeros(
             batch_size,
             0,
-            self.opt_model.config.vocab_size,
+            self.llm_model.config.vocab_size,
             device=outputs.logits[0].device,
         )
         for i in range(sequence_length):
             logits = outputs.logits[i].unsqueeze(1)
-            logits = logits.view(batch_size, num_beams, -1).max(dim=1).values.unsqueeze(1)
+            logits = (
+                logits.view(batch_size, num_beams, -1).max(dim=1).values.unsqueeze(1)
+            )
             logits_stacked = torch.cat([logits_stacked, logits], dim=1)
 
         outputs.logits = logits_stacked

@@ -25,11 +25,6 @@ from lavis.models.blip2_models.blip2 import (
 from model.blip2 import Blip2Base
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-llama_model_list = [
-    "decapoda-research/llama-7b-hf",
-    "decapoda-research/llama-13b-hf",
-]
-
 
 def mask_by_len(input, lens, fill_value=0):
     """

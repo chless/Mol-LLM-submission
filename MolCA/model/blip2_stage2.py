@@ -80,7 +80,7 @@ class Blip2Stage2(pl.LightningModule):
         self.min_len = args.min_len
         self.reaction_weight = args.reaction_weight
         self.llm_tune = args.llm_tune
-        if args.opt_model.find("galactica") >= 0:
+        if args.llm_model.find("galactica") >= 0:
             self.blip2opt = Blip2OPT(
                 args.bert_name,
                 args.gin_num_layers,
@@ -91,11 +91,11 @@ class Blip2Stage2(pl.LightningModule):
                 args.cross_attention_freq,
                 args.llm_tune,
                 args.peft_dir,
-                args.opt_model,
+                args.llm_model,
                 args.prompt,
                 args,
             )
-        elif args.opt_model.find("llama") >= 0 or args.opt_model.find("vicuna") >= 0:
+        elif args.llm_model.find("llama") >= 0 or args.llm_model.find("vicuna") >= 0:
             self.blip2opt = Blip2Llama(
                 args.bert_name,
                 args.gin_num_layers,
@@ -106,11 +106,11 @@ class Blip2Stage2(pl.LightningModule):
                 args.cross_attention_freq,
                 args.llm_tune,
                 args.peft_dir,
-                args.opt_model,
+                args.llm_model,
                 args.prompt,
                 args,
             )
-        elif args.opt_model.find("t5") >= 0:
+        elif args.llm_model.find("t5") >= 0:
             self.blip2opt = Blip2T5(
                 args.bert_name,
                 args.gin_num_layers,
@@ -121,7 +121,7 @@ class Blip2Stage2(pl.LightningModule):
                 args.cross_attention_freq,
                 args.llm_tune,
                 args.peft_dir,
-                args.opt_model,
+                args.llm_model,
                 args.prompt,
                 args,
             )
@@ -391,7 +391,7 @@ class Blip2Stage2(pl.LightningModule):
         parser.add_argument("--cross_attention_freq", type=int, default=2)
         parser.add_argument("--num_query_token", type=int, default=8)
         # OPT
-        parser.add_argument("--opt_model", type=str, default="facebook/galactica-1.3b")
+        parser.add_argument("--llm_model", type=str, default="facebook/galactica-1.3b")
         # parser.add_argument('--prompt', type=str, default='a molecule of ')
         parser.add_argument("--num_beams", type=int, default=5)
         parser.add_argument("--do_sample", action="store_true", default=False)
