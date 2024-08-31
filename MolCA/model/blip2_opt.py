@@ -89,40 +89,6 @@ class Blip2OPT(Blip2Base):
         self.args = args
         self.peft_dir = peft_dir
 
-        if "graph" in self.args.mol_representation:
-            self.graph_encoder, self.ln_graph = self.init_graph_encoder(
-                gin_num_layers, gin_hidden_dim, gin_drop_ratio, args
-            )
-
-            self.tune_gnn = tune_gnn
-            if not tune_gnn:
-                for name, param in self.graph_encoder.named_parameters():
-                    param.requires_grad = False
-                self.graph_encoder = self.graph_encoder.eval()
-                self.graph_encoder.train = disabled_train
-                logging.info("freeze graph encoder")
-
-            self.num_query_token = num_query_token
-            self.Qformer, self.query_tokens = self.init_Qformer(
-                bert_name,
-                num_query_token,
-                gin_hidden_dim,
-                cross_attention_freq,
-                bert_num_hidden_layers=args.bert_num_hidden_layers,
-            )
-
-            ## remove the unused parameters
-            self.Qformer.cls = None
-            self.Qformer.bert.embeddings.word_embeddings = None
-            self.Qformer.bert.embeddings.position_embeddings = None
-            for layer in self.Qformer.bert.encoder.layer:
-                layer.output = None
-                layer.intermediate = None
-
-            self.opt_proj = nn.Linear(
-                self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
-            )
-
         # initialize opt model
         self.llm_tokenizer = AutoTokenizer.from_pretrained(
             llm_model, use_fast=False, padding_side="right"
@@ -132,21 +98,8 @@ class Blip2OPT(Blip2Base):
         )
         self.add_necessary_tokens()
 
-        self.collater = Collater([], [])
+        self.set_llm_model(llm_model)
 
-        if llm_model == "facebook/galactica-125m":
-            self.llm_model = OPTForCausalLM.from_pretrained(
-                llm_model, torch_dtype=torch.bfloat16
-            )
-        else:
-            if torch.cuda.is_bf16_supported():
-                self.llm_model = OPTForCausalLM.from_pretrained(
-                    llm_model, torch_dtype=torch.bfloat16
-                )
-            else:
-                self.llm_model = OPTForCausalLM.from_pretrained(
-                    llm_model, torch_dtype=torch.float16
-                )
         self.llm_model.resize_token_embeddings(
             len(self.llm_tokenizer)
         )  # this will cause bug when full fine-tuning the opt model
@@ -181,24 +134,73 @@ class Blip2OPT(Blip2Base):
         else:
             raise NotImplementedError()
 
-        # fixme: this is different from the original BLIP2
-        self.eos_token_id = self.llm_tokenizer(
-            "\n", add_special_tokens=False
-        ).input_ids[0]
-
-        for name, param in self.llm_model.named_parameters():
-            name_split = name.split(".")
-            if name_split[-2] == "embed_tokens" or name_split[-2] == "embed_positions":
-                param.requires_grad = True
-        print("set embed_tokens and embed_positions to trainable")
+        self.set_params_requires_grads(
+            model=self.llm_model, keyword="embed", grad=True, IsPrint=False
+        )
 
         if self.args.llava_style:
-            for name, param in self.llm_model.named_parameters():
-                name_split = name.split(".")
-                if len(name_split) > 3:
-                    if name_split[-3] == "lora_A" or name_split[-3] == "lora_B":
-                        param.requires_grad = False
-            print("set lora_A and lora_B to non-trainable")
+            self.set_params_requires_grads(
+                model=self.llm_model, keyword="lora", grad=False
+            )
+
+        if "graph" in self.args.mol_representation:
+            self.graph_encoder, self.ln_graph = self.init_graph_encoder(
+                gin_num_layers, gin_hidden_dim, gin_drop_ratio, args
+            )
+
+            self.tune_gnn = tune_gnn
+            if not tune_gnn:
+                for name, param in self.graph_encoder.named_parameters():
+                    param.requires_grad = False
+                self.graph_encoder = self.graph_encoder.eval()
+                self.graph_encoder.train = disabled_train
+                logging.info("freeze graph encoder")
+
+            self.num_query_token = num_query_token
+            self.Qformer, self.query_tokens = self.init_Qformer(
+                bert_name,
+                num_query_token,
+                gin_hidden_dim,
+                cross_attention_freq,
+                bert_num_hidden_layers=args.bert_num_hidden_layers,
+            )
+
+            ## remove the unused parameters
+            self.Qformer.cls = None
+            self.Qformer.bert.embeddings.word_embeddings = None
+            self.Qformer.bert.embeddings.position_embeddings = None
+            for layer in self.Qformer.bert.encoder.layer:
+                layer.output = None
+                layer.intermediate = None
+
+            self.opt_proj = nn.Linear(
+                self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
+            )
+
+    def fit_llm_input_convention(self, llm_prompt):
+        llm_prompt = (
+            added_tokens.INSTRUCTION[0] + llm_prompt + added_tokens.INSTRUCTION[1]
+        )
+        return llm_prompt
+
+    def fit_llm_output_convention(self, llm_output):
+        llm_output += self.llm_tokenizer.eos_token
+        return llm_output
+
+    def set_llm_model(self, llm_model):
+        if llm_model == "facebook/galactica-125m":
+            self.llm_model = OPTForCausalLM.from_pretrained(
+                llm_model, torch_dtype=torch.bfloat16
+            )
+        else:
+            if torch.cuda.is_bf16_supported():
+                self.llm_model = OPTForCausalLM.from_pretrained(
+                    llm_model, torch_dtype=torch.bfloat16
+                )
+            else:
+                self.llm_model = OPTForCausalLM.from_pretrained(
+                    llm_model, torch_dtype=torch.float16
+                )
 
     def add_necessary_tokens(self):
         self.llm_tokenizer.add_special_tokens({"pad_token": "<pad>"})
@@ -216,8 +218,8 @@ class Blip2OPT(Blip2Base):
             ]
             self.llm_tokenizer.added_selfies_tokens = selfies_tokens
             # remove '.' from the marked list for selfies token
-            self.llm_tokenizer.added_selfies_tokens.remove(".")
-            self.llm_tokenizer.selfies_token_ids.remove(36)
+            # self.llm_tokenizer.added_selfies_tokens.remove(".")
+            # self.llm_tokenizer.selfies_token_ids.remove(36)
             print(f"Added {len(selfies_tokens)} selfies tokens to the tokenizer")
 
         additional_tokens = [
@@ -471,7 +473,7 @@ class Blip2OPT(Blip2Base):
             # min_length=min_length,
             min_new_tokens=min_length,  # TODO: change to min_new_tokens for all layered methods
             # pad_token_id=self.pad_token_id,
-            eos_token_id=self.eos_token_id,
+            eos_token_id=self.llm_tokenizer.eos_token_id,
             repetition_penalty=repetition_penalty,
             length_penalty=length_penalty,
             num_return_sequences=num_captions,
@@ -480,8 +482,6 @@ class Blip2OPT(Blip2Base):
             return_dict_in_generate=True,
         )
 
-        # TODO solve the minor discrepancy between logits decoded and output sequence decoded
-        scores = outputs.scores
         batch_size, sequence_length = outputs.sequences.shape
         # stack logtis
         logits_stacked = torch.zeros(
