@@ -24,6 +24,7 @@ from lavis.models.blip2_models.blip2 import (
 )
 from model.blip2 import Blip2Base
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from model.blip2_opt import Blip2OPT
 
 
 def mask_by_len(input, lens, fill_value=0):
@@ -37,9 +38,18 @@ def mask_by_len(input, lens, fill_value=0):
     return input
 
 
+from torch.nn import CrossEntropyLoss
+from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.utils import replace_return_docstrings
+
+from typing import Optional, List, Tuple, Union
+
+_CONFIG_FOR_DOC = "OPTConfig"
+
+
 # @registry.register_model("blip2")
 # @registry.register_model("blip2_feature_extractor")
-class Blip2Llama(Blip2Base):
+class Blip2Llama(Blip2OPT):
     """
     BLIP2 first-stage model with Q-former and ViT.
     Supported model types:
@@ -60,240 +70,167 @@ class Blip2Llama(Blip2Base):
         tune_gnn=False,
         num_query_token=32,
         cross_attention_freq=2,
-        lora_tuning=False,
+        llm_tune="freeze",
         peft_dir="",
-        llm_model="decapoda-research/llama-7b-hf",
-        prompt="",
+        llm_model="facebook/galactica-1.3b",
+        prompt="",  # TODO: remove. currently LLM classes not use prompt from args.prompt
         args=None,
     ):
-        super().__init__()
-        self.graph_encoder, self.ln_graph = self.init_graph_encoder(
-            gin_num_layers, gin_hidden_dim, gin_drop_ratio
+        super().__init__(
+            bert_name=bert_name,
+            gin_num_layers=gin_num_layers,
+            gin_hidden_dim=gin_hidden_dim,
+            gin_drop_ratio=gin_drop_ratio,
+            tune_gnn=tune_gnn,
+            num_query_token=num_query_token,
+            cross_attention_freq=cross_attention_freq,
+            llm_tune=llm_tune,
+            peft_dir=peft_dir,
+            llm_model=llm_model,
+            prompt=prompt,
+            args=args,
         )
-        self.tune_gnn = tune_gnn
-        if not tune_gnn:
-            for name, param in self.graph_encoder.named_parameters():
-                param.requires_grad = False
-            self.graph_encoder = self.graph_encoder.eval()
-            self.graph_encoder.train = disabled_train
-            logging.info("freeze graph encoder")
 
-        self.Qformer, self.query_tokens = self.init_Qformer(
-            bert_name,
-            num_query_token,
-            self.graph_encoder.num_features,
-            cross_attention_freq,
-        )
-        ### remove the unused parameters
-        self.Qformer.cls = None
-        self.Qformer.bert.embeddings.word_embeddings = None
-        self.Qformer.bert.embeddings.position_embeddings = None
-        for layer in self.Qformer.bert.encoder.layer:
-            layer.output = None
-            layer.intermediate = None
-
-        ## initialize opt model
-        self.llm_tokenizer = AutoTokenizer.from_pretrained(
-            llm_model, use_fast=False, padding_side="right"
-        )
-        self.llm_tokenizer.add_special_tokens({"pad_token": "[PAD]"})
-        self.llm_tokenizer.add_special_tokens({"bos_token": "</s>"})
-        self.llm_tokenizer.add_special_tokens({"eos_token": "</s>"})
-        self.llm_tokenizer.add_special_tokens({"unk_token": "</s>"})
+    def set_llm_model(self, llm_model):
         self.llm_model = AutoModelForCausalLM.from_pretrained(
             llm_model, torch_dtype=torch.bfloat16
         )
-        # self.llm_model = AutoModelForCausalLM.from_pretrained(llm_model)
-        self.llm_model.resize_token_embeddings(len(self.llm_tokenizer))
-
-        self.lora_tuning = lora_tuning
-        if lora_tuning:
-            if peft_dir:
-                self.llm_model = PeftModel.from_pretrained(
-                    self.llm_model, peft_dir, is_trainable=True
-                )
-            else:
-                peft_config = LoraConfig(
-                    task_type=TaskType.CAUSAL_LM,
-                    inference_mode=False,
-                    r=8,
-                    lora_alpha=32,
-                    lora_dropout=0.1,
-                )
-                self.llm_model = get_peft_model(self.llm_model, peft_config)
-                self.llm_model.print_trainable_parameters()
-        else:
-            for name, param in self.llm_model.named_parameters():
-                param.requires_grad = False
-
-        ## fixme: this is different from the original BLIP2
-        self.eos_token_id = self.llm_tokenizer(
-            "\n", add_special_tokens=False
-        ).input_ids[0]
-        self.pad_token_id = self.llm_tokenizer.pad_token_id
-
-        self.llm_proj = nn.Linear(
-            self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
-        )
-
-        ## fixme: no prompt yet
-        self.prompt = prompt
         # prompt_tokens = self.llm_tokenizer(self.prompt, return_tensors="pt")
         # self.prompt_length = prompt_tokens.attention_mask.sum(1)
 
-    def forward(self, batch):
-        graphs, text_tokens, prompt_lens = batch
-        graph_embeds, graph_masks = self.graph_encoder(graphs)
-        if not self.tune_gnn:
-            graph_embeds = graph_embeds.detach()
-        graph_embeds = self.ln_graph(graph_embeds, graph_masks)
-        device = graph_embeds.device
-        query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-        query_output = self.Qformer.bert(
-            query_embeds=query_tokens,
-            encoder_hidden_states=graph_embeds,
-            encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
-            return_dict=True,
-        )
-        inputs_llm = self.llm_proj(query_output.last_hidden_state)
-        atts_llm = torch.ones(inputs_llm.size()[:-1], dtype=torch.long).to(device)
-        targets = text_tokens.input_ids.masked_fill(
-            text_tokens.input_ids == self.llm_tokenizer.pad_token_id, -100
-        )
-        if self.prompt:
-            targets = mask_by_len(
-                targets, prompt_lens, -100
-            )  # do not apply loss to the prompt
-            # targets[:, : self.prompt_length] = -100  # do not apply loss to the prompt
+    def fit_llm_input_convention(self, llm_prompt):
+        # chemistry assistant
+        system_prompt = "You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation."
 
-        empty_targets = (
-            torch.ones(atts_llm.size(), dtype=torch.long).to(device).fill_(-100)
+        formatted_prompt = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_prompt}<|eot_id|>".format(
+            system_prompt=system_prompt
         )
-        targets = torch.cat([empty_targets, targets], dim=1)
-        # if self.lora_tuning:
-        #     inputs_embeds = self.llm_model.model.get_decoder().embed_tokens(text_tokens.input_ids)
-        # else:
-        #     inputs_embeds = self.llm_model.model.decoder.embed_tokens(text_tokens.input_ids)
-        inputs_embeds = self.llm_model.get_input_embeddings()(text_tokens.input_ids)
-        inputs_embeds = torch.cat([inputs_llm, inputs_embeds], dim=1)
-        attention_mask = torch.cat([atts_llm, text_tokens.attention_mask], dim=1)
-
-        outputs = self.llm_model(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            return_dict=True,
-            labels=targets,
-            # use_cache=False,
+        formatted_prompt += (
+            "<|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|>".format(
+                user_prompt=llm_prompt
+            )
         )
-        loss = outputs.loss
-        return {"loss": loss}
+        formatted_prompt += "<|start_header_id|>assistant<|end_header_id|>"
+        return formatted_prompt
 
-    @torch.no_grad()
-    def generate(
+
+from transformers.models.llama.modeling_llama import (
+    LlamaForCausalLM,
+    LLAMA_INPUTS_DOCSTRING,
+)
+from transformers.utils.doc import add_start_docstrings_to_model_forward
+
+
+class LlamaForCausalLM_Custom(LlamaForCausalLM):
+    def __init__(self, config):
+        super().__init__(config)
+
+    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
+    def forward(
         self,
-        samples,
-        do_sample=False,
-        num_beams=5,
-        max_length=128,
-        min_length=1,
-        top_p=0.9,
-        repetition_penalty=1.0,
-        length_penalty=1.0,
-        num_captions=1,
-        temperature=1,
-    ):
-        """
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        r"""
         Args:
-            samples (dict): A dictionary containing the following keys:
-                - image (torch.Tensor): A tensor of shape (batch_size, 3, H, W)
-            num_beams (int): Number of beams for beam search. 1 means no beam search.
-            max_length (int): The maximum length of the sequence to be generated.
-            min_length (int): The minimum length of the sequence to be generated.
-            top_p (float): The cumulative probability for nucleus sampling.
-            repetition_penalty (float): The parameter for repetition penalty. 1.0 means no penalty.
-            num_captions (int): Number of captions to be generated for each image.
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
         Returns:
-            captions (list): A list of strings of length batch_size * num_captions.
-        """
-        graphs = samples["graphs"]
-        prompt_tokens = samples["prompt_tokens"]
-        # prompt_lens = samples['prompt_lens']
-        with self.maybe_autocast():
-            graph_embeds, graph_masks = self.graph_encoder(graphs)
-            graph_embeds = self.ln_graph(graph_embeds)
 
-            query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=graph_embeds,
-                encoder_attention_mask=graph_masks,
-                return_dict=True,
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, LlamaForCausalLM
+
+        >>> model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
+
+        hidden_states = outputs[0]
+        if self.config.pretraining_tp > 1:
+            lm_head_slices = self.lm_head.weight.split(
+                self.vocab_size // self.config.pretraining_tp, dim=0
             )
+            logits = [
+                F.linear(hidden_states, lm_head_slices[i])
+                for i in range(self.config.pretraining_tp)
+            ]
+            logits = torch.cat(logits, dim=-1)
+        else:
+            logits = self.lm_head(hidden_states)
+        logits = logits.float()
 
-            device = graph_embeds.device
-            inputs_llm = self.llm_proj(query_output.last_hidden_state)
-            atts_llm = torch.ones(
-                inputs_llm.size()[:-1], dtype=torch.long, device=device
-            )
+        loss = None
+        if labels is not None:
+            # Shift so that tokens < n predict n
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss()
+            shift_logits = shift_logits.view(-1, self.config.vocab_size)
+            shift_labels = shift_labels.view(-1)
+            # Enable model parallelism
+            shift_labels = shift_labels.to(shift_logits.device)
+            loss = loss_fct(shift_logits, shift_labels)
 
-            attention_mask = torch.cat([atts_llm, prompt_tokens.attention_mask], dim=1)
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
 
-            if False:
-                if do_sample:
-                    query_embeds = inputs_llm.repeat_interleave(num_captions, dim=0)
-                    num_beams = 1
-                else:
-                    query_embeds = inputs_llm.repeat_interleave(num_beams, dim=0)
-
-                outputs = self.llm_model.generate(
-                    input_ids=prompt_tokens.input_ids,
-                    query_embeds=query_embeds,
-                    attention_mask=attention_mask,
-                    do_sample=do_sample,
-                    top_p=top_p,
-                    temperature=temperature,
-                    num_beams=num_beams,
-                    max_new_tokens=max_length,
-                    min_length=min_length,
-                    eos_token_id=self.eos_token_id,
-                    repetition_penalty=repetition_penalty,
-                    length_penalty=length_penalty,
-                    num_return_sequences=num_captions,
-                )
-
-                prompt_length = prompt_tokens.input_ids.shape[1]
-                output_text = self.llm_tokenizer.batch_decode(
-                    outputs[:, prompt_length:], skip_special_tokens=True
-                )
-            else:
-                inputs_embeds = self.llm_model.get_input_embeddings()(
-                    prompt_tokens.input_ids
-                )
-                inputs_embeds = torch.cat([inputs_llm, inputs_embeds], dim=1)
-                attention_mask = torch.cat(
-                    [atts_llm, prompt_tokens.attention_mask], dim=1
-                )
-
-                outputs = self.llm_model.generate(
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=attention_mask,
-                    do_sample=do_sample,
-                    top_p=top_p,
-                    temperature=temperature,
-                    num_beams=num_beams,
-                    max_length=max_length,
-                    min_length=min_length,
-                    pad_token_id=self.pad_token_id,
-                    eos_token_id=self.eos_token_id,
-                    repetition_penalty=repetition_penalty,
-                    length_penalty=length_penalty,
-                    num_return_sequences=num_captions,
-                    # use_cache=False,
-                )
-                # outputs[outputs == 0] = 2 # convert output id 0 to 2 (eos_token_id)
-                output_text = self.llm_tokenizer.batch_decode(
-                    outputs, skip_special_tokens=True
-                )
-            output_text = [text.strip() for text in output_text]
-            outputs.predictions = output_text
-            return outputs
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
