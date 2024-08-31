@@ -34,9 +34,10 @@ CUSTOM_SEQ_RE = re.compile(r"(<MOL_1D>)(.*?)(</MOL_1D>)")
 # literally in the source code in case we ever include it in the training data.
 
 
-def prepare_llm_prompt(
+def prepare_llm_input(
     mol_string,
     instruction,
+    task,
     mol_ph,
     mol_representation,
 ):
@@ -63,7 +64,27 @@ def prepare_llm_prompt(
     else:
         llm_prompt = instruction
 
-    llm_prompt = added_tokens.INSTRUCTION[0] + llm_prompt + added_tokens.INSTRUCTION[1]
+    llm_prompt += " Answer format: {label_start}.{label_end}."
+    if task in CLASSIFICATION_BENCHMARKS:
+        llm_prompt = llm_prompt.format(
+            label_start=added_tokens.BOOL[0], label_end=added_tokens.BOOL[1]
+        )
+    elif task in REGRESSION_BENCHMARKS:
+        llm_prompt = llm_prompt.format(
+            label_start=added_tokens.FLOAT[0], label_end=added_tokens.FLOAT[1]
+        )
+    elif task in MOL2TEXT_BENCHMARKS:
+        llm_prompt = llm_prompt.format(
+            label_start=added_tokens.DESCRIPTION[0],
+            label_end=added_tokens.DESCRIPTION[1],
+        )
+    elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS:
+        llm_prompt = llm_prompt.format(
+            label_start=added_tokens.MOL_1D[0], label_end=added_tokens.MOL_1D[1]
+        )
+    else:
+        raise NotImplementedError
+
     return llm_prompt
 
 
@@ -80,7 +101,8 @@ class TrainCollater:
         model=None,
         truncation=True,
         padding="max_length",
-        mol_string_randomization_ratio=0,
+        fit_llm_input_convention=None,
+        fit_llm_output_convention=None,
     ):
         self.prompt_max_len = prompt_max_len
         self.label_max_len = label_max_len
@@ -93,14 +115,15 @@ class TrainCollater:
         self.model = model
         self.truncation = truncation
         self.padding = padding
-        self.mol_string_randomization_ratio = mol_string_randomization_ratio
+        self.fit_llm_input_convention = fit_llm_input_convention
+        self.fit_llm_output_convention = fit_llm_output_convention
 
     def __call__(self, batch):
         # in multi-task, perdevice  batch size should be multiple of 4: classificaiton, regression, translation, reaction
         if self.multi_task:
-            graphs, label_text, input_mol_string, tasks, instructions = zip(*batch)
+            graphs, label_texts, input_mol_string, tasks, instructions = zip(*batch)
         else:
-            graphs, label_text, input_mol_string, tasks = zip(*batch)
+            graphs, label_texts, input_mol_string, tasks = zip(*batch)
 
         if isinstance(graphs[0], PairData):
             reactant_batch = torch.tensor([], dtype=torch.int64)
@@ -128,14 +151,18 @@ class TrainCollater:
 
         ## deal with prompt
         input_texts = [
-            prepare_llm_prompt(
-                p,
-                instruction,
-                self.mol_ph,
-                self.mol_representation,
+            prepare_llm_input(
+                mol_string=mol_string,
+                instruction=instruction,
+                task=task.split("/")[0],
+                mol_ph=self.mol_ph,
+                mol_representation=self.mol_representation,
             )
-            for p, instruction in zip(input_mol_string, instructions)
+            for mol_string, instruction, task in zip(
+                input_mol_string, instructions, tasks
+            )
         ]
+        input_texts = [self.fit_llm_input_convention(text) for text in input_texts]
 
         self.tokenizer.padding_side = "left"
         input_tokens = self.tokenizer(
@@ -151,12 +178,15 @@ class TrainCollater:
         is_mol_token = input_tokens.input_ids == self.mol_token_id
         input_tokens["is_mol_token"] = is_mol_token
 
+        # concat eos token to the end of the label
+        label_texts = [self.fit_llm_output_convention(label) for label in label_texts]
+
         self.tokenizer.padding_side = "right"
         label_tokens = self.tokenizer(
-            text=label_text,
+            text=label_texts,
             truncation=True if self.truncation else False,
             padding=self.padding,
-            add_special_tokens=True,
+            add_special_tokens=False,
             max_length=self.label_max_len,
             return_tensors="pt",
             return_attention_mask=True,
@@ -177,6 +207,8 @@ class InferenceCollater:
         model=None,
         truncation=True,
         padding="max_length",
+        fit_llm_input_convention=None,
+        fit_llm_output_convention=None,
     ):
         self.prompt_max_len = prompt_max_len
         self.label_max_len = label_max_len
@@ -189,6 +221,8 @@ class InferenceCollater:
         self.model = model
         self.truncation = truncation
         self.padding = padding
+        self.fit_llm_input_convention = fit_llm_input_convention
+        self.fit_llm_output_convention = fit_llm_output_convention
 
     def __call__(self, batch):
         if self.multi_task:
@@ -221,8 +255,13 @@ class InferenceCollater:
             graphs.product_batch = product_batch
 
         input_texts = [
-            prepare_llm_prompt(p, instruction, self.mol_ph, self.mol_representation)
-            for p, instruction in zip(input_mol_string, instructions)
+            prepare_llm_input(
+                mol_string=mol_string,
+                instruction=instruction,
+                mol_ph=self.mol_ph,
+                mol_representation=self.mol_representation,
+            )
+            for mol_string, instruction in zip(input_mol_string, instructions)
         ]
 
         ## deal with prompt
@@ -303,6 +342,8 @@ class Stage3DM(LightningDataModule):
         num_workers: int = 0,
         root: str = "data/",
         tokenizer=None,
+        fit_llm_input_convention=None,
+        fit_llm_output_convention=None,
         args=None,
     ):
         super().__init__()
@@ -314,6 +355,8 @@ class Stage3DM(LightningDataModule):
         self.debug = args.debug
         self.args = args
         self.root = root
+        self.fit_llm_input_convention = fit_llm_input_convention
+        self.fit_llm_output_convention = fit_llm_output_convention
         self.task_categories = [
             "classification",
             "regression",
@@ -334,6 +377,20 @@ class Stage3DM(LightningDataModule):
             "reaction": args.per_device_inference_batch_size_rxn,
             "reagent": args.per_device_inference_batch_size_rea,
             "translation": args.per_device_inference_batch_size_trn,
+        }
+        self.label_max_lens = {
+            "classification": 6,
+            "regression": 12,
+            "reaction": args.label_max_len,
+            "reagent": args.label_max_len,
+            "translation": args.label_max_len,
+        }
+        self.prompt_max_lens = {
+            "classification": args.prompt_max_len - 6,
+            "regression": args.prompt_max_len - 12,
+            "reaction": args.prompt_max_len,
+            "reagent": args.prompt_max_len + args.num_query_token,
+            "translation": args.prompt_max_len,
         }
 
         if root == "multi_task":
@@ -376,16 +433,6 @@ class Stage3DM(LightningDataModule):
     def train_dataloader(self):
         loader = []
         for task in self.concat_datasets.keys():
-            if task in ["classification", "regression"]:
-                label_max_len = 9
-                prompt_max_len = self.prompt_max_len - 9
-            elif task in ["reagent"]:
-                label_max_len = self.label_max_len
-                prompt_max_len = self.prompt_max_len + self.args.num_query_token
-            else:
-                label_max_len = self.label_max_len
-                prompt_max_len = self.prompt_max_len
-
             loader.append(
                 DataLoader(
                     self.concat_datasets[task]["train"],
@@ -397,8 +444,8 @@ class Stage3DM(LightningDataModule):
                     persistent_workers=True,
                     collate_fn=TrainCollater(
                         tokenizer=self.tokenizer,
-                        prompt_max_len=prompt_max_len,
-                        label_max_len=label_max_len,
+                        prompt_max_len=self.prompt_max_lens[task],
+                        label_max_len=self.label_max_lens[task],
                         mol_ph=self.mol_ph_token,
                         mol_token_id=self.mol_token_id,
                         mol_representation=self.mol_representation,
@@ -406,7 +453,8 @@ class Stage3DM(LightningDataModule):
                         model=self.args.llm_model,
                         truncation=self.args.truncation,
                         padding=self.args.padding,
-                        mol_string_randomization_ratio=self.args.mol_string_randomization_ratio,
+                        fit_llm_input_convention=self.fit_llm_input_convention,
+                        fit_llm_output_convention=self.fit_llm_output_convention,
                     ),
                 )
             )
@@ -445,6 +493,8 @@ class Stage3DM(LightningDataModule):
                         model=self.args.llm_model,
                         truncation=self.args.truncation,
                         padding=self.args.padding,
+                        fit_llm_input_convention=self.fit_llm_input_convention,
+                        fit_llm_output_convention=self.fit_llm_output_convention,
                     ),
                 )
             )
@@ -483,6 +533,8 @@ class Stage3DM(LightningDataModule):
                         model=self.args.llm_model,
                         truncation=self.args.truncation,
                         padding=self.args.padding,
+                        fit_llm_input_convention=self.fit_llm_input_convention,
+                        fit_llm_output_convention=self.fit_llm_output_convention,
                     ),
                 )
             )
