@@ -253,15 +253,17 @@ class InferenceCollater:
         if isinstance(graphs, PairData):
             graphs.reactant_batch = reactant_batch
             graphs.product_batch = product_batch
-
         input_texts = [
             prepare_llm_input(
                 mol_string=mol_string,
                 instruction=instruction,
+                task=task.split("/")[0],
                 mol_ph=self.mol_ph,
                 mol_representation=self.mol_representation,
             )
-            for mol_string, instruction in zip(input_mol_string, instructions)
+            for mol_string, instruction, task in zip(
+                input_mol_string, instructions, tasks
+            )
         ]
 
         ## deal with prompt
