@@ -143,6 +143,31 @@ class Blip2Base(BaseModel):
 
         return msg
 
+    def set_params_requires_grads(cls, model, keyword, grad=True, IsPrint=True):
+        names = []
+        for name, param in model.named_parameters():
+            if keyword in name:
+                param.requires_grad = grad
+                names.append(name)
+        if IsPrint:
+            for n in names:
+                print(f"{n} set to requires_grad: {grad}")
+
+    def check_grads(cls, model, keyword):
+        names = []
+        requires_grad = []
+        for name, param in model.named_parameters():
+            if keyword in name:
+                names.append(name)
+                requires_grad.append(param.requires_grad)
+                print(name, param.requires_grad)
+        if len(requires_grad) == 0:
+            print("No param with keyword found")
+        else:
+            print("=====================================")
+            print("all params with keyword requires grad:", all(requires_grad))
+            print("=====================================")
+
 
 def disabled_train(self, mode=True):
     """Overwrite model.train with this function to make sure train/eval mode
