@@ -5,7 +5,7 @@ import warnings
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, strategies
 from pytorch_lightning.callbacks import Callback, ModelCheckpoint
-from pytorch_lightning.loggers import CSVLogger, NeptuneLogger, TensorBoardLogger
+from pytorch_lightning.loggers import CSVLogger, WandbLogger, TensorBoardLogger
 from data_provider.stage3_dm import (
     Stage3DM,
     CLASSIFICATION_BENCHMARKS,
@@ -17,6 +17,7 @@ from data_provider.stage3_dm import (
 from data_provider.stage2_chebi_dm import Stage2CheBIDM
 from model.blip2_stage3 import Blip2Stage3
 import json
+import ast
 
 # instruction-tuning for benchmark datasets
 
@@ -65,24 +66,17 @@ def main(args):
 
     print("total params:", sum(p.numel() for p in model.parameters()))
 
-    if args.llm_model.find("galactica") >= 0 or args.llm_model.find("t5") >= 0:
-        tokenizer = model.blip2model.llm_tokenizer
-    elif args.llm_model.find("llama") >= 0 or args.llm_model.find("vicuna") >= 0:
-        tokenizer = model.blip2model.llm_tokenizer
-    else:
-        raise NotImplementedError
-    # data
-    import ast
-
     devices = ast.literal_eval(args.devices)
     num_devices = len(devices) if not isinstance(devices, int) else 1
 
     dm = Stage3DM(
-        args.mode,
-        args.num_workers,
-        args.root,
-        tokenizer,
-        args,
+        mode=args.mode,
+        num_workers=args.num_workers,
+        root=args.root,
+        tokenizer=model.blip2model.llm_tokenizer,
+        fit_llm_input_convention=model.blip2model.fit_llm_input_convention,
+        fit_llm_output_convention=model.blip2model.fit_llm_output_convention,
+        args=args,
     )
 
     # callbacks to save model parameters
@@ -120,10 +114,10 @@ def main(args):
     # logger setting
     logger = CSVLogger(save_dir=os.path.join(args.logging_dir, args.filename))
 
-    neptune_logger = NeptuneLogger(
-        api_key=os.environ.get("NEPTUNE_API_TOKEN"),
-        project=args.neptune_project,
-        log_model_checkpoints=False,
+    wandb_logger = WandbLogger(
+        name=args.filename,
+        project=args.wandb_project,
+        entity=args.wandb_entity,
     )
 
     tb_logger = TensorBoardLogger(
@@ -137,7 +131,7 @@ def main(args):
         "precision": args.precision,
         "callbacks": callbacks,
         "strategy": strategy,
-        "logger": [logger, tb_logger],
+        "logger": [logger, wandb_logger, tb_logger],
     }
     if args.val_check_interval > 0:
         trainer_args["val_check_interval"] = args.val_check_interval
@@ -258,6 +252,8 @@ def get_args():
     parser.add_argument("--skip_sanity_check", action="store_true", default=False)
     parser.add_argument("--logging_dir", type=str, default="MolCA/all_checkpoints/")
     parser.add_argument("--llava_style", type=int, default=0)
+    parser.add_argument("--wandb_project", type=str, default="mol-llm")
+    parser.add_argument("--wandb_entity", type=str, default="chless")
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)
