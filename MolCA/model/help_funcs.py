@@ -50,10 +50,14 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
             pred = None
             pred_tokens = None
 
-    bleu2 = corpus_bleu(references, hypotheses, weights=(0.5, 0.5))
-    bleu4 = corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25))
-    bleu2 *= 100
-    bleu4 *= 100
+    if hypotheses:
+        bleu2 = corpus_bleu(references, hypotheses, weights=(0.5, 0.5))
+        bleu4 = corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25))
+        bleu2 *= 100
+        bleu4 *= 100
+    else:
+        bleu2 = 0
+        bleu4 = 0
 
     _meteor_score = np.mean(meteor_scores)
     _meteor_score *= 100
@@ -194,14 +198,22 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
     morgan_sim = np.mean(morgan_sims)
     exact_match_ratio = np.mean(exact_matches)
     levenshtein_score = np.mean(levs)
-    bleu_smiles = corpus_bleu(
-        ref_smiles_list, pred_smiles_list, weights=(0.25, 0.25, 0.25, 0.25)
-    )
-    bleu_smiles *= 100
-    bleu_selfies = corpus_bleu(
-        ref_selfies_list, pred_selfies_list, weights=(0.25, 0.25, 0.25, 0.25)
-    )
-    bleu_selfies *= 100
+
+    if pred_smiles_list:
+        bleu_smiles = corpus_bleu(
+            ref_smiles_list, pred_smiles_list, weights=(0.25, 0.25, 0.25, 0.25)
+        )
+        bleu_smiles *= 100
+    else:
+        bleu_smiles = 0
+
+    if pred_selfies_list:
+        bleu_selfies = corpus_bleu(
+            ref_selfies_list, pred_selfies_list, weights=(0.25, 0.25, 0.25, 0.25)
+        )
+        bleu_selfies *= 100
+    else:
+        bleu_selfies = 0
 
     results = {
         "validity_ratio": validity_ratio,
