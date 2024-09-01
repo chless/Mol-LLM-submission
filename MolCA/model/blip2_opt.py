@@ -140,7 +140,7 @@ class Blip2OPT(Blip2Base):
 
         if self.args.llava_style:
             self.set_params_requires_grads(
-                model=self.llm_model, keyword="lora", grad=False
+                model=self.llm_model, keyword="lora", grad=False, IsPrint=False
             )
 
         if "graph" in self.args.mol_representation:
@@ -202,8 +202,12 @@ class Blip2OPT(Blip2Base):
                     llm_model, torch_dtype=torch.float16
                 )
 
-    def add_necessary_tokens(self):
+    def add_pad_token(self):
+        # pad toekn for galactica is "<pad>""
         self.llm_tokenizer.add_special_tokens({"pad_token": "<pad>"})
+
+    def add_necessary_tokens(self):
+        self.add_pad_token()
 
         if self.args.add_selfies_tokens:
             # Read txt from selfies_token_path
@@ -334,8 +338,7 @@ class Blip2OPT(Blip2Base):
             return_dict=True,
             labels=targets,
         )
-
-        results = dict()
+        """
         if self.args.apply_reg_order_scale and task == "regression":
             logits = outputs.logits
             # calculate ce loss using logits and targets
@@ -356,8 +359,11 @@ class Blip2OPT(Blip2Base):
 
         else:
             loss = outputs.loss
+        """
+        loss = outputs.loss
 
-        results.update({"loss": loss})
+        results = {"loss": loss}
+        results.update({"instance_loss": outputs.instance_loss})
         return results
 
     def inject_graph_embeds2prompt_embeds(self, prompt_embeds, prompt_tokens, graphs):
@@ -499,7 +505,7 @@ class Blip2OPT(Blip2Base):
 
         outputs.logits = logits_stacked
         output_text = self.llm_tokenizer.batch_decode(
-            outputs.sequences, skip_special_tokens=True
+            outputs.sequences, skip_special_tokens=False
         )
 
         output_text = [text.strip() for text in output_text]
