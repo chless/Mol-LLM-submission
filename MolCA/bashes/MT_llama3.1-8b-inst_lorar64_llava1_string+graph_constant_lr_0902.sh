@@ -23,9 +23,9 @@ python3 MolCA/stage3.py \
 --second_stage_start_step 10000 \
 --num_beam 1 \
 --raw_data_root MolCA/data/multi_task_dataset_0813_selfies \
---gen_max_len 256 \
---prompt_max_len 256 \
---label_max_len 256 \
+--gen_max_len 290 \
+--prompt_max_len 290 \
+--label_max_len 290 \
 --logging_dir MolCA/all_checkpoints \
 --graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
 --resize 2400 \
