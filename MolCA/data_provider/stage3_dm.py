@@ -64,31 +64,30 @@ def prepare_llm_input(
     else:
         llm_prompt = instruction
 
-    llm_prompt += " Answer format: {label_start}.{label_end}."
+    llm_prompt += " Answer format: {label_start}...{label_end}."
     if task in CLASSIFICATION_BENCHMARKS:
-        llm_prompt = llm_prompt.format(
-            label_start=added_tokens.BOOL[0], label_end=added_tokens.BOOL[1]
-        )
+        llm_prompt = llm_prompt.replace("{label_start}", added_tokens.BOOL[0])
+        llm_prompt = llm_prompt.replace("{label_end}", added_tokens.BOOL[1])
     elif task in REGRESSION_BENCHMARKS:
-        llm_prompt = llm_prompt.format(
-            label_start=added_tokens.FLOAT[0], label_end=added_tokens.FLOAT[1]
-        )
+        llm_prompt = llm_prompt.replace("{label_start}", added_tokens.FLOAT[0])
+        llm_prompt = llm_prompt.replace("{label_end}", added_tokens.FLOAT[1])
     elif task in MOL2TEXT_BENCHMARKS:
-        llm_prompt = llm_prompt.format(
-            label_start=added_tokens.DESCRIPTION[0],
-            label_end=added_tokens.DESCRIPTION[1],
-        )
+        llm_prompt = llm_prompt.replace("{label_start}", added_tokens.DESCRIPTION[0])
+        llm_prompt = llm_prompt.replace("{label_end}", added_tokens.DESCRIPTION[1])
     elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS:
-        llm_prompt = llm_prompt.format(
-            label_start=added_tokens.MOL_1D[0], label_end=added_tokens.MOL_1D[1]
-        )
+        try:
+            llm_prompt = llm_prompt.replace("{label_start}", added_tokens.MOL_1D[0])
+            llm_prompt = llm_prompt.replace("{label_end}", added_tokens.MOL_1D[1])
+        except:
+            print(llm_prompt)
+            raise NotImplementedError
     else:
         raise NotImplementedError
 
     return llm_prompt
 
 
-class TrainCollater:
+class DataCollater:
     def __init__(
         self,
         tokenizer,
@@ -97,7 +96,6 @@ class TrainCollater:
         mol_ph,
         mol_token_id,
         mol_representation=True,
-        multi_task=False,
         model=None,
         truncation=True,
         padding="max_length",
@@ -111,19 +109,14 @@ class TrainCollater:
         self.mol_ph = mol_ph
         self.mol_token_id = mol_token_id
         self.mol_representation = mol_representation
-        self.multi_task = multi_task
         self.model = model
-        self.truncation = truncation
+        self.truncation = bool(truncation)
         self.padding = padding
         self.fit_llm_input_convention = fit_llm_input_convention
         self.fit_llm_output_convention = fit_llm_output_convention
 
     def __call__(self, batch):
-        # in multi-task, perdevice  batch size should be multiple of 4: classificaiton, regression, translation, reaction
-        if self.multi_task:
-            graphs, label_texts, input_mol_string, tasks, instructions = zip(*batch)
-        else:
-            graphs, label_texts, input_mol_string, tasks = zip(*batch)
+        graphs, label_texts, input_mol_string, tasks, instructions = zip(*batch)
 
         if isinstance(graphs[0], PairData):
             reactant_batch = torch.tensor([], dtype=torch.int64)
@@ -169,7 +162,7 @@ class TrainCollater:
             text=input_texts,
             truncation=True if self.truncation else False,
             padding=self.padding,
-            add_special_tokens=True,
+            add_special_tokens=False,
             max_length=self.prompt_max_len,
             return_tensors="pt",
             return_attention_mask=True,
@@ -184,113 +177,13 @@ class TrainCollater:
         self.tokenizer.padding_side = "right"
         label_tokens = self.tokenizer(
             text=label_texts,
-            truncation=True if self.truncation else False,
+            truncation=self.truncation,
             padding=self.padding,
             add_special_tokens=False,
             max_length=self.label_max_len,
             return_tensors="pt",
             return_attention_mask=True,
         )
-        return graphs, input_tokens, label_tokens, tasks
-
-
-class InferenceCollater:
-    def __init__(
-        self,
-        tokenizer,
-        prompt_max_len,
-        label_max_len,
-        mol_ph,
-        mol_token_id,
-        mol_representation=True,
-        multi_task=False,
-        model=None,
-        truncation=True,
-        padding="max_length",
-        fit_llm_input_convention=None,
-        fit_llm_output_convention=None,
-    ):
-        self.prompt_max_len = prompt_max_len
-        self.label_max_len = label_max_len
-        self.tokenizer = tokenizer
-        self.collater = Collater([], [])
-        self.mol_ph = mol_ph
-        self.mol_token_id = mol_token_id
-        self.mol_representation = mol_representation
-        self.multi_task = multi_task
-        self.model = model
-        self.truncation = truncation
-        self.padding = padding
-        self.fit_llm_input_convention = fit_llm_input_convention
-        self.fit_llm_output_convention = fit_llm_output_convention
-
-    def __call__(self, batch):
-        if self.multi_task:
-            graphs, label_texts, input_mol_string, tasks, instructions = zip(*batch)
-        else:
-            graphs, label_texts, input_mol_string, tasks = zip(*batch)
-
-        if isinstance(graphs[0], PairData):
-            reactant_batch = torch.tensor([], dtype=torch.int64)
-            product_batch = torch.tensor([], dtype=torch.int64)
-            for i in range(len(graphs)):
-                reactant_num_nodes = graphs[i].reactant_x.size(0)
-                reactant_node_indexing_tensor = torch.tensor(
-                    [i] * reactant_num_nodes, dtype=torch.int64
-                )
-                reactant_batch = torch.cat(
-                    (reactant_batch, reactant_node_indexing_tensor), 0
-                )
-                product_num_nodes = graphs[i].product_x.size(0)
-                product_node_indexing_tensor = torch.tensor(
-                    [i] * product_num_nodes, dtype=torch.int64
-                )
-                product_batch = torch.cat(
-                    (product_batch, product_node_indexing_tensor), 0
-                )
-
-        graphs = self.collater(graphs)
-        if isinstance(graphs, PairData):
-            graphs.reactant_batch = reactant_batch
-            graphs.product_batch = product_batch
-        input_texts = [
-            prepare_llm_input(
-                mol_string=mol_string,
-                instruction=instruction,
-                task=task.split("/")[0],
-                mol_ph=self.mol_ph,
-                mol_representation=self.mol_representation,
-            )
-            for mol_string, instruction, task in zip(
-                input_mol_string, instructions, tasks
-            )
-        ]
-
-        ## deal with prompt
-        self.tokenizer.padding_side = "left"
-        input_tokens = self.tokenizer(
-            input_texts,
-            return_tensors="pt",
-            add_special_tokens=True,
-            max_length=self.prompt_max_len,
-            padding=self.padding,
-            truncation=True if self.truncation else False,
-            return_attention_mask=True,
-        )
-
-        self.tokenizer.padding_side = "right"
-        label_tokens = self.tokenizer(
-            text=label_texts,
-            return_tensors="pt",
-            add_special_tokens=True,
-            max_length=self.label_max_len,
-            truncation=True if self.truncation else False,
-            padding=self.padding,
-            return_attention_mask=True,
-        )
-
-        is_mol_token = input_tokens.input_ids == self.mol_token_id
-        input_tokens["is_mol_token"] = is_mol_token
         return graphs, input_tokens, label_tokens, tasks
 
 
@@ -444,14 +337,13 @@ class Stage3DM(LightningDataModule):
                     pin_memory=True,
                     drop_last=True,
                     persistent_workers=True,
-                    collate_fn=TrainCollater(
+                    collate_fn=DataCollater(
                         tokenizer=self.tokenizer,
                         prompt_max_len=self.prompt_max_lens[task],
                         label_max_len=self.label_max_lens[task],
                         mol_ph=self.mol_ph_token,
                         mol_token_id=self.mol_token_id,
                         mol_representation=self.mol_representation,
-                        multi_task=True,
                         model=self.args.llm_model,
                         truncation=self.args.truncation,
                         padding=self.args.padding,
@@ -484,14 +376,13 @@ class Stage3DM(LightningDataModule):
                     pin_memory=True,
                     drop_last=False,
                     persistent_workers=True,
-                    collate_fn=InferenceCollater(
+                    collate_fn=DataCollater(
                         tokenizer=self.tokenizer,
                         prompt_max_len=prompt_max_len,
                         label_max_len=label_max_len,
                         mol_ph=self.mol_ph_token,
                         mol_token_id=self.mol_token_id,
                         mol_representation=self.mol_representation,
-                        multi_task=True,
                         model=self.args.llm_model,
                         truncation=self.args.truncation,
                         padding=self.args.padding,
@@ -524,14 +415,13 @@ class Stage3DM(LightningDataModule):
                     pin_memory=True,
                     drop_last=False,
                     persistent_workers=True,
-                    collate_fn=InferenceCollater(
+                    collate_fn=DataCollater(
                         tokenizer=self.tokenizer,
                         prompt_max_len=prompt_max_len,
                         label_max_len=label_max_len,
                         mol_ph=self.mol_ph_token,
                         mol_token_id=self.mol_token_id,
                         mol_representation=self.mol_representation,
-                        multi_task=True,
                         model=self.args.llm_model,
                         truncation=self.args.truncation,
                         padding=self.args.padding,
