@@ -76,6 +76,7 @@ class Blip2Stage3(pl.LightningModule):
         self.min_len = args.min_len
         self.reaction_weight = args.reaction_weight
         self.llm_tune = args.llm_tune
+        self.on_second_stage = False
         if args.llm_model.find("galactica") >= 0:
             self.blip2model = Blip2OPT(
                 args.bert_name,
@@ -233,7 +234,24 @@ class Blip2Stage3(pl.LightningModule):
     def on_validation_epoch_end(self) -> None:
         self.on_evaluation_epoch_end(mode="val")
 
+    def apply_separated_stage(self):
+        if (
+            self.trainer.global_step >= self.args.second_stage_start_step
+            and not self.on_second_stage
+        ):
+            self.blip2model.set_params_requires_grads(
+                model=self.blip2model.llm_model,
+                keyword="lora",
+                grad=True,
+                IsPrint=False,
+            )
+            self.on_second_stage = True
+            print("set lora weights trainable")
+
     def training_step(self, batch, batch_idx):
+        if self.args.llava_style:
+            self.apply_separated_stage()
+
         if self.scheduler:
             self.scheduler.step(self.trainer.current_epoch, self.trainer.global_step)
 
@@ -248,46 +266,87 @@ class Blip2Stage3(pl.LightningModule):
             }
             total_batch_size = sum(batch_sizes)
             ##============== Overall Loss ===================##
-            (
-                classification_batch,
-                regression_batch,
-                reaction_batch,
-                reagent_batch,
-                translation_batch,
-            ) = batch
-            losses = {
-                "classification": self.blip2model(classification_batch[:-1]),
-                "regression": self.blip2model(regression_batch[:-1], task="regression"),
-                "reaction": self.blip2model(reaction_batch[:-1]),
-                "reagent": self.blip2model(reagent_batch[:-1]),
-                "translation": self.blip2model(translation_batch[:-1]),
+            batches = {
+                "classification": batch[0],
+                "regression": batch[1],
+                "reaction": batch[2],
+                "reagent": batch[3],
+                "translation": batch[4],
+            }
+
+            outputs = {
+                "classification": self.blip2model(batches["classification"][:-1]),
+                "regression": self.blip2model(
+                    batches["regression"][:-1], task="regression"
+                ),
+                "reaction": self.blip2model(batches["reaction"][:-1]),
+                "reagent": self.blip2model(batches["reagent"][:-1]),
+                "translation": self.blip2model(batches["translation"][:-1]),
             }
             self.log(
                 "lr",
                 self.trainer.optimizers[0].param_groups[0]["lr"],
                 batch_size=total_batch_size,
-                sync_dist=True,
+                sync_dist=False,
             )
-            for key, loss in losses.items():
+            for key in outputs.keys():
                 self.log(
-                    f"{key}_loss",
-                    float(loss["loss"]),
+                    f"{key}/total_loss",
+                    float(outputs[key]["loss"]),
                     batch_size=batch_size_dict[key],
-                    sync_dist=True,
+                    sync_dist=False,
                 )
-            # TODO: refactor hardcoded loss scale
+
+                task_subtask_pairs = batches[key][3]
+                instance_losses = outputs[key]["instance_loss"]
+
+                for task_subtask_pair in task_subtask_pairs:
+                    if task_subtask_pair not in self.dataset_losses.keys():
+                        self.dataset_losses[task_subtask_pair] = {
+                            "avg_loss": 0,
+                            "total_samples": 0,
+                            "added_samples": 0,
+                        }
+
+                for i in range(instance_losses.shape[0]):
+                    task_subtask_pair = task_subtask_pairs[i]
+                    # calculate average loss
+                    self.dataset_losses[task_subtask_pair][
+                        "avg_loss"
+                    ] *= self.dataset_losses[task_subtask_pair]["total_samples"] / (
+                        self.dataset_losses[task_subtask_pair]["total_samples"] + 1
+                    )
+                    self.dataset_losses[task_subtask_pair][
+                        "avg_loss"
+                    ] += instance_losses[i] / (
+                        self.dataset_losses[task_subtask_pair]["total_samples"] + 1
+                    )
+
+                    self.dataset_losses[task_subtask_pair]["total_samples"] += 1
+                    self.dataset_losses[task_subtask_pair]["added_samples"] += 1
+
+            for dataset in self.dataset_losses.keys():
+                self.log(
+                    f"{dataset}/avg_loss",
+                    self.dataset_losses[dataset]["avg_loss"],
+                    batch_size=self.dataset_losses[dataset]["added_samples"],
+                    sync_dist=False,
+                )
+                self.dataset_losses[dataset]["added_samples"] = 0
+
             total_loss = (
-                losses["classification"]["loss"] * batch_sizes[0]
-                + losses["regression"]["loss"] * batch_sizes[1]
-                + losses["reaction"]["loss"] * batch_sizes[2]
-                + losses["reagent"]["loss"] * batch_sizes[3]
-                + losses["translation"]["loss"] * batch_sizes[4]
+                outputs["classification"]["loss"] * batch_sizes[0]
+                + outputs["regression"]["loss"] * batch_sizes[1]
+                + outputs["reaction"]["loss"] * batch_sizes[2]
+                + outputs["reagent"]["loss"] * batch_sizes[3]
+                + outputs["translation"]["loss"] * batch_sizes[4]
             ) / sum(batch_sizes)
+
             self.log(
                 "total_loss",
                 float(total_loss),
                 batch_size=total_batch_size,
-                sync_dist=True,
+                sync_dist=False,
             )
 
             return total_loss
@@ -295,28 +354,28 @@ class Blip2Stage3(pl.LightningModule):
             batch_size = batch[0][1].input_ids.size(0)
             ##============== Overall Loss ===================##
 
-            loss = self.blip2model(batch[0][:-1])
+            outputs = self.blip2model(batch[0][:-1])
             self.log(
                 "lr",
                 self.trainer.optimizers[0].param_groups[0]["lr"],
                 batch_size=batch_size,
-                sync_dist=True,
+                sync_dist=False,
             )
             key = self.args.root
 
             self.log(
                 f"{key}_loss",
-                float(loss["loss"]),
+                float(outputs["loss"]),
                 batch_size=batch_size,
-                sync_dist=True,
+                sync_dist=False,
             )
-            total_loss = loss["loss"]
+            total_loss = outputs["loss"]
             total_batch_size = batch_size
             self.log(
                 "total_loss",
                 float(total_loss),
                 batch_size=total_batch_size,
-                sync_dist=True,
+                sync_dist=False,
             )
 
             return total_loss
@@ -336,16 +395,7 @@ class Blip2Stage3(pl.LightningModule):
             sync_dist=False,
         )
 
-    def on_train_epoch_end(self) -> None:
-        if self.args.llava_style:
-            current_epoch = self.trainer.current_epoch
-            if current_epoch >= self.args.second_stage_start_epoch:
-                for name, param in self.blip2model.llm_model.named_parameters():
-                    name_split = name.split(".")
-                    if len(name_split) > 3:
-                        if name_split[-3] == "lora_A" or name_split[-3] == "lora_B":
-                            param.requires_grad = True
-                print("set lora_A and lora_B to True for next epoch")
+        self.dataset_losses = {}
 
     def on_evaluation_epoch_start(self):
         self.list_predictions = []
@@ -356,22 +406,9 @@ class Blip2Stage3(pl.LightningModule):
         self.total_avg_loss = 0.0
         self.total_seen_data_size = 0
         self.batch_losses = []
-        self.dict_task_losses = {}
+        self.eval_dataset_losses = {}
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
-        """
-        if dataloader_idx == 0:
-            task = "classification"
-        elif dataloader_idx == 1:
-            task = "regression"
-        elif dataloader_idx == 2:
-            task = "reaction"
-        elif dataloader_idx == 3:
-            task = "reagent"
-        elif dataloader_idx == 4:
-            task = "translation"
-        """
-        # TODO: figure out why batch composition is different from training_step
         graphs, prompt_tokens, texts, tasks = batch
         if all(task.split("/")[0] in CLASSIFICATION_BENCHMARKS for task in tasks):
             task = "classification"
@@ -400,7 +437,7 @@ class Blip2Stage3(pl.LightningModule):
         predictions = outputs.predictions
         targets = self.blip2model.llm_tokenizer.batch_decode(texts.input_ids)
         prompts = self.blip2model.llm_tokenizer.batch_decode(
-            prompt_tokens.input_ids, skip_special_tokens=True
+            prompt_tokens.input_ids, skip_special_tokens=False
         )
         self.list_predictions.append(predictions)
         self.list_targets.append(targets)
@@ -411,23 +448,58 @@ class Blip2Stage3(pl.LightningModule):
         self.list_probs.append(probs)
 
         batch_size = texts.input_ids.shape[0]
-        loss = self.blip2model(batch[:-1])  # omit tasks when inputting to the model
+        outputs = self.blip2model(batch[:-1])  # omit tasks when inputting to the model
         ##============== Overall Loss ===================##
-        for key, loss_item in loss.items():
-            self.log(
-                f"{mode}/{task}",
-                float(loss_item),
-                batch_size=batch_size,
-                sync_dist=True,
-            )
+
+        self.log(
+            f"{mode}/{task}/total_loss",
+            float(outputs["loss"]),
+            batch_size=batch_size,
+            sync_dist=True,
+        )
 
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
         self.total_avg_loss += (
-            loss["loss"].item() - self.total_avg_loss
+            outputs["loss"].item() - self.total_avg_loss
         ) * new_data_weight
         self.total_seen_data_size += batch_size
 
-        return loss["loss"]
+        task_subtask_pairs = tasks
+        instance_losses = outputs["instance_loss"]
+
+        for task_subtask_pair in task_subtask_pairs:
+            if task_subtask_pair not in self.eval_dataset_losses.keys():
+                self.eval_dataset_losses[task_subtask_pair] = {
+                    "avg_loss": 0,
+                    "total_samples": 0,
+                    "added_samples": 0,
+                }
+
+        for i in range(instance_losses.shape[0]):
+            task_subtask_pair = task_subtask_pairs[i]
+            # calculate average loss
+            self.eval_dataset_losses[task_subtask_pair][
+                "avg_loss"
+            ] *= self.eval_dataset_losses[task_subtask_pair]["total_samples"] / (
+                self.eval_dataset_losses[task_subtask_pair]["total_samples"] + 1
+            )
+            self.eval_dataset_losses[task_subtask_pair]["avg_loss"] += instance_losses[
+                i
+            ] / (self.eval_dataset_losses[task_subtask_pair]["total_samples"] + 1)
+
+            self.eval_dataset_losses[task_subtask_pair]["total_samples"] += 1
+            self.eval_dataset_losses[task_subtask_pair]["added_samples"] += 1
+
+        for dataset in self.eval_dataset_losses.keys():
+            self.log(
+                f"{mode}/{dataset}/avg_loss",
+                self.eval_dataset_losses[dataset]["avg_loss"],
+                batch_size=self.eval_dataset_losses[dataset]["added_samples"],
+                sync_dist=False,
+            )
+            self.eval_dataset_losses[dataset]["added_samples"] = 0
+
+        return outputs["loss"]
 
     def on_evaluation_epoch_end(self, mode="val") -> None:
         print("on_evaluation_epoch_end start")
