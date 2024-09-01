@@ -5,7 +5,7 @@ python3 MolCA/stage3.py \
 --devices $gpus \
 --root translation \
 --mode test \
---opt_model facebook/galactica-1.3b \
+--llm_model facebook/galactica-1.3b \
 --llm_tune lora \
 --lora_r 64 \
 --per_device_batch_size_trn 28 \

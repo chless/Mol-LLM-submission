@@ -7,7 +7,7 @@ python3 MolCA/stage3.py \
 --devices $gpus \
 --root multi_task \
 --mode ft \
---opt_model 'facebook/galactica-1.3b' \
+--llm_model 'facebook/galactica-1.3b' \
 --tune_gnn \
 --llm_tune lora \
 --batch_size $batch_size \

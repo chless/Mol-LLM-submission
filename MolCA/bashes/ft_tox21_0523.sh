@@ -6,7 +6,7 @@ python3 MolCA/stage3.py \
 --devices $gpus \
 --filename $filename \
 --stage2_path 'MolCA/all_checkpoints/MolCA/stage2.ckpt' \
---opt_model 'facebook/galactica-1.3b' \
+--llm_model 'facebook/galactica-1.3b' \
 --max_epochs 20 \
 --mode ft \
 --prompt '[START_I_SMILES]{}[END_I_SMILES].' \

@@ -5,7 +5,7 @@ python3 MolCA/stage3.py \
 --devices $gpus \
 --root multi_task \
 --mode ft \
---opt_model meta-llama/Meta-Llama-3.1-8B-Instruct \
+--llm_model meta-llama/Meta-Llama-3.1-8B-Instruct \
 --llm_tune lora \
 --lora_r 64 \
 --per_device_batch_size_cls 3 \
