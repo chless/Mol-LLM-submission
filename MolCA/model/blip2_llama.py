@@ -92,11 +92,15 @@ class Blip2Llama(Blip2OPT):
         )
 
     def set_llm_model(self, llm_model):
+        """
         self.llm_model = AutoModelForCausalLM.from_pretrained(
             llm_model, torch_dtype=torch.bfloat16
         )
-        # prompt_tokens = self.llm_tokenizer(self.prompt, return_tensors="pt")
-        # self.prompt_length = prompt_tokens.attention_mask.sum(1)
+        """
+        self.llm_model = LlamaForCausalLM_Custom.from_pretrained(
+            llm_model, torch_dtype=torch.bfloat16
+        )
+        return
 
     def fit_llm_input_convention(self, llm_prompt):
         # chemistry assistant
@@ -113,12 +117,19 @@ class Blip2Llama(Blip2OPT):
         formatted_prompt += "<|start_header_id|>assistant<|end_header_id|>"
         return formatted_prompt
 
+    def add_pad_token(self):
+        # pad toekn for llama-3.1-8B is "<|finetune_right_pad_id|>"
+        self.llm_tokenizer.add_special_tokens(
+            {"pad_token": "<|finetune_right_pad_id|>"}
+        )
+
 
 from transformers.models.llama.modeling_llama import (
     LlamaForCausalLM,
     LLAMA_INPUTS_DOCSTRING,
 )
 from transformers.utils.doc import add_start_docstrings_to_model_forward
+import torch.nn.functional as F
 
 
 class LlamaForCausalLM_Custom(LlamaForCausalLM):
@@ -216,21 +227,89 @@ class LlamaForCausalLM_Custom(LlamaForCausalLM):
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
+            loss_fct = CrossEntropyLoss()
+            """
             loss = loss_fct(shift_logits, shift_labels)
+            """
+
+            # custom forward to get not reduced loss
+            loss_fct_not_reduced = CrossEntropyLoss(reduction="none")
+            loss_not_reduced = loss_fct_not_reduced(shift_logits, shift_labels).view(
+                labels.size(0), -1
+            )
+            # normalization exclude default ignore index -100
+            instance_non_pad_tokens = torch.where(
+                shift_labels != -100,
+                torch.tensor(1).to(shift_labels.device),
+                torch.tensor(0).to(shift_labels.device),
+            ).view(labels.size(0), -1)
+            instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
+                dim=-1
+            ) / instance_non_pad_tokens.sum(dim=-1)
+            instance_loss = instance_loss.detach()
+            # cross entropy aggregate not row-wise, but sum of all instances
+            loss = (
+                loss_not_reduced * instance_non_pad_tokens
+            ).sum() / instance_non_pad_tokens.sum()
+            # check loss and loss_not_reduced consistency allowing 10^-2 tolerance
+            # assert loss_fct(shift_logits, shift_labels) - loss < 1e-2, f"loss: {loss}, loss_not_reduced: {loss_fct(shift_logits, shift_labels)}"
+        else:
+            instance_loss = None
 
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return CausalLMOutputWithPast_Custom(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            instance_loss=instance_loss,
         )
+
+
+from transformers.modeling_outputs import ModelOutput
+from dataclasses import dataclass
+
+
+@dataclass
+class CausalLMOutputWithPast_Custom(ModelOutput):
+    """
+    Base class for causal language model (or autoregressive) outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    instance_loss: Optional[torch.FloatTensor] = None
