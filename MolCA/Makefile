@@ -7,9 +7,11 @@ init-env:
 	pip install git+https://github.com/thunlp/OpenDelta.git
 	pip install rouge_score nltk ogb peft rdkit salesforce-lavis selfies deepchem Levenshtein evaluate
 	pip install -U transformers==4.40.1 pytorch-lightning
+	pip install transformers --upgrade
 	pip install deepspeed
 	pip install torch_geometric
 	pip install -U tensorboardX tensorboard
+	pip install wandb
 
 debug:
 	conda create -n ${ENV_NAME} python=3.10 -y
