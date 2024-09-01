@@ -18,7 +18,7 @@ python3 MolCA/stage3.py \
 --per_device_inference_batch_size_rxn 16 \
 --per_device_inference_batch_size_rea 16 \
 --per_device_inference_batch_size_trn 16 \
---val_check_interval 10000 \
+--val_check_interval 8000 \
 --max_epochs 100 \
 --second_stage_start_step 10000 \
 --num_beam 1 \
