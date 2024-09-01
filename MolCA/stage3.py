@@ -239,7 +239,7 @@ def get_args():
     parser.add_argument("--devices", type=str, default="0,1,2,3")
     parser.add_argument("--precision", type=str, default="bf16-mixed")
     parser.add_argument("--max_epochs", type=int, default=10)
-    parser.add_argument("--second_stage_start_epoch", type=int, default=5)
+    parser.add_argument("--second_stage_start_step", type=int, default=1000000)
     parser.add_argument("--max_steps", type=int, default=-1)
     parser.add_argument("--accumulate_grad_batches", type=int, default=1)
     parser.add_argument("--every_n_train_steps", type=int, default=1000)
