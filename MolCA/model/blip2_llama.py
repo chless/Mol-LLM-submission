@@ -70,7 +70,7 @@ class Blip2Llama(Blip2OPT):
         tune_gnn=False,
         num_query_token=32,
         cross_attention_freq=2,
-        llm_tune="freeze",
+        tune_llm="freeze",
         peft_dir="",
         llm_model="facebook/galactica-1.3b",
         prompt="",  # TODO: remove. currently LLM classes not use prompt from args.prompt
@@ -84,7 +84,7 @@ class Blip2Llama(Blip2OPT):
             tune_gnn=tune_gnn,
             num_query_token=num_query_token,
             cross_attention_freq=cross_attention_freq,
-            llm_tune=llm_tune,
+            tune_llm=tune_llm,
             peft_dir=peft_dir,
             llm_model=llm_model,
             prompt=prompt,

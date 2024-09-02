@@ -41,7 +41,7 @@ class Blip2T5(Blip2Base):
         tune_gnn=False,
         num_query_token=32,
         cross_attention_freq=2,
-        llm_tune="freeze",
+        tune_llm="freeze",
         peft_dir="",
         llm_model="facebook/galactica-1.3b",
         prompt="",
@@ -93,8 +93,8 @@ class Blip2T5(Blip2Base):
             len(self.llm_tokenizer)
         )  ## this will cause bug when full fine-tuning the opt model
 
-        self.llm_tune = llm_tune
-        if llm_tune == "lora":
+        self.tune_llm = tune_llm
+        if tune_llm == "lora":
             if peft_dir:
                 self.llm_model = PeftModel.from_pretrained(
                     self.llm_model, peft_dir, is_trainable=True
@@ -115,10 +115,10 @@ class Blip2T5(Blip2Base):
                 self.peft_config = peft_config
                 self.llm_model = get_peft_model(self.llm_model, peft_config)
                 self.llm_model.print_trainable_parameters()
-        elif llm_tune == "freeze":
+        elif tune_llm == "freeze":
             for name, param in self.llm_model.named_parameters():
                 param.requires_grad = False
-        elif llm_tune == "full":
+        elif tune_llm == "full":
             pass
         else:
             raise NotImplementedError()

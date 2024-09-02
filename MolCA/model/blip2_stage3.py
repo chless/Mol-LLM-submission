@@ -75,7 +75,7 @@ class Blip2Stage3(pl.LightningModule):
         self.gen_max_len = args.gen_max_len
         self.min_len = args.min_len
         self.reaction_weight = args.reaction_weight
-        self.llm_tune = args.llm_tune
+        self.tune_llm = args.tune_llm
         self.on_second_stage = False
         if args.llm_model.find("galactica") >= 0:
             self.blip2model = Blip2OPT(
@@ -86,7 +86,7 @@ class Blip2Stage3(pl.LightningModule):
                 args.tune_gnn,
                 args.num_query_token,
                 args.cross_attention_freq,
-                args.llm_tune,
+                args.tune_llm,
                 args.peft_dir,
                 args.llm_model,
                 args.prompt,
@@ -101,7 +101,7 @@ class Blip2Stage3(pl.LightningModule):
                 args.tune_gnn,
                 args.num_query_token,
                 args.cross_attention_freq,
-                args.llm_tune,
+                args.tune_llm,
                 args.peft_dir,
                 args.llm_model,
                 args.prompt,
@@ -116,7 +116,7 @@ class Blip2Stage3(pl.LightningModule):
                 args.tune_gnn,
                 args.num_query_token,
                 args.cross_attention_freq,
-                args.llm_tune,
+                args.tune_llm,
                 args.peft_dir,
                 args.llm_model,
                 args.prompt,
@@ -593,7 +593,7 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--do_sample", action="store_true", default=False)
         parser.add_argument("--gen_max_len", type=int, default=256)
         parser.add_argument("--min_len", type=int, default=8)
-        parser.add_argument("--llm_tune", type=str, default="freeze")
+        parser.add_argument("--tune_llm", type=str, default="freeze")
         parser.add_argument("--peft_config", type=str, default=None)
         parser.add_argument("--peft_dir", type=str, default="")
 
