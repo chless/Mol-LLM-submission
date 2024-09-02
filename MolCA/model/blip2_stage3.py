@@ -321,7 +321,7 @@ class Blip2Stage3(pl.LightningModule):
                     f"{dataset}/avg_loss",
                     sum(self.dataset_losses[dataset])
                     / len(self.dataset_losses[dataset]),
-                    batch_size=self.num_moving_samples,
+                    batch_size=len(self.dataset_losses[dataset]),
                     sync_dist=False,
                 )
 
