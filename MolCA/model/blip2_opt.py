@@ -8,7 +8,7 @@
 import logging
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast as autocast
+from torch.amp import autocast as autocast
 from torch.nn import functional as F
 from peft import (
     get_peft_config,
@@ -457,8 +457,6 @@ class Blip2OPT(Blip2Base):
         """
         graphs = samples["graphs"]
         prompt_tokens = samples["prompt_tokens"]
-        # prompt_lens = samples['prompt_lens']
-        # with self.maybe_autocast():
 
         prompt_embeds = self.llm_model.get_input_embeddings()(prompt_tokens.input_ids)
         if "graph" in self.args.mol_representation:

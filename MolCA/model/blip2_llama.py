@@ -8,7 +8,7 @@
 import logging
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast as autocast
+from torch.amp import autocast as autocast
 from peft import (
     get_peft_config,
     get_peft_model,

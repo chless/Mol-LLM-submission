@@ -11,7 +11,7 @@ import torch
 import torch.distributed as dist
 from torch import Tensor
 import torch.nn as nn
-from torch.cuda.amp import autocast as autocast
+from torch.amp import autocast as autocast
 from torch.nn import functional as F
 from typing import Any, Iterable, Iterator, List, Optional, Sized, Tuple, Union, Dict
 from model.help_funcs import pad_and_concat

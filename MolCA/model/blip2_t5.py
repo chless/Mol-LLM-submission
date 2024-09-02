@@ -8,7 +8,7 @@
 import logging
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast as autocast
+from torch.amp import autocast as autocast
 from peft import get_peft_model, LoraConfig, TaskType, PeftModel
 from lavis.models.blip2_models.blip2 import disabled_train
 from model.blip2 import Blip2Base
@@ -214,8 +214,6 @@ class Blip2T5(Blip2Base):
             prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1).to(
                 torch.float32
             )
-            # prompt_embeds = self.llm_model.encoder.embed_tokens(prompt_tokens.input_ids)
-            # prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
 
             outputs = self.llm_model.generate(
                 inputs_embeds=prompt_embeds,
