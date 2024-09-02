@@ -131,6 +131,7 @@ class Blip2Stage3(pl.LightningModule):
             else len(ast.literal_eval(args.devices))
         )
         self.save_hyperparameters(args)
+        self.num_moving_samples = 32
 
     def load_from_stage1_checkpoint(self, path):
         ckpt = torch.load(path, map_location="cpu")
@@ -302,37 +303,27 @@ class Blip2Stage3(pl.LightningModule):
 
                 for task_subtask_pair in task_subtask_pairs:
                     if task_subtask_pair not in self.dataset_losses.keys():
-                        self.dataset_losses[task_subtask_pair] = {
-                            "avg_loss": 0,
-                            "total_samples": 0,
-                            "added_samples": 0,
-                        }
+                        self.dataset_losses[task_subtask_pair] = []
 
                 for i in range(instance_losses.shape[0]):
                     task_subtask_pair = task_subtask_pairs[i]
                     # calculate average loss
-                    self.dataset_losses[task_subtask_pair][
-                        "avg_loss"
-                    ] *= self.dataset_losses[task_subtask_pair]["total_samples"] / (
-                        self.dataset_losses[task_subtask_pair]["total_samples"] + 1
-                    )
-                    self.dataset_losses[task_subtask_pair][
-                        "avg_loss"
-                    ] += instance_losses[i] / (
-                        self.dataset_losses[task_subtask_pair]["total_samples"] + 1
-                    )
+                    self.dataset_losses[task_subtask_pair].append(instance_losses[i])
 
-                    self.dataset_losses[task_subtask_pair]["total_samples"] += 1
-                    self.dataset_losses[task_subtask_pair]["added_samples"] += 1
+                    while (
+                        len(self.dataset_losses[task_subtask_pair])
+                        > self.num_moving_samples
+                    ):
+                        self.dataset_losses[task_subtask_pair].pop(0)
 
             for dataset in self.dataset_losses.keys():
                 self.log(
                     f"{dataset}/avg_loss",
-                    self.dataset_losses[dataset]["avg_loss"],
-                    batch_size=self.dataset_losses[dataset]["added_samples"],
+                    sum(self.dataset_losses[dataset])
+                    / len(self.dataset_losses[dataset]),
+                    batch_size=self.num_moving_samples,
                     sync_dist=False,
                 )
-                self.dataset_losses[dataset]["added_samples"] = 0
 
             total_loss = (
                 outputs["classification"]["loss"] * batch_sizes[0]
@@ -470,9 +461,8 @@ class Blip2Stage3(pl.LightningModule):
         for task_subtask_pair in task_subtask_pairs:
             if task_subtask_pair not in self.eval_dataset_losses.keys():
                 self.eval_dataset_losses[task_subtask_pair] = {
-                    "avg_loss": 0,
+                    "avg_loss": 0.0,
                     "total_samples": 0,
-                    "added_samples": 0,
                 }
 
         for i in range(instance_losses.shape[0]):
@@ -488,16 +478,6 @@ class Blip2Stage3(pl.LightningModule):
             ] / (self.eval_dataset_losses[task_subtask_pair]["total_samples"] + 1)
 
             self.eval_dataset_losses[task_subtask_pair]["total_samples"] += 1
-            self.eval_dataset_losses[task_subtask_pair]["added_samples"] += 1
-
-        for dataset in self.eval_dataset_losses.keys():
-            self.log(
-                f"{mode}/{dataset}/avg_loss",
-                self.eval_dataset_losses[dataset]["avg_loss"],
-                batch_size=self.eval_dataset_losses[dataset]["added_samples"],
-                sync_dist=False,
-            )
-            self.eval_dataset_losses[dataset]["added_samples"] = 0
 
         return outputs["loss"]
 
@@ -582,6 +562,14 @@ class Blip2Stage3(pl.LightningModule):
                         evaluation_results[task_subtask_pair][metric],
                         sync_dist=False,
                     )
+
+            for dataset in self.eval_dataset_losses.keys():
+                self.log(
+                    f"{mode}/{dataset}/avg_loss",
+                    self.eval_dataset_losses[dataset]["avg_loss"],
+                    batch_size=self.eval_dataset_losses[dataset]["total_samples"],
+                    sync_dist=False,
+                )
 
     @staticmethod
     def add_model_specific_args(parent_parser):
