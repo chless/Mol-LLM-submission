@@ -141,15 +141,16 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
             prediction_mol = Chem.MolFromSmiles(prediction_smiles)
             prediction_canonical_smiles = Chem.CanonSmiles(prediction_smiles)
             prediction_canonical_selfies = selfies.encoder(prediction_canonical_smiles)
+
+            exact_matches.append(
+                Chem.MolToInchi(target_mol) == Chem.MolToInchi(prediction_mol)
+            )
         except:
             failure_idxs.append(i)
             prediction_mol = None
             continue
 
         if prediction_mol is not None:
-            exact_matches.append(
-                Chem.MolToInchi(target_mol) == Chem.MolToInchi(prediction_mol)
-            )
 
             levs.append(lev(target_canonical_smiles, prediction_canonical_smiles))
 
