@@ -6,7 +6,7 @@ python3 MolCA/stage3.py \
 --root multi_task \
 --mode ft \
 --llm_model meta-llama/Meta-Llama-3.1-8B-Instruct \
---llm_tune lora \
+--tune_llm lora \
 --tune_gnn \
 --lora_r 64 \
 --per_device_batch_size_cls 3 \

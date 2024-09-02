@@ -6,7 +6,7 @@ python3 MolCA/stage3.py \
 --root translation \
 --mode ft \
 --llm_model facebook/galactica-1.3b \
---llm_tune lora \
+--tune_llm lora \
 --lora_r 64 \
 --per_device_batch_size_trn 28 \
 --per_device_inference_batch_size_trn 60 \

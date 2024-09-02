@@ -11,7 +11,7 @@ python3 MolCA/stage3.py \
 --mode ft \
 --prompt '[START_I_SMILES]{}[END_I_SMILES].' \
 --tune_gnn \
---llm_tune lora \
+--tune_llm lora \
 --inference_batch_size 1 \
 --val_check_interval 1 \
 --max_epochs 10 \

@@ -6,7 +6,7 @@ python3 MolCA/stage3.py \
 --root multi_task \
 --mode ft \
 --llm_model facebook/galactica-1.3b \
---llm_tune lora \
+--tune_llm lora \
 --lora_r 64 \
 --per_device_batch_size_cls 5 \
 --per_device_batch_size_reg 10 \

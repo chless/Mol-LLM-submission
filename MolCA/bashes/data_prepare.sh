@@ -9,7 +9,7 @@ python3 MolCA/stage3.py \
 --mode ft \
 --llm_model 'facebook/galactica-1.3b' \
 --tune_gnn \
---llm_tune lora \
+--tune_llm lora \
 --batch_size $batch_size \
 --inference_batch_size $inference_batch_size \
 --val_check_interval 5 \
