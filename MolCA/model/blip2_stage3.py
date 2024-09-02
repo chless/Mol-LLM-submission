@@ -442,13 +442,6 @@ class Blip2Stage3(pl.LightningModule):
         outputs = self.blip2model(batch[:-1])  # omit tasks when inputting to the model
         ##============== Overall Loss ===================##
 
-        self.log(
-            f"{mode}/{task}/total_loss",
-            float(outputs["loss"]),
-            batch_size=batch_size,
-            sync_dist=True,
-        )
-
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
         self.total_avg_loss += (
             outputs["loss"].item() - self.total_avg_loss
@@ -560,7 +553,7 @@ class Blip2Stage3(pl.LightningModule):
                     self.log(
                         f"{mode}/{task_subtask_pair}/{metric}",
                         evaluation_results[task_subtask_pair][metric],
-                        sync_dist=True,
+                        sync_dist=False,
                     )
 
             for dataset in self.eval_dataset_losses.keys():
@@ -568,7 +561,7 @@ class Blip2Stage3(pl.LightningModule):
                     f"{mode}/{dataset}/avg_loss",
                     self.eval_dataset_losses[dataset]["avg_loss"],
                     batch_size=self.eval_dataset_losses[dataset]["total_samples"],
-                    sync_dist=True,
+                    sync_dist=False,
                 )
 
     @staticmethod
