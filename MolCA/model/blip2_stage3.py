@@ -292,7 +292,7 @@ class Blip2Stage3(pl.LightningModule):
             )
             for key in outputs.keys():
                 self.log(
-                    f"{key}/total_loss",
+                    f"train/{key}/total_loss",
                     float(outputs[key]["loss"]),
                     batch_size=batch_size_dict[key],
                     sync_dist=False,
@@ -318,7 +318,7 @@ class Blip2Stage3(pl.LightningModule):
 
             for dataset in self.dataset_losses.keys():
                 self.log(
-                    f"{dataset}/avg_loss",
+                    f"train/{dataset}/avg_loss",
                     sum(self.dataset_losses[dataset])
                     / len(self.dataset_losses[dataset]),
                     batch_size=len(self.dataset_losses[dataset]),
@@ -334,7 +334,7 @@ class Blip2Stage3(pl.LightningModule):
             ) / sum(batch_sizes)
 
             self.log(
-                "total_loss",
+                "train/total_loss",
                 float(total_loss),
                 batch_size=total_batch_size,
                 sync_dist=False,
@@ -355,7 +355,7 @@ class Blip2Stage3(pl.LightningModule):
             key = self.args.root
 
             self.log(
-                f"{key}_loss",
+                f"train/{key}_loss",
                 float(outputs["loss"]),
                 batch_size=batch_size,
                 sync_dist=False,
@@ -363,7 +363,7 @@ class Blip2Stage3(pl.LightningModule):
             total_loss = outputs["loss"]
             total_batch_size = batch_size
             self.log(
-                "total_loss",
+                "train/total_loss",
                 float(total_loss),
                 batch_size=total_batch_size,
                 sync_dist=False,
