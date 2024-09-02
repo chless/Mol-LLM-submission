@@ -34,5 +34,5 @@ python3 MolCA/stage3.py \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
 --mol_representation string+graph \
---filename MT_llama3.1-8b-inst_lorar64_llava1_string+graph_constant_lr_0902 \
+--filename MT_llama3.1-8b-inst_string+graph_0902 \
 --scheduler None \
