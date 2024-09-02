@@ -160,7 +160,7 @@ class DataCollater:
         self.tokenizer.padding_side = "left"
         input_tokens = self.tokenizer(
             text=input_texts,
-            truncation=True if self.truncation else False,
+            truncation=self.truncation,
             padding=self.padding,
             add_special_tokens=False,
             max_length=self.prompt_max_len,
