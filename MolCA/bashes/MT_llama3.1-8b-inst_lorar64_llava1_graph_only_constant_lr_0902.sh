@@ -15,9 +15,9 @@ python3 MolCA/stage3.py \
 --per_device_batch_size_trn 3 \
 --per_device_inference_batch_size_cls 40 \
 --per_device_inference_batch_size_reg 40 \
---per_device_inference_batch_size_rxn 16 \
---per_device_inference_batch_size_rea 16 \
---per_device_inference_batch_size_trn 16 \
+--per_device_inference_batch_size_rxn 14 \
+--per_device_inference_batch_size_rea 14 \
+--per_device_inference_batch_size_trn 14 \
 --val_check_interval 8000 \
 --max_epochs 100 \
 --second_stage_start_step 10000 \
@@ -29,7 +29,6 @@ python3 MolCA/stage3.py \
 --logging_dir MolCA/all_checkpoints \
 --graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
 --resize 2400 \
---skip_sanity_check \
 --llava_style 1 \
 --num_query_token 32 \
 --bert_num_hidden_layers 5 \
