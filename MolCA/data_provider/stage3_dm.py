@@ -253,11 +253,11 @@ class Stage3DM(LightningDataModule):
         self.fit_llm_input_convention = fit_llm_input_convention
         self.fit_llm_output_convention = fit_llm_output_convention
         self.task_categories = [
-            "classification",
-            "regression",
-            "reaction",
-            "reagent",
             "translation",
+            "reagent",
+            "reaction",
+            "regression",
+            "classification",
         ]
         self.batch_sizes = {
             "classification": args.per_device_batch_size_cls,
@@ -284,7 +284,7 @@ class Stage3DM(LightningDataModule):
             "classification": args.prompt_max_len - 6,
             "regression": args.prompt_max_len - 12,
             "reaction": args.prompt_max_len,
-            "reagent": args.prompt_max_len + args.num_query_token,
+            "reagent": args.prompt_max_len,
             "translation": args.prompt_max_len,
         }
 
