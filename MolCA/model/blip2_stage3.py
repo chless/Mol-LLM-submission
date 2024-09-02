@@ -560,7 +560,7 @@ class Blip2Stage3(pl.LightningModule):
                     self.log(
                         f"{mode}/{task_subtask_pair}/{metric}",
                         evaluation_results[task_subtask_pair][metric],
-                        sync_dist=False,
+                        sync_dist=True,
                     )
 
             for dataset in self.eval_dataset_losses.keys():
@@ -568,7 +568,7 @@ class Blip2Stage3(pl.LightningModule):
                     f"{mode}/{dataset}/avg_loss",
                     self.eval_dataset_losses[dataset]["avg_loss"],
                     batch_size=self.eval_dataset_losses[dataset]["total_samples"],
-                    sync_dist=False,
+                    sync_dist=True,
                 )
 
     @staticmethod
