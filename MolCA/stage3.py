@@ -84,7 +84,7 @@ def main(args):
     if args.not_save_model:
         pass
     else:
-        monitoring_metric = "val/total_loss"
+        monitoring_metric = "train/total_loss"
         callbacks.append(
             ModelCheckpoint(
                 dirpath=os.path.join(args.logging_dir, args.filename),
