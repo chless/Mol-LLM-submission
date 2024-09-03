@@ -88,7 +88,7 @@ def main(args):
         callbacks.append(
             ModelCheckpoint(
                 dirpath=os.path.join(args.logging_dir, args.filename),
-                filename="{step:05d}-{total_loss:.3f}",
+                filename="{step:05d}-{train/total_loss:.3f}",
                 every_n_train_steps=args.every_n_train_steps,
                 save_last=True,
                 save_top_k=10,
@@ -118,7 +118,7 @@ def main(args):
         entity=args.wandb_entity,
         id=args.wandb_id,
     )
-    wandb_logger.watch(model, log="all")
+    wandb_logger.watch(model, log="all", log_freq=args.wandb_log_freq)
 
     tb_logger = TensorBoardLogger(
         os.path.join(args.logging_dir, "tensorboard"),
@@ -231,6 +231,7 @@ def get_args():
     parser.add_argument("--wandb_entity", type=str, default="mol-llm")
     parser.add_argument("--wandb_project", type=str, default="mol-llm")
     parser.add_argument("--wandb_id", type=str, default=None)
+    parser.add_argument("--wandb_log_freq", type=int, default=100)
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)
