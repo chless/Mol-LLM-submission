@@ -116,7 +116,7 @@ def main(args):
         name=args.filename,
         project=args.wandb_project,
         entity=args.wandb_entity,
-        id=args.wandb_id,
+        id=args.filename,
     )
     wandb_logger.watch(model, log="all", log_freq=args.wandb_log_freq)
 
@@ -230,7 +230,6 @@ def get_args():
     parser.add_argument("--llava_style", type=int, default=0)
     parser.add_argument("--wandb_entity", type=str, default="mol-llm")
     parser.add_argument("--wandb_project", type=str, default="mol-llm")
-    parser.add_argument("--wandb_id", type=str, default=None)
     parser.add_argument("--wandb_log_freq", type=int, default=100)
 
     # added args
