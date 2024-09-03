@@ -319,7 +319,7 @@ class Blip2Stage3(pl.LightningModule):
 
             for dataset in self.dataset_losses.keys():
                 self.log(
-                    f"train/{dataset}/avg_loss",
+                    f"train/{dataset}/loss",
                     sum(self.dataset_losses[dataset])
                     / len(self.dataset_losses[dataset]),
                     batch_size=len(self.dataset_losses[dataset]),
