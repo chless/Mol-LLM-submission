@@ -7,6 +7,7 @@ python3 MolCA/stage3.py \
 --mode ft \
 --llm_model meta-llama/Meta-Llama-3.1-8B-Instruct \
 --tune_llm lora \
+--tune_gnn \
 --lora_r 64 \
 --per_device_batch_size_cls 2 \
 --per_device_batch_size_reg 4 \
@@ -20,7 +21,7 @@ python3 MolCA/stage3.py \
 --per_device_inference_batch_size_cls 8 \
 --val_check_interval 5000 \
 --max_epochs 100 \
---second_stage_start_step 10000 \
+--second_stage_start_step 5000 \
 --num_beam 1 \
 --raw_data_root MolCA/data/multi_task_dataset_0813_selfies \
 --gen_max_len 222 \
@@ -34,5 +35,6 @@ python3 MolCA/stage3.py \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
 --mol_representation graph_only \
---filename MT_llama3.1-8b-inst_graph_only_0902 \
+--filename MT_llama3.1-8b-inst_graph_only_tune_gnn_0903 \
 --scheduler None \
+--init_lr 5e-5 \

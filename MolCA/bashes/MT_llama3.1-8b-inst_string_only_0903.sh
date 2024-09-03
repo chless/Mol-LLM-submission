@@ -20,7 +20,7 @@ python3 MolCA/stage3.py \
 --per_device_inference_batch_size_cls 8 \
 --val_check_interval 5000 \
 --max_epochs 100 \
---second_stage_start_step 10000 \
+--second_stage_start_step 5000 \
 --num_beam 1 \
 --raw_data_root MolCA/data/multi_task_dataset_0813_selfies \
 --gen_max_len 222 \
@@ -36,3 +36,4 @@ python3 MolCA/stage3.py \
 --mol_representation string_only \
 --filename MT_llama3.1-8b-inst_string_only_0903 \
 --scheduler None \
+--init_lr 5e-5 \
