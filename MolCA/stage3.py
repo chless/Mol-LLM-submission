@@ -14,7 +14,7 @@ from data_provider.stage3_dm import (
     TEXT2MOL_BENCHMARKS,
     TOTAL_BENCHMARKS,
 )
-from data_provider.stage2_chebi_dm import Stage2CheBIDM
+
 from model.blip2_stage3 import Blip2Stage3
 import json
 import ast
@@ -52,6 +52,7 @@ def main(args):
             args.init_checkpoint, strict=False, args=args
         )
         print(f"loaded init checkpoint from {args.init_checkpoint}")
+        ckpt = torch.load(args.init_checkpoint, map_location="cpu")
     elif args.stage2_path:
         model = model(args)
         ckpt = torch.load(args.stage2_path, map_location="cpu")
@@ -67,7 +68,6 @@ def main(args):
     print("total params:", sum(p.numel() for p in model.parameters()))
 
     devices = ast.literal_eval(args.devices)
-    num_devices = len(devices) if not isinstance(devices, int) else 1
 
     dm = Stage3DM(
         mode=args.mode,
@@ -97,9 +97,7 @@ def main(args):
                 mode="min",
             )
         )
-        callbacks.append(
-            SaveLoRAModelCallback(os.path.join(args.logging_dir, args.filename, "lora"))
-        )
+
 
     if len(args.devices.split(",")) > 1:
         if args.strategy_name == "fsdp":
@@ -118,7 +116,9 @@ def main(args):
         name=args.filename,
         project=args.wandb_project,
         entity=args.wandb_entity,
+        id=args.wandb_id,
     )
+    wandb_logger.watch(model, log="all")
 
     tb_logger = TensorBoardLogger(
         os.path.join(args.logging_dir, "tensorboard"),
@@ -200,29 +200,6 @@ def update_result_csv(args, outputs, logger_dir, task_names=None):
         json.dump(final_output, f, indent=4)
 
 
-class SaveLoRAModelCallback(Callback):
-    def __init__(self, dir_path):
-        """
-        Args:
-            save_path (str): Path where the model and LoRA weights should be saved.
-        """
-        self.dir_path = dir_path
-        if not os.path.exists(self.dir_path):
-            os.makedirs(self.dir_path)
-
-    def on_epoch_end(self, trainer, pl_module):
-        """
-        Called when an epoch ends.
-        """
-        model = (
-            pl_module.model
-        )  # Assuming the LoRA adapted model is stored in this property
-        model.save_pretrained(self.dir_path)
-        print(
-            f"Peft lora weights saved to {self.dir_path} at epoch {trainer.current_epoch}"
-        )
-
-
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--filename", type=str, default="stage2_test")
@@ -231,7 +208,6 @@ def get_args():
     parser.add_argument("--mode", type=str, default="pretrain")
     parser.add_argument("--strategy_name", type=str, default=None)
     parser.add_argument("--iupac_prediction", action="store_true", default=False)
-    parser.add_argument("--ckpt_path", type=str, default=None)
     # parser = Trainer.add_argparse_args(parser)
     parser = Blip2Stage3.add_model_specific_args(parser)  # add model args
     parser = Stage3DM.add_model_specific_args(parser)
@@ -252,8 +228,9 @@ def get_args():
     parser.add_argument("--skip_sanity_check", action="store_true", default=False)
     parser.add_argument("--logging_dir", type=str, default="MolCA/all_checkpoints/")
     parser.add_argument("--llava_style", type=int, default=0)
+    parser.add_argument("--wandb_entity", type=str, default="mol-llm")
     parser.add_argument("--wandb_project", type=str, default="mol-llm")
-    parser.add_argument("--wandb_entity", type=str, default="chless")
+    parser.add_argument("--wandb_id", type=str, default=None)
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)

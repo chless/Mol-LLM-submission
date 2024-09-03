@@ -74,9 +74,10 @@ class Blip2Stage3(pl.LightningModule):
         self.num_beams = args.num_beams
         self.gen_max_len = args.gen_max_len
         self.min_len = args.min_len
-        self.reaction_weight = args.reaction_weight
         self.tune_llm = args.tune_llm
         self.on_second_stage = False
+        # set strict_loading to False to load model in a lightweight way
+        self.strict_loading = False
         if args.llm_model.find("galactica") >= 0:
             self.blip2model = Blip2OPT(
                 args.bert_name,
@@ -130,8 +131,8 @@ class Blip2Stage3(pl.LightningModule):
             if isinstance(ast.literal_eval(args.devices), int)
             else len(ast.literal_eval(args.devices))
         )
-        self.save_hyperparameters(args)
         self.num_moving_samples = 32
+        self.save_hyperparameters(args)
 
     def load_from_stage1_checkpoint(self, path):
         ckpt = torch.load(path, map_location="cpu")
@@ -600,7 +601,6 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--lora_dropout", type=int, default=0.1)
 
         # optimization
-        parser.add_argument("--reaction_weight", type=float, default=1.0)
         parser.add_argument(
             "--weight_decay", type=float, default=0.05, help="optimizer weight decay"
         )
@@ -634,6 +634,8 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--stage1_path", type=str, default="")
         parser.add_argument("--stage2_path", type=str, default="")
         parser.add_argument("--init_checkpoint", type=str, default="")
+        #normal resume feature for pytorch lightning Trainer
+        parser.add_argument("--ckpt_path", type=str, default=None)
         parser.add_argument(
             "--graph_encoder_ckpt",
             type=str,
