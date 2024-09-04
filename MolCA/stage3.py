@@ -88,7 +88,7 @@ def main(args):
         callbacks.append(
             ModelCheckpoint(
                 dirpath=os.path.join(args.logging_dir, args.filename),
-                filename="{step:05d}-{train/total_loss:.3f}",
+                filename="{step:05d}-{train_total_loss:.3f}",
                 every_n_train_steps=args.every_n_train_steps,
                 save_last=True,
                 save_top_k=10,
