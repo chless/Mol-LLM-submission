@@ -431,6 +431,7 @@ class Blip2Stage3(pl.LightningModule):
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             prompt_tokens.input_ids, skip_special_tokens=False
         )
+        prompts = [p.replace(" ", "") for p in prompts]
         self.list_predictions.append(predictions)
         self.list_targets.append(targets)
         self.list_prompts.append(prompts)
@@ -634,7 +635,7 @@ class Blip2Stage3(pl.LightningModule):
         parser.add_argument("--stage1_path", type=str, default="")
         parser.add_argument("--stage2_path", type=str, default="")
         parser.add_argument("--init_checkpoint", type=str, default="")
-        #normal resume feature for pytorch lightning Trainer
+        # normal resume feature for pytorch lightning Trainer
         parser.add_argument("--ckpt_path", type=str, default=None)
         parser.add_argument(
             "--graph_encoder_ckpt",
