@@ -9,21 +9,6 @@ import logging
 import torch
 import torch.nn as nn
 from torch.amp import autocast as autocast
-from peft import (
-    get_peft_config,
-    get_peft_model,
-    get_peft_model_state_dict,
-    LoraConfig,
-    TaskType,
-    PeftModel,
-)
-
-from lavis.models.blip2_models.blip2 import (
-    # Blip2Base,
-    disabled_train,
-)
-from model.blip2 import Blip2Base
-from transformers import AutoTokenizer, AutoModelForCausalLM
 from model.blip2_opt import Blip2OPT
 
 
@@ -117,7 +102,7 @@ class Blip2Llama(Blip2OPT):
         formatted_prompt += "<|start_header_id|>assistant<|end_header_id|>"
         return formatted_prompt
 
-    def add_pad_token(self):
+    def add_special_token(self):
         # pad toekn for llama-3.1-8B is "<|finetune_right_pad_id|>"
         self.llm_tokenizer.add_special_tokens(
             {"pad_token": "<|finetune_right_pad_id|>"}
@@ -231,10 +216,6 @@ class LlamaForCausalLM_Custom(LlamaForCausalLM):
             shift_labels = shift_labels.view(-1)
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
-            loss_fct = CrossEntropyLoss()
-            """
-            loss = loss_fct(shift_logits, shift_labels)
-            """
 
             # custom forward to get not reduced loss
             loss_fct_not_reduced = CrossEntropyLoss(reduction="none")
@@ -255,8 +236,6 @@ class LlamaForCausalLM_Custom(LlamaForCausalLM):
             loss = (
                 loss_not_reduced * instance_non_pad_tokens
             ).sum() / instance_non_pad_tokens.sum()
-            # check loss and loss_not_reduced consistency allowing 10^-2 tolerance
-            # assert loss_fct(shift_logits, shift_labels) - loss < 1e-2, f"loss: {loss}, loss_not_reduced: {loss_fct(shift_logits, shift_labels)}"
         else:
             instance_loss = None
 
