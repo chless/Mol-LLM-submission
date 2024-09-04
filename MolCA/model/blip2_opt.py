@@ -30,7 +30,6 @@ from model.blip2 import Blip2Base
 from transformers import AutoTokenizer
 from transformers import OPTForCausalLM
 import model.added_tokens as added_tokens
-from data_provider.stage3_dm import CUSTOM_SEQ_RE
 
 
 def mask_by_len(input, lens, fill_value=0):
