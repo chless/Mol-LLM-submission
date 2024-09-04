@@ -98,7 +98,6 @@ def main(args):
             )
         )
 
-
     if len(args.devices.split(",")) > 1:
         if args.strategy_name == "fsdp":
             strategy = strategies.DDPFullyShardedNativeStrategy()
@@ -118,7 +117,7 @@ def main(args):
         entity=args.wandb_entity,
         id=args.filename,
     )
-    wandb_logger.watch(model, log="all", log_freq=args.wandb_log_freq)
+    # wandb_logger.watch(model, log="all", log_freq=args.wandb_log_freq)
 
     tb_logger = TensorBoardLogger(
         os.path.join(args.logging_dir, "tensorboard"),
