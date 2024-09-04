@@ -26,7 +26,7 @@ python3 MolCA/stage3.py \
 --mol_string_randomization_ratio -1 \
 --mol_representation string_only \
 --filename MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0904 \
---stage2_path MolCA/all_checkpoints/MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0822/step=67000-total_loss=0.454.ckpt \
+--stage2_path MolCA/all_checkpoints/MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0822/step=130000-total_loss=0.374.ckpt \
 --scheduler None \
 --truncation 1 \
 --padding max_length \
