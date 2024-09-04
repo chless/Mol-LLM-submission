@@ -28,7 +28,7 @@ python3 MolCA/stage3.py \
 --label_max_len 256 \
 --logging_dir MolCA/all_checkpoints \
 --graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
---resize 2400 \
+--valset_resize 2400 \
 --llava_style 1 \
 --num_query_token 32 \
 --bert_num_hidden_layers 5 \

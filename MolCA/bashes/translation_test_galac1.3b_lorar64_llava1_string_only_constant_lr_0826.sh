@@ -20,7 +20,7 @@ python3 MolCA/stage3.py \
 --label_max_len 256 \
 --logging_dir /data/text-mol-logging/tensorboard \
 --graph_encoder_ckpt /data/ckpts/MoleculeSTM/molecule_model.pth \
---resize 2400 \
+--valset_resize 2400 \
 --skip_sanity_check \
 --llava_style 1 \
 --num_query_token 32 \

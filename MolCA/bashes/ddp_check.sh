@@ -22,5 +22,5 @@ python3 MolCA/stage3.py \
 --save_every_n_epochs 1 \
 --filename instruction_tuning_string_only_scratch_galac_selfies_vocab_add_0730 \
 --raw_data_root MolCA/data/multi_task_dataset_0715_selfies \
---resize 100 \
+--valset_resize 100 \
 --skip_sanity_check
