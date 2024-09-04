@@ -22,6 +22,7 @@ import numpy as np
 import selfies as sf
 from tqdm import tqdm
 import model.added_tokens as added_tokens
+import random
 
 # we split individual characters inside special tokens like [START_DNA]
 # TODO: change this ugly I_SMILES things to regular special token, and add the special token to vocab whichever LLM
@@ -296,19 +297,37 @@ class Stage3DM(LightningDataModule):
             }
             for task in self.concat_datasets.keys():
                 for split in ["train", "val", "test"]:
+                    if split == "val":
+                        resize = args.valset_resize if args.valset_resize > 0 else None
+                    elif split == "test":
+                        resize = args.testset_resize if args.testset_resize > 0 else None
+                    elif split == "train":
+                        resize = args.trainset_resize if args.trainset_resize > 0 else None
+                    else:
+                        raise NotImplementedError
+
                     self.concat_datasets[task][split] = InstructionInMemoryDataset(
                         root=self.args.raw_data_root,
                         filename=f"{task}_{split}",
-                        resize=self.args.resize if split == "val" else None,
+                        resize=resize,
                     )
         elif root in self.task_categories:
             self.concat_datasets = {root: {"train": None, "val": None, "test": None}}
             for task in self.concat_datasets.keys():
                 for split in ["train", "val", "test"]:
+                    if split == "val":
+                        resize = args.valset_resize if args.valset_resize > 0 else None
+                    elif split == "test":
+                        resize = args.testset_resize if args.testset_resize > 0 else None
+                    elif split == "train":
+                        resize = args.trainset_resize if args.trainset_resize > 0 else None
+                    else:
+                        raise NotImplementedError
+
                     self.concat_datasets[task][split] = InstructionInMemoryDataset(
                         root=self.args.raw_data_root,
                         filename=f"{task}_{split}",
-                        resize=self.args.resize if split == "val" else None,
+                        resize=resize,
                     )
         else:
             raise NotImplementedError
@@ -462,7 +481,6 @@ class Stage3DM(LightningDataModule):
         parser.add_argument("--label_max_len", type=int, default=256)
         parser.add_argument("--truncation", default=1, type=int)
         parser.add_argument("--padding", default="max_length", type=str)
-        parser.add_argument("--resize", default=2400, type=int)
         parser.add_argument(
             "--prompt",
             type=str,
@@ -912,7 +930,6 @@ class InstructionInMemoryDataset(InMemoryDataset):
     def shuffle_dataset(self):
         # Shuffle the dataset
         data_list = [self.get(i) for i in range(len(self))]
-        import random
 
         random.shuffle(data_list)
         data, slices = self.collate(data_list)

@@ -206,6 +206,9 @@ def get_args():
     # MM settings
     parser.add_argument("--mode", type=str, default="pretrain")
     parser.add_argument("--test_on_trainset", action="store_true", default=False)
+    parser.add_argument("--trainset_resize", type=int, default=-1)
+    parser.add_argument("--valset_resize", type=int, default=2400)
+    parser.add_argument("--testset_resize", type=int, default=-1)
     parser.add_argument("--strategy_name", type=str, default=None)
     # parser = Trainer.add_argparse_args(parser)
     parser = Blip2Stage3.add_model_specific_args(parser)  # add model args
