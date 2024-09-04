@@ -36,4 +36,3 @@ python3 MolCA/stage3.py \
 --mol_representation graph_only \
 --filename MT_llama3.1-8b-inst_graph_only_0903 \
 --scheduler None \
---init_lr 5e-5 \

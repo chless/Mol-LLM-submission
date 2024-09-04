@@ -1,5 +1,5 @@
 export TOKENIZERS_PARALLELISM=false;
-gpus='1,2'
+gpus='3,4,5'
 
 python3 MolCA/stage3.py \
 --devices $gpus \
@@ -8,35 +8,25 @@ python3 MolCA/stage3.py \
 --llm_model facebook/galactica-1.3b \
 --tune_llm lora \
 --lora_r 64 \
---per_device_batch_size_cls 5 \
---per_device_batch_size_reg 10 \
---per_device_batch_size_rxn 10 \
---per_device_batch_size_rea 5 \
---per_device_batch_size_trn 5 \
---per_device_inference_batch_size_cls 50 \
---per_device_inference_batch_size_reg 50 \
---per_device_inference_batch_size_rxn 20 \
---per_device_inference_batch_size_rea 20 \
---per_device_inference_batch_size_trn 20 \
---val_check_interval 2500 \
---max_epochs 100 \
---second_stage_start_epoch 1 \
---num_beam 5 \
---raw_data_root /data/datasets/multi_task_dataset_0813_selfies \
+--per_device_inference_batch_size_trn 30 \
+--per_device_inference_batch_size_rea 30 \
+--per_device_inference_batch_size_rxn 30 \
+--per_device_inference_batch_size_reg 60 \
+--per_device_inference_batch_size_cls 60 \
+--num_beam 1 \
+--raw_data_root MolCA/data/multi_task_dataset_0813_selfies \
 --gen_max_len 256 \
 --prompt_max_len 256 \
 --label_max_len 256 \
---logging_dir /data/text-mol-logging/all_checkpoints \
+--logging_dir MolCA/all_checkpoints \
 --graph_encoder_ckpt /data/ckpts/MoleculeSTM/molecule_model.pth \
---valset_resize 2400 \
 --skip_sanity_check \
---llava_style 1 \
 --num_query_token 32 \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
 --mol_representation string_only \
---filename MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0822-2 \
---stage2_path /data/ckpts/molllm-ckpt/MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0822-2/step=130000-total_loss=0.374.ckpt \
+--filename MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0822 \
+--stage2_path MolCA/all_checkpoints/MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0822/step=67000-total_loss=0.454.ckpt \
 --scheduler None \
---truncation 0 \
---padding longest \
+--truncation 1 \
+--padding max_length
