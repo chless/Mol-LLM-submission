@@ -25,8 +25,10 @@ python3 MolCA/stage3.py \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
 --mol_representation string_only \
---filename MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0822 \
+--filename MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0904 \
 --stage2_path MolCA/all_checkpoints/MT_galac1.3b_lorar64_llava1_string_only_constant_lr_0822/step=67000-total_loss=0.454.ckpt \
 --scheduler None \
 --truncation 1 \
---padding max_length
+--padding max_length \
+--test_on_trainset \
+--trainset_resize 4800
