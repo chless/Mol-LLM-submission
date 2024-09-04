@@ -8,11 +8,11 @@ python3 MolCA/stage3.py \
 --llm_model facebook/galactica-1.3b \
 --tune_llm lora \
 --lora_r 64 \
---per_device_inference_batch_size_trn 30 \
---per_device_inference_batch_size_rea 30 \
---per_device_inference_batch_size_rxn 30 \
---per_device_inference_batch_size_reg 60 \
---per_device_inference_batch_size_cls 60 \
+--per_device_inference_batch_size_trn 40 \
+--per_device_inference_batch_size_rea 40 \
+--per_device_inference_batch_size_rxn 40 \
+--per_device_inference_batch_size_reg 70 \
+--per_device_inference_batch_size_cls 70 \
 --num_beam 1 \
 --raw_data_root MolCA/data/multi_task_dataset_0813_selfies \
 --gen_max_len 256 \
