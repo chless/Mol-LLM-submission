@@ -205,6 +205,7 @@ def get_args():
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     # MM settings
     parser.add_argument("--mode", type=str, default="pretrain")
+    parser.add_argument("--test_on_trainset", action="store_true", default=False)
     parser.add_argument("--strategy_name", type=str, default=None)
     # parser = Trainer.add_argparse_args(parser)
     parser = Blip2Stage3.add_model_specific_args(parser)  # add model args

@@ -395,6 +395,7 @@ class Stage3DM(LightningDataModule):
 
     def test_dataloader(self):
         loader = []
+        split = "test" if not self.args.test_on_trainset else "train"
         for task in self.concat_datasets.keys():
             if task in ["classification", "regression"]:
                 label_max_len = 9
@@ -408,7 +409,7 @@ class Stage3DM(LightningDataModule):
 
             loader.append(
                 DataLoader(
-                    self.concat_datasets[task]["test"],
+                    self.concat_datasets[task][split],
                     batch_size=self.inference_batch_sizes[task],
                     shuffle=False,
                     num_workers=self.num_workers,
