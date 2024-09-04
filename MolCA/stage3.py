@@ -115,7 +115,7 @@ def main(args):
         name=args.filename,
         project=args.wandb_project,
         entity=args.wandb_entity,
-        id=args.filename,
+        id=args.wandb_id,
     )
     # wandb_logger.watch(model, log="all", log_freq=args.wandb_log_freq)
 
@@ -206,7 +206,6 @@ def get_args():
     # MM settings
     parser.add_argument("--mode", type=str, default="pretrain")
     parser.add_argument("--strategy_name", type=str, default=None)
-    parser.add_argument("--iupac_prediction", action="store_true", default=False)
     # parser = Trainer.add_argparse_args(parser)
     parser = Blip2Stage3.add_model_specific_args(parser)  # add model args
     parser = Stage3DM.add_model_specific_args(parser)
@@ -227,9 +226,11 @@ def get_args():
     parser.add_argument("--skip_sanity_check", action="store_true", default=False)
     parser.add_argument("--logging_dir", type=str, default="MolCA/all_checkpoints/")
     parser.add_argument("--llava_style", type=int, default=0)
+
     parser.add_argument("--wandb_entity", type=str, default="mol-llm")
     parser.add_argument("--wandb_project", type=str, default="mol-llm")
     parser.add_argument("--wandb_log_freq", type=int, default=100)
+    parser.add_argument("--wandb_id", type=str, default=None)
 
     # added args
     parser.add_argument("--debug", action="store_true", default=False)
