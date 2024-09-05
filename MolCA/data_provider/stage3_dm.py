@@ -48,20 +48,20 @@ def prepare_llm_input(
     mol_ph = added_tokens.MOL_2D[0] + mol_ph + added_tokens.MOL_2D[1]
 
     if mol_representation == "graph_only":
-        mol_string = CUSTOM_SEQ_RE.sub(r"%s" % (mol_ph), mol_string)
+        mol_string_converted = CUSTOM_SEQ_RE.sub(r"%s" % (mol_ph), mol_string)
         # reagent prediction has reaction direction token and second molecule
 
     elif mol_representation == "string_only":
-        mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3", mol_string)
+        mol_string_converted = CUSTOM_SEQ_RE.sub(r"\1\2\3", mol_string)
 
     elif mol_representation == "string+graph":
-        mol_string = CUSTOM_SEQ_RE.sub(r"\1\2\3%s" % (mol_ph), mol_string)
-
+        mol_string_converted = CUSTOM_SEQ_RE.sub(r"\1\2\3%s" % (mol_ph), mol_string)
     else:
         raise NotImplementedError("mol_representation should be one of the options")
 
+    # for tasks whose input does not contain molecule string (such as text2mol), don't add mol_string
     if not "<None>" in mol_string:
-        llm_prompt = instruction + mol_string
+        llm_prompt = instruction + mol_string_converted
     else:
         llm_prompt = instruction
 
