@@ -341,16 +341,16 @@ class Blip2Stage3(pl.LightningModule):
                 sync_dist=False,
             )
 
-
             for key in batches.keys():
                 self.evaluation_in_train_step(
                     batch=batches[key],
-                    predictions=self.blip2model.llm_tokenizer.batch_decode(outputs[key]["logits"].argmax(dim=-1)),
+                    predictions=self.blip2model.llm_tokenizer.batch_decode(
+                        outputs[key]["logits"].argmax(dim=-1)
+                    ),
                     logits=outputs[key]["logits"],
                 )
             if (self.trainer.global_step + 1) % self.args.val_check_interval == 0:
                 self.on_train_evaluation_end()
-
 
             return total_loss
         elif isinstance(batch, list) and len(batch) == 1:
@@ -407,17 +407,23 @@ class Blip2Stage3(pl.LightningModule):
         self.train_list_probs = []
         self.train_total_avg_loss = 0.0
         self.train_total_seen_data_size = 0
-    
+
     def evaluation_in_train_step(self, batch, predictions, logits):
         graphs, prompt_tokens, texts, tasks = batch
-        
+
         targets = self.blip2model.llm_tokenizer.batch_decode(texts.input_ids)
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             prompt_tokens.input_ids, skip_special_tokens=False
         )
-        predictions = [p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions]
-        targets = [t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets]
-        prompts = [p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts]
+        predictions = [
+            p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions
+        ]
+        targets = [
+            t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
+        ]
+        prompts = [
+            p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
+        ]
         probs = convert_logit2binary_prob(logits, self.blip2model.llm_tokenizer)
 
         self.train_list_predictions.append(predictions)
@@ -470,8 +476,8 @@ class Blip2Stage3(pl.LightningModule):
                 targets=all_targets,
                 tasks=all_tasks,
                 prompts=all_prompts,
-                filename=f"{self.args.mode}_{self.global_step}_predictions.json"
-                )
+                filename=f"{self.args.mode}-step{self.global_step}_predictions.json",
+            )
 
             evaluation_results, failed_cases = task_specifically_evaluate(
                 predictions=all_predictions,
@@ -487,8 +493,8 @@ class Blip2Stage3(pl.LightningModule):
                 targets=failed_cases["targets"],
                 tasks=failed_cases["tasks"],
                 prompts=failed_cases["prompts"],
-                filename=f"{self.args.mode}_{self.global_step}_failed_cases.json"
-                )
+                filename=f"{self.args.mode}-step{self.global_step}_failed_cases.json",
+            )
 
             for task_subtask_pair in evaluation_results:
                 for metric in evaluation_results[task_subtask_pair]:
@@ -546,9 +552,15 @@ class Blip2Stage3(pl.LightningModule):
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             prompt_tokens.input_ids, skip_special_tokens=False
         )
-        predictions = [p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions]
-        targets = [t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets]
-        prompts = [p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts]
+        predictions = [
+            p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions
+        ]
+        targets = [
+            t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
+        ]
+        prompts = [
+            p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
+        ]
         probs = convert_logit2binary_prob(outputs.logits, self.blip2model.llm_tokenizer)
 
         self.list_predictions.append(predictions)
@@ -640,7 +652,7 @@ class Blip2Stage3(pl.LightningModule):
                 tasks=all_tasks,
                 prompts=all_prompts,
                 filename=(
-                    f"{self.args.mode}_{self.global_step}_predictions.json"
+                    f"{self.args.mode}-step{self.global_step}_predictions.json"
                     if self.args.mode == "val"
                     else f"{self.args.mode}_predictions.json"
                 ),
@@ -661,7 +673,7 @@ class Blip2Stage3(pl.LightningModule):
                 tasks=failed_cases["tasks"],
                 prompts=failed_cases["prompts"],
                 filename=(
-                    f"{self.args.mode}_{self.global_step}_failed_cases.json"
+                    f"{self.args.mode}-step{self.global_step}_failed_cases.json"
                     if self.args.mode == "val"
                     else f"{self.args.mode}_failed_cases.json"
                 ),
