@@ -371,10 +371,11 @@ class Blip2OPT(Blip2Base):
         else:
             loss = outputs.loss
         """
-        loss = outputs.loss
-
-        results = {"loss": loss}
-        results.update({"instance_loss": outputs.instance_loss})
+        results = {
+            "loss": outputs.loss,
+            "instance_loss": outputs.instance_loss,
+            "logits": outputs.logits,
+            }
         return results
 
     def inject_graph_embeds2prompt_embeds(self, prompt_embeds, prompt_tokens, graphs):
