@@ -431,11 +431,9 @@ class Blip2Stage3(pl.LightningModule):
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             prompt_tokens.input_ids, skip_special_tokens=False
         )
-        prompts = [p.replace(" ", "") for p in prompts]
-        self.list_predictions.append(predictions)
-        self.list_targets.append(targets)
-        self.list_prompts.append(prompts)
-        self.list_tasks.append(tasks)
+        prompts = [p.replace(self.llm_tokenizer.pad_token, "") for p in prompts]
+        targets = [t.replace(self.llm_tokenizer.pad_token, "") for t in targets]
+        predictions = [p.replace(self.llm_tokenizer.pad_token, "") for p in predictions]
         # TODO: implement exception for tasks other than classification
         probs = convert_logit2binary_prob(outputs.logits, self.blip2model.llm_tokenizer)
         self.list_probs.append(probs)
