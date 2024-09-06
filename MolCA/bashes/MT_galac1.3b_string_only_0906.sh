@@ -8,11 +8,11 @@ python3 MolCA/stage3.py \
 --llm_model facebook/galactica-1.3b \
 --tune_llm lora \
 --lora_r 64 \
---per_device_batch_size_cls 9 \
---per_device_batch_size_reg 9 \
---per_device_batch_size_rxn 9 \
---per_device_batch_size_rea 9 \
---per_device_batch_size_trn 9 \
+--per_device_batch_size_cls 7 \
+--per_device_batch_size_reg 7 \
+--per_device_batch_size_rxn 7 \
+--per_device_batch_size_rea 7 \
+--per_device_batch_size_trn 7 \
 --per_device_inference_batch_size_cls 70 \
 --per_device_inference_batch_size_reg 70 \
 --per_device_inference_batch_size_rxn 30 \
@@ -29,7 +29,6 @@ python3 MolCA/stage3.py \
 --logging_dir MolCA/all_checkpoints \
 --graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
 --valset_resize 2400 \
---skip_sanity_check \
 --llava_style 1 \
 --num_query_token 32 \
 --bert_num_hidden_layers 5 \
