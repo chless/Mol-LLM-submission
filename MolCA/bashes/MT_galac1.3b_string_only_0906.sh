@@ -35,5 +35,5 @@ python3 MolCA/stage3.py \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
 --mol_representation string_only \
---filename MT_galac1.3b_llava1_string_only_0906 \
+--filename MT_galac1.3b_string_only_0906 \
 --scheduler None \
