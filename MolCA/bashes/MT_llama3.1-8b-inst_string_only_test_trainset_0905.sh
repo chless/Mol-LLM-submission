@@ -20,16 +20,14 @@ python3 MolCA/stage3.py \
 --label_max_len 222 \
 --logging_dir MolCA/all_checkpoints \
 --graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
---valset_resize 2400 \
---llava_style 1 \
 --num_query_token 32 \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
 --mol_representation string_only \
 --filename MT_llama3.1-8b-inst_string_only_test_trainset_0905 \
---stage2_path MolCA/all_checkpoints/MT_llama3.1-8b-inst_string_only_0903/step=89000-train/total_loss=0.384.ckpt \
 --scheduler None \
 --truncation 1 \
 --padding max_length \
 --test_on_trainset \
---trainset_resize 2400
+--trainset_resize 4800 \
+--stage2_path MolCA/all_checkpoints/MT_llama3.1-8b-inst_string_only_0903/step=89000-train/total_loss=0.384.ckpt \
