@@ -81,22 +81,20 @@ def main(args):
 
     # callbacks to save model parameters
     callbacks = []
-    if args.not_save_model:
-        pass
-    else:
-        monitoring_metric = "train/total_loss"
-        callbacks.append(
-            ModelCheckpoint(
-                dirpath=os.path.join(args.logging_dir, args.filename),
-                filename="{step:05d}-{train_total_loss:.3f}",
-                every_n_train_steps=args.every_n_train_steps,
-                save_last=True,
-                save_top_k=10,
-                save_on_train_epoch_end=True,
-                monitor=monitoring_metric,
-                mode="min",
-            )
+
+    monitoring_metric = "train_total_loss"
+    callbacks.append(
+        ModelCheckpoint(
+            dirpath=os.path.join(args.logging_dir, args.filename),
+            filename="{step:05d}-{train_total_loss:.3f}",
+            every_n_train_steps=args.every_n_train_steps,
+            save_last=True,
+            save_top_k=10,
+            save_on_train_epoch_end=True,
+            monitor=monitoring_metric,
+            mode="min",
         )
+    )
 
     if len(args.devices.split(",")) > 1:
         if args.strategy_name == "fsdp":
@@ -216,17 +214,15 @@ def get_args():
     parser.add_argument("--accelerator", type=str, default="gpu")
     parser.add_argument("--devices", type=str, default="0,1,2,3")
     parser.add_argument("--precision", type=str, default="bf16-mixed")
+    parser.add_argument("--max_steps", type=int, default=50000)
     parser.add_argument("--max_epochs", type=int, default=10)
-    parser.add_argument("--second_stage_start_step", type=int, default=1000000)
-    parser.add_argument("--max_steps", type=int, default=-1)
+    parser.add_argument("--second_stage_start_step", type=int, default=20000)
     parser.add_argument("--accumulate_grad_batches", type=int, default=1)
     parser.add_argument("--every_n_train_steps", type=int, default=1000)
     parser.add_argument("--task", type=str, default=None)
     parser.add_argument("--val_check_interval", type=float, default=0.1)
     parser.add_argument("--check_val_every_n_epoch", type=int, default=1)
     parser.add_argument("--save_top_k", type=int, default=10)
-    parser.add_argument("--neptune_project", type=str, default="debug")
-    parser.add_argument("--not_save_model", action="store_true", default=False)
     parser.add_argument("--skip_sanity_check", action="store_true", default=False)
     parser.add_argument("--logging_dir", type=str, default="MolCA/all_checkpoints/")
     parser.add_argument("--llava_style", type=int, default=0)
