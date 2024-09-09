@@ -11,8 +11,8 @@ python3 MolCA/stage3.py \
 --per_device_inference_batch_size_trn 70 \
 --per_device_inference_batch_size_rea 70 \
 --per_device_inference_batch_size_rxn 70 \
---per_device_inference_batch_size_reg 80 \
---per_device_inference_batch_size_cls 80 \
+--per_device_inference_batch_size_reg 120 \
+--per_device_inference_batch_size_cls 120 \
 --num_beam 1 \
 --raw_data_root MolCA/data/multi_task_dataset_0813_selfies \
 --gen_max_len 256 \
