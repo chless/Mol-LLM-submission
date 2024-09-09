@@ -557,9 +557,6 @@ class MoleculeNetDatasetDeepChem(Dataset):
 
         self.set_necessary_data()
 
-    def __len__(self):
-        return len(self.smiles_list)
-
     def get_necessary_data(self, index):
         smiles = self.smiles_list[index]
         # set molecule string representation as selfies
@@ -597,10 +594,6 @@ class MoleculeNetDatasetDeepChem(Dataset):
                 }
             )
 
-        if self.debug:
-            self.mol_list = self.mol_list[:100]
-            self.label_list = self.label_list[:100]
-
         self.smiles_list = []
         for mol in self.mol_list:
             self.smiles_list.append(Chem.MolToSmiles(mol))
@@ -634,6 +627,9 @@ class MoleculeNetDatasetDeepChem(Dataset):
         self.input_mol_string_list = input_mol_string_list
         self.graph_list = graph_list
         self.instruction_list = instruction_list
+
+    def __len__(self):
+        return len(self.label_list)
 
     def __getitem__(self, index):
         graph = self.graph_list[index]
@@ -718,7 +714,7 @@ class MolInstructionDatset(Dataset):
         self.instruction_list = instruction_list
 
     def __len__(self):
-        return len(self.input_list)
+        return len(self.label_list)
 
     def get_necessary_data(self, index):
         instruction = self.instruction_list[index]
@@ -1176,7 +1172,6 @@ class InstructionInMemoryDataset(InMemoryDataset):
         raw_data_list = list(torch.load(self.raw_paths[0]))
         data_list = []
         count_fail_conversion = 0
-
         iter_bar = tqdm(range(len(raw_data_list)))
         for i in iter_bar:
             iter_bar.set_description(
