@@ -381,6 +381,12 @@ class Blip2Stage3(pl.LightningModule):
                 batch_size=total_batch_size,
                 sync_dist=False,
             )
+            self.log(
+                "train_total_loss",
+                float(total_loss),
+                batch_size=total_batch_size,
+                sync_dist=False,
+            )
 
             return total_loss
 
