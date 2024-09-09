@@ -253,13 +253,7 @@ class Stage3DM(LightningDataModule):
         self.root = root
         self.fit_llm_input_convention = fit_llm_input_convention
         self.fit_llm_output_convention = fit_llm_output_convention
-        self.task_categories = [
-            "translation",
-            "reagent",
-            "reaction",
-            "regression",
-            "classification",
-        ]
+
         self.batch_sizes = {
             "classification": args.per_device_batch_size_cls,
             "regression": args.per_device_batch_size_reg,
@@ -290,47 +284,40 @@ class Stage3DM(LightningDataModule):
         }
 
         if root == "multi_task":
-            task_categories = self.task_categories
-            self.concat_datasets = {
-                task: {"train": None, "val": None, "test": None}
-                for task in task_categories
-            }
-            for task in self.concat_datasets.keys():
-                for split in ["train", "val", "test"]:
-                    if split == "val":
-                        resize = args.valset_resize if args.valset_resize > 0 else None
-                    elif split == "test":
-                        resize = args.testset_resize if args.testset_resize > 0 else None
-                    elif split == "train":
-                        resize = args.trainset_resize if args.trainset_resize > 0 else None
-                    else:
-                        raise NotImplementedError
-
-                    self.concat_datasets[task][split] = InstructionInMemoryDataset(
-                        root=self.args.raw_data_root,
-                        filename=f"{task}_{split}",
-                        resize=resize,
-                    )
+            self.task_categories = [
+                "translation",
+                "reagent",
+                "reaction",
+                "regression",
+                "classification",
+            ]
         elif root in self.task_categories:
-            self.concat_datasets = {root: {"train": None, "val": None, "test": None}}
-            for task in self.concat_datasets.keys():
-                for split in ["train", "val", "test"]:
-                    if split == "val":
-                        resize = args.valset_resize if args.valset_resize > 0 else None
-                    elif split == "test":
-                        resize = args.testset_resize if args.testset_resize > 0 else None
-                    elif split == "train":
-                        resize = args.trainset_resize if args.trainset_resize > 0 else None
-                    else:
-                        raise NotImplementedError
-
-                    self.concat_datasets[task][split] = InstructionInMemoryDataset(
-                        root=self.args.raw_data_root,
-                        filename=f"{task}_{split}",
-                        resize=resize,
-                    )
+            self.task_categories = [root]
+        elif root == "smol_instruct":
+            self.task_categories = ["smol_instruct"]
         else:
             raise NotImplementedError
+        
+        self.concat_datasets = {
+            task: {"train": None, "val": None, "test": None}
+            for task in self.task_categories
+        }
+        for task in self.concat_datasets.keys():
+            for split in ["train", "val", "test"]:
+                if split == "val":
+                    resize = args.valset_resize if args.valset_resize > 0 else None
+                elif split == "test":
+                    resize = args.testset_resize if args.testset_resize > 0 else None
+                elif split == "train":
+                    resize = args.trainset_resize if args.trainset_resize > 0 else None
+                else:
+                    raise NotImplementedError
+
+                self.concat_datasets[task][split] = InstructionInMemoryDataset(
+                    root=self.args.raw_data_root,
+                    filename=f"{task}_{split}",
+                    resize=resize,
+                )
 
         self.init_tokenizer(tokenizer)
         self.mol_ph_token = "<mol>" * self.args.num_query_token
