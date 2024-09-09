@@ -1,5 +1,5 @@
 export TOKENIZERS_PARALLELISM=false;
-gpus='0,1,2,3,4,5,6,7'
+gpus='1,2,3,4,5,6,7'
 
 python3 MolCA/stage3.py \
 --devices $gpus \
@@ -19,8 +19,8 @@ python3 MolCA/stage3.py \
 --per_device_inference_batch_size_reg 120 \
 --per_device_inference_batch_size_cls 120 \
 --val_check_interval 2500 \
---max_epochs 100 \
---second_stage_start_step 25000 \
+--max_steps 50000 \
+--second_stage_start_step 20000 \
 --num_beam 1 \
 --raw_data_root MolCA/data/multi_task_dataset_0813_selfies \
 --gen_max_len 256 \
@@ -33,6 +33,6 @@ python3 MolCA/stage3.py \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
 --mol_representation string_only \
---filename MT_galac1.3b_string_only_0906 \
+--filename MT_galac1.3b_string_only_0910 \
 --scheduler None \
 --valset_resize 2400 \
