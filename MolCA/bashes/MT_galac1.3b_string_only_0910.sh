@@ -36,5 +36,3 @@ python3 MolCA/stage3.py \
 --filename MT_galac1.3b_string_only_0910 \
 --scheduler None \
 --valset_resize 2400 \
---ckpt_path MolCA/all_checkpoints/MT_galac1.3b_string_only_0910/step=02001-train_total_loss=0.901.ckpt \
---wandb_id 5ar6g21w
