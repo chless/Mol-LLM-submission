@@ -33,9 +33,9 @@ torch.set_float32_matmul_precision(
 
 
 class MyDDPStrategy(strategies.DDPStrategy):
-    def load_model_state_dict(self, checkpoint):
+    def load_model_state_dict(self, checkpoint, strict=False):
         assert self.lightning_module is not None
-        self.lightning_module.load_state_dict(checkpoint["state_dict"], strict=False)
+        self.lightning_module.load_state_dict(checkpoint["state_dict"], strict=strict)
 
 
 def main(args):
@@ -89,7 +89,7 @@ def main(args):
             filename="{step:05d}-{train_total_loss:.3f}",
             every_n_train_steps=args.every_n_train_steps,
             save_last=True,
-            save_top_k=10,
+            save_top_k=5,
             save_on_train_epoch_end=True,
             monitor=monitoring_metric,
             mode="min",
