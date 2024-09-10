@@ -183,10 +183,6 @@ class Blip2OPT(Blip2Base):
             )
 
     def fit_llm_input_convention(self, llm_prompt):
-        # TODO: if train galactica next time, remove the debugging code. The code is added currently because previously trained model is not aligned with.
-        # <DEBUG>
-        llm_prompt = re.sub(r" Answer format:.*", '', llm_prompt)
-        # </DEBUG>
         llm_prompt = (
             added_tokens.INSTRUCTION[0] + llm_prompt + added_tokens.INSTRUCTION[1]
         )
