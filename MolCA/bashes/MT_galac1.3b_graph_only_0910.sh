@@ -32,7 +32,7 @@ python3 MolCA/stage3.py \
 --num_query_token 32 \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
---mol_representation string_only \
+--mol_representation graph_only \
 --filename MT_galac1.3b_graph_only_0910 \
 --scheduler None \
 --valset_resize 2400 \
