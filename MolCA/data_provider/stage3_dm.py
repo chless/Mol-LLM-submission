@@ -65,26 +65,6 @@ def prepare_llm_input(
     else:
         llm_prompt = instruction
 
-    llm_prompt += " Answer format: {label_start}...{label_end}."
-    if task in CLASSIFICATION_BENCHMARKS:
-        llm_prompt = llm_prompt.replace("{label_start}", added_tokens.BOOL[0])
-        llm_prompt = llm_prompt.replace("{label_end}", added_tokens.BOOL[1])
-    elif task in REGRESSION_BENCHMARKS:
-        llm_prompt = llm_prompt.replace("{label_start}", added_tokens.FLOAT[0])
-        llm_prompt = llm_prompt.replace("{label_end}", added_tokens.FLOAT[1])
-    elif task in MOL2TEXT_BENCHMARKS:
-        llm_prompt = llm_prompt.replace("{label_start}", added_tokens.DESCRIPTION[0])
-        llm_prompt = llm_prompt.replace("{label_end}", added_tokens.DESCRIPTION[1])
-    elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS:
-        try:
-            llm_prompt = llm_prompt.replace("{label_start}", added_tokens.MOL_1D[0])
-            llm_prompt = llm_prompt.replace("{label_end}", added_tokens.MOL_1D[1])
-        except:
-            print(llm_prompt)
-            raise NotImplementedError
-    else:
-        raise NotImplementedError
-
     return llm_prompt
 
 
