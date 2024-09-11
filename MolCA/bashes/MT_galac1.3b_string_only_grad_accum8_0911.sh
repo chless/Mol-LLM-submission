@@ -37,4 +37,5 @@ python3 MolCA/stage3.py \
 --scheduler None \
 --valset_resize 2400 \
 --init_lr 1e-3 \
---accumulate_grad_batches 8
+--accumulate_grad_batches 8 \
+--every_n_train_steps 100
