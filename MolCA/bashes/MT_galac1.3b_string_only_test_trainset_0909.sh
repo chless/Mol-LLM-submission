@@ -1,5 +1,5 @@
 export TOKENIZERS_PARALLELISM=false;
-gpus='1,2,3,4,5,6,7'
+gpus='0,1,2,3,4,5,6,7'
 
 python3 MolCA/stage3.py \
 --devices $gpus \
@@ -24,9 +24,10 @@ python3 MolCA/stage3.py \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
 --mol_representation string_only \
---filename MT_galac1.3b_string_only_test_trainset_0909 \
+--filename MT_galac1.3b_string_only_test_trainset_0910 \
 --scheduler None \
 --truncation 1 \
 --padding max_length \
 --test_on_trainset \
---stage2_path MolCA/all_checkpoints/MT_galac1.3b_string_only_0906/step=177000-train_total_loss=0.000.ckpt
+--trainset_resize 20000 \
+--stage2_path MolCA/all_checkpoints/MT_galac1.3b_string_only_0910/step=50000-train_total_loss=0.340.ckpt
