@@ -38,4 +38,5 @@ python3 MolCA/stage3.py \
 --valset_resize 2400 \
 --init_lr 1e-3 \
 --accumulate_grad_batches 8 \
---every_n_train_steps 100
+--every_n_train_steps 100 \
+--ckpt_path MolCA/all_checkpoints/MT_galac1.3b_string_only_grad_accum8_0911/step=00300-train_total_loss=0.619.ckpt
