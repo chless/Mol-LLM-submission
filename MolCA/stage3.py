@@ -67,8 +67,6 @@ def main(args):
 
     print("total params:", sum(p.numel() for p in model.parameters()))
 
-    devices = ast.literal_eval(args.devices)
-
     dm = Stage3DM(
         mode=args.mode,
         num_workers=args.num_workers,
