@@ -259,13 +259,6 @@ class Blip2Stage3(pl.LightningModule):
 
         if isinstance(batch, list) and len(batch) == 5:
             batch_sizes = [b[1].input_ids.size(0) for b in batch]
-            batch_size_dict = {
-                "classification": batch_sizes[0],
-                "regression": batch_sizes[1],
-                "reaction": batch_sizes[2],
-                "reagent": batch_sizes[3],
-                "translation": batch_sizes[4],
-            }
             total_batch_size = sum(batch_sizes)
             ##============== Overall Loss ===================##
             batches = {
@@ -292,13 +285,6 @@ class Blip2Stage3(pl.LightningModule):
                 sync_dist=False,
             )
             for key in outputs.keys():
-                self.log(
-                    f"train/{key}/total_loss",
-                    float(outputs[key]["loss"]),
-                    batch_size=batch_size_dict[key],
-                    sync_dist=False,
-                )
-
                 task_subtask_pairs = batches[key][3]
                 instance_losses = outputs[key]["instance_loss"]
 
