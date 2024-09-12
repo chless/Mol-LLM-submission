@@ -39,4 +39,5 @@ python3 MolCA/stage3.py \
 --init_lr 1e-4 \
 --accumulate_grad_batches 8 \
 --every_n_train_steps 100 \
---ckpt_path MolCA/all_checkpoints/MT_galac1.3b_string_only_grad_accum8_0911/last.ckpt
+--ckpt_path MolCA/all_checkpoints/MT_galac1.3b_string_only_grad_accum8_0911/last.ckpt \
+--wandb_id whem9v0j
