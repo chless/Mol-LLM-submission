@@ -28,5 +28,4 @@ python3 MolCA/stage3.py \
 --scheduler None \
 --truncation 1 \
 --padding max_length \
---test_on_trainset \
 --stage2_path MolCA/all_checkpoints/MT_galac1.3b_string_only_0906/step=177000-train_total_loss=0.000.ckpt
