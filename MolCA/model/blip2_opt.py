@@ -241,6 +241,12 @@ class Blip2OPT(Blip2Base):
         additional_tokens = [
             token for sublist in additional_tokens for token in sublist
         ]
+        if 'smol' not in self.args.root:
+            additional_tokens.remove('<IUPAC>')
+            additional_tokens.remove('</IUPAC>')
+            additional_tokens.remove('<MOLFORMULA>')
+            additional_tokens.remove('</MOLFORMULA>')
+            
         self.llm_tokenizer.add_tokens(additional_tokens)
 
         self.mol_token = added_tokens.MOL_EMBEDDING[0]
