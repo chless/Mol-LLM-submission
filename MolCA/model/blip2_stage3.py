@@ -445,6 +445,7 @@ class Blip2Stage3(pl.LightningModule):
         self.train_list_tasks.append(tasks)
         self.train_list_probs.append(probs)
 
+    # not use, because evaluatino and logging in training step make x4 times per epoch training time
     def on_train_evaluation_end(self, mode="train"):
         print("on_evaluation_epoch_end start")
         list_predictions = self.train_list_predictions
@@ -536,27 +537,12 @@ class Blip2Stage3(pl.LightningModule):
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
         graphs, prompt_tokens, texts, tasks = batch
-        if all(task.split("/")[0] in CLASSIFICATION_BENCHMARKS for task in tasks):
-            task = "classification"
-        elif all(task.split("/")[0] in REGRESSION_BENCHMARKS for task in tasks):
-            task = "regression"
-        elif all(task.split("/")[0] in REACTION_BENCHMARKS for task in tasks):
-            task = "reaction"
-        elif all(task.split("/")[0] in ["reagent_prediction"] for task in tasks):
-            task = "reagent"
-        elif all(
-            task.split("/")[0] in MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS
-            for task in tasks
-        ):
-            task = "translation"
-        else:
-            raise NotImplementedError()
 
         samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
         outputs = self.blip2model.generate(
             samples,
             do_sample=self.do_sample,
-            num_beams=self.num_beams if task != "classification" else 1,
+            num_beams=self.num_beams,
             max_length=self.gen_max_len,
             min_length=self.min_len,
         )
@@ -726,7 +712,7 @@ class Blip2Stage3(pl.LightningModule):
         # OPT
         parser.add_argument("--llm_model", type=str, default="facebook/galactica-1.3b")
         # parser.add_argument('--prompt', type=str, default='a molecule of ')
-        parser.add_argument("--num_beams", type=int, default=5)
+        parser.add_argument("--num_beams", type=int, default=1)
         parser.add_argument("--do_sample", action="store_true", default=False)
         parser.add_argument("--gen_max_len", type=int, default=256)
         parser.add_argument("--min_len", type=int, default=8)
