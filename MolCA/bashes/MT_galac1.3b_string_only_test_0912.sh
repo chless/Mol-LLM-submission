@@ -29,4 +29,4 @@ python3 MolCA/stage3.py \
 --truncation 1 \
 --padding max_length \
 --test_on_trainset \
---stage2_path MolCA/all_checkpoints/MT_galac1.3b_string_only_grad_accum8_0911/last.ckpt
+--stage2_path MolCA/all_checkpoints/MT_galac1.3b_string_only_grad_accum8_0912/step=06500-train_total_loss=0.282.ckpt
