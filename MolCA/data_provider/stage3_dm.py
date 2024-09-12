@@ -188,26 +188,26 @@ REGRESSION_BENCHMARKS = [
 
 MOL2TEXT_BENCHMARKS = [
     # "molecular_description_generation",
-    "chebi-20-mol2text"
-                "smol-name_conversion-s2f",
-                "smol-name_conversion-s2i",
-                "smol-name_conversion-i2f",
-                "smol-molecule_captioning",
+    "chebi-20-mol2text",
+    "smol-name_conversion-s2f",
+    "smol-name_conversion-s2i",
+    "smol-name_conversion-i2f",
+    "smol-molecule_captioning",
 ]
 
 TEXT2MOL_BENCHMARKS = [
     # "description_guided_molecule_design",
-    "chebi-20-text2mol"
-                "smol-name_conversion-i2s",
-                "smol-molecule_generation",
+    "chebi-20-text2mol",
+    "smol-name_conversion-i2s",
+    "smol-molecule_generation",
 ]
 
 REACTION_BENCHMARKS = [
     "reagent_prediction",
     "forward_reaction_prediction",
     "retrosynthesis",
-               "smol-forward_synthesis",
-                "smol-retrosynthesis"
+    "smol-forward_synthesis",
+    "smol-retrosynthesis"
 ]
 
 TOTAL_BENCHMARKS = (
