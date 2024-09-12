@@ -8,5 +8,5 @@ NUMBER = [f"<|{i}|>" for i in range(10)]
 NUMBER.extend(["<|+|>", "<|-|>", "<|.|>"])
 INSTRUCTION = ["<INSTRUCTION>", "</INSTRUCTION>"]
 REACTION_DIRECTION = ["|>>|"]
-IUPAC_NAME = ["<IUPAC_NAME>", "</IUPAC_NAME>"]
+IUPAC = ["<IUPAC>", "</IUPAC>"]
 MOLFORMULA = ["<MOLFORMULA>", "</MOLFORMULA>"]
