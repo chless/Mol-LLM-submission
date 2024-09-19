@@ -851,6 +851,9 @@ class SMolInstructDataset(Dataset):
         self.data = data
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
+        self.instruction_list ={
+            'chebi_20_text2mol': getattr(instructions, 'chebi_20_text2mol'),
+        }
 
         self.set_necesary_data()
 
