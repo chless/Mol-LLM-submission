@@ -151,3 +151,64 @@ chebi_20_text2mol = [
     "What is the molecule that can be derived from these structural description?",
     "Can you synthesize a molecule based on this structural information?",
 ]
+
+smol_name_conversion_s2f = [
+    '<INPUT> is the SMILES representation of a molecule. What is its molecular formula?',
+    'Convert the SMILES representation of a molecule <INPUT> into molecular formula.',
+    'What is the formula of the molecule <INPUT> ?',
+    'Can you give the molecular molecular formula of <INPUT> ?',
+    'Please write the molecular formula of the molecule <INPUT> .',
+    'Given the SMILES representation <INPUT>, what would be its molecular formula?',
+    'The SMILES representation <INPUT> represents a specific molecule. Can you reveal its molecular formula?',
+    'Considering the SMILES code <INPUT>, can you determine the corresponding molecular formula?',
+    'Can you tell me the molecular formula of <INPUT> ?',
+    "I'd like to know the molecular formula of <INPUT> . Can you tell me?",
+    'What is the molecular formula for the molecule denoted by <INPUT> ?',
+    'What is the molecular formula of <INPUT> ?',
+    'Please provide the molecular formula for <INPUT> .'
+]
+smol_name_conversion_s2i = [
+    '<INPUT> is the SMILES representation of a molecule. What is its IUPAC name?',
+    'Convert the SMILES representation of a molecule <INPUT> into IUPAC name.',
+    'What is the IUPAC name of the molecule <INPUT> ?',
+    'Can you give the IUPAC name of the molecule <INPUT> ?',
+    'Please write the IUPAC name of the molecule <INPUT> .',
+    '<INPUT> The above is a SMILES representation. Write the IUPAC name of the corresponding molecule.',
+    'Determine the IUPAC name for the molecule represented by the following SMILES representation: <INPUT> .',
+    'What is the IUPAC name for the molecule whose SMILES representation is <INPUT> ?',
+    'Determine the IUPAC name for the molecule denoted by <INPUT> .',
+    'Translate the given SMILES formula of a molecule <INPUT> into its IUPAC name.',
+    'Provide the IUPAC name for the molecule represented as <INPUT> .',
+    'Convert the following SMILES notation <INPUT> into its IUPAC nomenclature.',
+    'Turn the given SMILES symbol of a molecule <INPUT> into its respective IUPAC name.'
+]
+smol_name_conversion_i2s = [
+    '<INPUT> is the IUPAC name of a molecule. Please give its SMILES representation.',
+    'Convert the IUPAC name of a molecule <INPUT> into SMILES representation.',
+    'What is the SMILES representation of the molecule with IUPAC name <INPUT> ?',
+    'Can you give the SMILES notation of the molecule <INPUT> ?',
+    'Please write the SMILES representation of the molecule <INPUT> .',
+    '<INPUT> The above is the IUPAC name of a molecule. Write its SMILES notation.',
+    'The IUPAC name of a certain molecule is <INPUT> . Can you provide its SMILES representation?',
+    'Please identify the SMILES representation of the molecule named <INPUT> .',
+    'For the molecule with <INPUT> as the IUPAC name, what is the corresponding SMILES representation?',
+    'What is the SMILES notation for <INPUT> ?',
+    'Could you provide the SMILES for <INPUT> ?',
+    'Can you tell me the SMILES representation for the molecule <INPUT> ?',
+    'What is the SMILES representation for <INPUT> ?'
+]
+smol_name_conversion_i2f = [
+    '<INPUT> is the IUPAC name of a molecule. Please give its molecular formula.',
+    'Convert the IUPAC name of a molecule <INPUT> into molecular formula.',
+    'What is the molecular formula of the molecule <INPUT> ?',
+    'Can you give the molecular formula of the molecule <INPUT> ?',
+    'Please write the molecular formula of the molecule <INPUT> .',
+    '<INPUT> The above is the IUPAC name of a molecule. Write its molecular formula.',
+    'What is the molecular formula of the molecule identified by <INPUT> ?',
+    'For the molecule named <INPUT> by IUPAC nomenclature, provide its molecular formula.',
+    'Name the molecular formula for the molecule established as <INPUT> using the IUPAC nomenclature.',
+    'Under IUPAC nomenclature, a molecule named <INPUT> is given. What is its corresponding molecular formula?',
+    'Translate the chemical IUPAC name <INPUT> into its molecular formula.',
+    'Provide the molecular formula for the IUPAC named substance <INPUT> .',
+    'What is the molecular formula of the compound with this IUPAC name <INPUT> ?'
+]

@@ -60,7 +60,9 @@ def prepare_llm_input(
         raise NotImplementedError("mol_representation should be one of the options")
 
     # for tasks whose input does not contain molecule string (such as text2mol), don't add mol_string
-    if not "<None>" in mol_string:
+    if '<INPUT>' in instruction and not "<None>" in mol_string:   # for LlaSMol whose input contains <INPUT>
+        llm_prompt = instruction.replace('<INPUT>', mol_string_converted)
+    elif not "<None>" in mol_string:
         llm_prompt = instruction + mol_string_converted
     else:
         llm_prompt = instruction
@@ -191,13 +193,14 @@ MOL2TEXT_BENCHMARKS = [
     "chebi-20-mol2text",
     "smol-name_conversion-s2f",
     "smol-name_conversion-s2i",
-    "smol-name_conversion-i2f",
+    
     "smol-molecule_captioning",
 ]
 
 TEXT2MOL_BENCHMARKS = [
     # "description_guided_molecule_design",
     "chebi-20-text2mol",
+    "smol-name_conversion-i2f",
     "smol-name_conversion-i2s",
     "smol-molecule_generation",
 ]
@@ -449,6 +452,10 @@ def wrap_label(label, task):
         label_tokens = added_tokens.BOOL
     elif task in REGRESSION_BENCHMARKS:
         label_tokens = added_tokens.FLOAT
+    elif task in ["smol-name_conversion-s2f", "smol-name_conversion-i2f"]:
+        label_tokens = added_tokens.MOLFORMULA
+    elif task == "smol-name_conversion-s2i":
+        label_tokens = added_tokens.IUPAC
     elif task in MOL2TEXT_BENCHMARKS:
         label_tokens = added_tokens.DESCRIPTION
     elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS:
@@ -807,7 +814,7 @@ class SMolInstructDataset(Dataset):
         self.data = data
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
-
+        self.instruction_list = getattr(instructions, self.task.replace("-", "_"))
         self.set_necesary_data()
 
     def set_necesary_data(self):
@@ -817,6 +824,11 @@ class SMolInstructDataset(Dataset):
         label_list = []
 
         self.count_invalid_smiles = 0
+        
+        # pre-load data
+        raw_inputs = self.data['raw_input'][:]
+        raw_outputs = self.data['raw_output'][:]
+        
         iter_bar = tqdm(
             range(len(self.data)),
             total=len(self.data),
@@ -824,57 +836,66 @@ class SMolInstructDataset(Dataset):
         )
         for i in iter_bar:
             try:
-                graph, label, input_mol_string, instruction = self.get_necessary_data(i)
+                graph, label, input_mol_string, instruction = self.get_necessary_data(i, raw_inputs[i], raw_outputs[i])
                 label_list.append(label)
                 input_mol_string_list.append(input_mol_string)
                 graph_list.append(graph)
                 instruction_list.append(instruction)
             except Exception as e:
                 self.count_invalid_smiles += 1
-        if self.count_invalid_smiles > 0:
-            print(f"{self.task}: Number of invalid smiles: {self.count_invalid_smiles}")
-            print(
-                f"{self.task}: Invalid smiles ratio: {self.count_invalid_smiles/len(self.label_list)}"
-            )
-
+        
         self.label_list = label_list
         self.input_mol_string_list = input_mol_string_list
         self.graph_list = graph_list
         self.instruction_list = instruction_list
+        
+        if self.count_invalid_smiles > 0:
+            print(f"{self.task}: Number of invalid smiles: {self.count_invalid_smiles}")
+            print(f"{self.task}: Invalid smiles ratio: {self.count_invalid_smiles/len(self.label_list)}")
+
+        
 
     def __len__(self):
         return len(self.label_list)
 
-    def get_necessary_data(self, index):
-        input = self.data['input'][index]
-
-        raw_input = self.data['raw_input'][index]
-        label = self.data['raw_output'][index]
-
-        input = re.sub(r"<SELFIES>\s*", added_tokens.SELFIES[0], input)
-        input = re.sub(r"\s*</SELFIES>", added_tokens.SELFIES[1], input)
-
+    def get_necessary_data(self, index, raw_input, raw_output):
+        raw_input = raw_input
+        label = raw_output
+        instruction = self.instruction_list[
+            np.random.choice(len(self.instruction_list))
+            ]
 
         if self.task in TEXT2MOL_BENCHMARKS:
+            """
+            "chebi-20-text2mol",
+            "smol-name_conversion-i2s",
+            "smol-name_conversion-i2f",
+            "smol-molecule_generation",
+            """
+            s_token, e_token = \
+                added_tokens.IUPAC if self.task in ["smol-name_conversion-i2s", "smol-name_conversion-i2f"] \
+                else added_tokens.DESCRIPTION 
+                
             description = raw_input
-            instruction += (
-                "\n"
-                + added_tokens.DESCRIPTION[0]
-                + description
-                + added_tokens.DESCRIPTION[1]
-            )
+            
+            instruction += ("\n" + s_token + description + e_token)
             graph = smiles2data('CCCC') # null smiles, just input for batch processing
             input_mol_string = "<None>"
         elif self.task in MOL2TEXT_BENCHMARKS:
-            input = re.sub(r"<SELFIES> ", added_tokens.SELFIES[0], input)
-            input = re.sub(r"</SELFIES>", added_tokens.SELFIES[1], input)
-
+            """
+            "chebi-20-mol2text",
+            "smol-name_conversion-s2f",
+            "smol-name_conversion-s2i",
+            "smol-molecule_captioning",
+            """
+            
             input_mol_string = raw_input
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
         elif self.task in REACTION_BENCHMARKS:
-            input = re.sub(r"<SELFIES>\s*", added_tokens.SELFIES[0], input)
-            input = re.sub(r"\s*</SELFIES>", added_tokens.SELFIES[1], input)
+            # input = re.sub(r"<SELFIES>\s*", added_tokens.SELFIES[0], input)
+            # input = re.sub(r"\s*</SELFIES>", added_tokens.SELFIES[1], input)
+            pass
 
         label = wrap_label(label, self.task)
         input_mol_string = (
@@ -1407,8 +1428,15 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
             test_dataset = dataset.filter(lambda x: "test" in x["metadata"])
             tasks = [task_name]
         elif "smol" in task_name:
-            smol_dataset = load_dataset("osunlp/SMolInstruct", use_selfies=True)
-            _task = task_name.split("-")[1]
+            # smol_dataset = load_dataset("osunlp/SMolInstruct", use_selfies=True)
+            smol_dataset = load_dataset(
+                "osunlp/SMolInstruct", 
+                use_selfies=True,
+                insert_core_tags=False,  # loada data w/o core tags such as <SELFIES>, </SELFIES>
+                # cache_dir=os.path.join(self.root, 'cache')
+                )
+            _task = task_name[5:]  # remove smol- from smol-<task_name>
+            
             # DEBUG: to avoid lengthy processing time
             train_dataset = smol_dataset["train"].filter(lambda x: x["task"] == _task)
             valid_dataset = smol_dataset["validation"].filter(lambda x: x["task"] == _task)
