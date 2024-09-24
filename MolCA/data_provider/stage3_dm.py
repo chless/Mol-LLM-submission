@@ -27,7 +27,7 @@ import random
 # we split individual characters inside special tokens like [START_DNA]
 # TODO: change this ugly I_SMILES things to regular special token, and add the special token to vocab whichever LLM
 # CUSTOM_SEQ_RE = re.compile(r"(\[START_(DNA|SMILES|I_SMILES|AMINO)])(.*?)(\[END_\2])")
-CUSTOM_SEQ_RE = re.compile(r"(<MOL_1D>)(.*?)(</MOL_1D>)")
+CUSTOM_SEQ_RE = re.compile(r"(<SELFIES>)(.*?)(</SELFIES>)")
 
 # token added to implement a custom sequence tokenization. This token is added at
 # corpus cleaning step and removed in pretokenization. The digits are added to increase the chance
@@ -43,7 +43,7 @@ def prepare_llm_input(
     mol_representation,
 ):
     if CUSTOM_SEQ_RE.match(mol_string) is None:
-        mol_string = added_tokens.MOL_1D[0] + mol_string + added_tokens.MOL_1D[1]
+        mol_string = added_tokens.SELFIES[0] + mol_string + added_tokens.SELFIES[1]
 
     mol_ph = added_tokens.MOL_2D[0] + mol_ph + added_tokens.MOL_2D[1]
 
@@ -281,7 +281,7 @@ class Stage3DM(LightningDataModule):
             dataset_class = Mol_LLM_Dataset
         elif root in TOTAL_BENCHMARKS:
             self.task_categories = [root]
-            dataset_class = Mol_LLM_Dataset
+            dataset_class = Mol_LLM_SMol_Dataset
         elif root == "multi_task+smol":
             self.task_categories = [
                 "translation",
@@ -314,6 +314,7 @@ class Stage3DM(LightningDataModule):
                     root=self.args.raw_data_root,
                     filename=f"{task}_{split}",
                     resize=resize,
+                    args=self.args,
                 )
 
         self.init_tokenizer(tokenizer)
@@ -451,7 +452,7 @@ def wrap_label(label, task):
     elif task in MOL2TEXT_BENCHMARKS:
         label_tokens = added_tokens.DESCRIPTION
     elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS:
-        label_tokens = added_tokens.MOL_1D
+        label_tokens = added_tokens.SELFIES
     else:
         raise NotImplementedError
 
@@ -513,7 +514,7 @@ class MoleculeNetDatasetDeepChem(Dataset):
         # set molecule string representation as selfies
         input_mol_string = sf.encoder(smiles)
         input_mol_string = (
-            added_tokens.MOL_1D[0] + input_mol_string + added_tokens.MOL_1D[1]
+            added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
         )
         label = self.label_list[index]
         label = wrap_label(label, self.task)
@@ -681,7 +682,7 @@ class MolInstructionDatset(Dataset):
                 )  # reagent prediction has two selfies in input
                 input_mol_string = input.replace(
                     ">>",
-                    f"{added_tokens.MOL_1D[1]}{added_tokens.REACTION_DIRECTION[0]}{added_tokens.MOL_1D[0]}",
+                    f"{added_tokens.SELFIES[1]}{added_tokens.REACTION_DIRECTION[0]}{added_tokens.SELFIES[0]}",
                 )
                 list_smiles = [sf.decoder(s) for s in list_selfies]
                 graph = [smiles2data(s) for s in list_smiles]
@@ -699,7 +700,7 @@ class MolInstructionDatset(Dataset):
 
         label = wrap_label(label, self.task)
         input_mol_string = (
-            added_tokens.MOL_1D[0] + input_mol_string + added_tokens.MOL_1D[1]
+            added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
         )
 
         return graph, label, input_mol_string, instruction
@@ -787,7 +788,7 @@ class ChEBIDatset(Dataset):
 
         label = wrap_label(label, self.task)
         input_mol_string = (
-            added_tokens.MOL_1D[0] + input_mol_string + added_tokens.MOL_1D[1]
+            added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
         )
 
         return graph, label, input_mol_string, instruction
@@ -806,9 +807,6 @@ class SMolInstructDataset(Dataset):
         self.data = data
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
-        self.instruction_list ={
-            'chebi_20_text2mol': getattr(instructions, 'chebi_20_text2mol'),
-        }
 
         self.set_necesary_data()
 
@@ -853,6 +851,9 @@ class SMolInstructDataset(Dataset):
         raw_input = self.data['raw_input'][index]
         label = self.data['raw_output'][index]
 
+        input = re.sub(r"<SELFIES>\s*", added_tokens.SELFIES[0], input)
+        input = re.sub(r"\s*</SELFIES>", added_tokens.SELFIES[1], input)
+
 
         if self.task in TEXT2MOL_BENCHMARKS:
             description = raw_input
@@ -865,21 +866,19 @@ class SMolInstructDataset(Dataset):
             graph = smiles2data('CCCC') # null smiles, just input for batch processing
             input_mol_string = "<None>"
         elif self.task in MOL2TEXT_BENCHMARKS:
-            input = re.sub(r"<SELFIES>", added_tokens.MOL_1D[0], input)
-            input = re.sub(r"</SELFIES>", added_tokens.MOL_1D[1], input)
+            input = re.sub(r"<SELFIES> ", added_tokens.SELFIES[0], input)
+            input = re.sub(r"</SELFIES>", added_tokens.SELFIES[1], input)
 
             input_mol_string = raw_input
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
         elif self.task in REACTION_BENCHMARKS:
-            input = re.sub(r"<SELFIES>", added_tokens.MOL_1D[0], input)
-            input = re.sub(r"</SELFIES>", added_tokens.MOL_1D[1], input)
-
-            instruction = re.sub(r"<SELFIES>.*</SELFIES>", "", input)
+            input = re.sub(r"<SELFIES>\s*", added_tokens.SELFIES[0], input)
+            input = re.sub(r"\s*</SELFIES>", added_tokens.SELFIES[1], input)
 
         label = wrap_label(label, self.task)
         input_mol_string = (
-            added_tokens.MOL_1D[0] + input_mol_string + added_tokens.MOL_1D[1]
+            added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
         )
 
         return graph, label, input_mol_string, instruction
@@ -928,9 +927,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
         transform=None,
         pre_transform=None,
         resize=None,
+        args=None,
     ):
+        self.args = args
         self.filename = filename  # raw_file_names and processed_file_names use this
-        self.start, self.end = added_tokens.MOL_1D
+        self.start, self.end = added_tokens.SELFIES
         self.resize = resize
         super(Mol_LLM_Dataset, self).__init__(root, transform, pre_transform)
         self.load(self.processed_paths[0])
@@ -1305,7 +1306,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
     
 class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
     def get_target_benchmarks(self):
-        if "classification" in self.filename:
+        if "target_benchmarks" in self.args:
+            target_benchmarks = self.args.target_benchmarks
+        elif "classification" in self.filename:
             target_benchmarks = [
                 "bace", 
                 "bbbp", 
@@ -1406,6 +1409,7 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
         elif "smol" in task_name:
             smol_dataset = load_dataset("osunlp/SMolInstruct", use_selfies=True)
             _task = task_name.split("-")[1]
+            # DEBUG: to avoid lengthy processing time
             train_dataset = smol_dataset["train"].filter(lambda x: x["task"] == _task)
             valid_dataset = smol_dataset["validation"].filter(lambda x: x["task"] == _task)
             test_dataset = smol_dataset["test"].filter(lambda x: x["task"] == _task)
@@ -1434,6 +1438,7 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
     
     def download(self):
         # subtask index is necessary when loading clintox from deepchem
+        # TODO: deprecate this lengthy hardcoded list
         task_subtask_lists = {
             "qm9_homo": [0],
             "qm9_lumo": [0],

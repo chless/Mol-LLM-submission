@@ -115,26 +115,26 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
         target = targets[i]
         prediction = predictions[i]
 
-        if re.search(r"(?<=<MOL_1D>).*?(?=</MOL_1D>)", target):
-            target_selfies = re.search(r"(?<=<MOL_1D>).*?(?=</MOL_1D>)", target).group()
+        if re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", target):
+            target_selfies = re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", target).group()
         else:
-            target_selfies = re.search(r"(?<=<MOL_1D>).*", target).group()
+            target_selfies = re.search(r"(?<=<SELFIES>).*", target).group()
         target_smiles = selfies.decoder(target_selfies)
         target_mol = Chem.MolFromSmiles(target_smiles)
         target_canonical_smiles = Chem.CanonSmiles(target_smiles)
         target_canonical_selfies = selfies.encoder(target_canonical_smiles)
 
         try:
-            if re.search(r"(?<=<MOL_1D>).*?(?=</MOL_1D>)", prediction) is not None:
+            if re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", prediction) is not None:
                 prediction_selfies = re.search(
-                    r"(?<=<MOL_1D>).*?(?=</MOL_1D>)", prediction
+                    r"(?<=<SELFIES>).*?(?=</SELFIES>)", prediction
                 ).group()
             else:
-                prediction_selfies = re.search(r"(?<=<MOL_1D>).*", prediction).group()
+                prediction_selfies = re.search(r"(?<=<SELFIES>).*", prediction).group()
 
             assert (
-                "<MOL_1D>" not in prediction_selfies
-                and "</MOL_1D>" not in prediction_selfies
+                "<SELFIES>" not in prediction_selfies
+                and "</SELFIES>" not in prediction_selfies
             )
 
             prediction_smiles = selfies.decoder(prediction_selfies)

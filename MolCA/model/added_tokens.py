@@ -1,7 +1,7 @@
 BOOL = ["<BOOLEAN>", "</BOOLEAN>"]
 FLOAT = ["<FLOAT>", "</FLOAT>"]
 DESCRIPTION = ["<DESCRIPTION>", "</DESCRIPTION>"]
-MOL_1D = ["<MOL_1D>", "</MOL_1D>"]
+SELFIES = ["<SELFIES>", "</SELFIES>"]
 MOL_2D = ["<MOL_2D>", "</MOL_2D>"]
 MOL_EMBEDDING = ["<mol>"]
 NUMBER = [f"<|{i}|>" for i in range(10)]
