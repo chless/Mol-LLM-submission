@@ -68,9 +68,6 @@ class Blip2Stage3(pl.LightningModule):
             args = AttrDict(**args)
 
         self.args = args
-        if not hasattr(args, "do_sample"):
-            args.do_sample = False
-        self.do_sample = args.do_sample
         self.num_beams = args.num_beams
         self.gen_max_len = args.gen_max_len
         self.min_len = args.min_len
@@ -79,52 +76,28 @@ class Blip2Stage3(pl.LightningModule):
         # set strict_loading to False to load model in a lightweight way
         self.strict_loading = False
         if args.llm_model.find("galactica") >= 0:
-            self.blip2model = Blip2OPT(
-                args.bert_name,
-                args.gin_num_layers,
-                args.gin_hidden_dim,
-                args.drop_ratio,
-                args.tune_gnn,
-                args.num_query_token,
-                args.cross_attention_freq,
-                args.tune_llm,
-                args.peft_dir,
-                args.llm_model,
-                args.prompt,
-                args,
-            )
+            blip2model = Blip2OPT
         elif args.llm_model.find("llama") >= 0 or args.llm_model.find("vicuna") >= 0:
-            self.blip2model = Blip2Llama(
-                args.bert_name,
-                args.gin_num_layers,
-                args.gin_hidden_dim,
-                args.drop_ratio,
-                args.tune_gnn,
-                args.num_query_token,
-                args.cross_attention_freq,
-                args.tune_llm,
-                args.peft_dir,
-                args.llm_model,
-                args.prompt,
-                args,
-            )
+            blip2model = Blip2Llama
         elif args.llm_model.find("t5") >= 0:
-            self.blip2model = Blip2T5(
-                args.bert_name,
-                args.gin_num_layers,
-                args.gin_hidden_dim,
-                args.drop_ratio,
-                args.tune_gnn,
-                args.num_query_token,
-                args.cross_attention_freq,
-                args.tune_llm,
-                args.peft_dir,
-                args.llm_model,
-                args.prompt,
-                args,
-            )
+            blip2model = Blip2T5
         else:
             raise NotImplementedError()
+        
+        self.blip2model = blip2model(
+                args.bert_name,
+                args.gin_num_layers,
+                args.gin_hidden_dim,
+                args.drop_ratio,
+                args.tune_gnn,
+                args.num_query_token,
+                args.cross_attention_freq,
+                args.tune_llm,
+                args.peft_dir,
+                args.llm_model,
+                args.prompt,
+                args,
+        )
         self.tokenizer = self.blip2model.init_tokenizer()
         self.num_devices = (
             1
@@ -527,7 +500,6 @@ class Blip2Stage3(pl.LightningModule):
         samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
         outputs = self.blip2model.generate(
             samples,
-            do_sample=self.do_sample,
             num_beams=self.num_beams,
             max_length=self.gen_max_len,
             min_length=self.min_len,
@@ -679,99 +651,3 @@ class Blip2Stage3(pl.LightningModule):
                     batch_size=self.eval_dataset_losses[dataset]["total_samples"],
                     sync_dist=False,
                 )
-
-    @staticmethod
-    def add_model_specific_args(parent_parser):
-        parser = parent_parser.add_argument_group("GINSimclr")
-        # train mode
-        # GIN
-        parser.add_argument("--gin_hidden_dim", type=int, default=300)
-        parser.add_argument("--gin_num_layers", type=int, default=5)
-        parser.add_argument("--drop_ratio", type=float, default=0.0)
-        parser.add_argument("--tune_gnn", action="store_true", default=False)
-        # Bert
-        parser.add_argument("--bert_hidden_dim", type=int, default=768, help="")
-        parser.add_argument("--bert_name", type=str, default="scibert")
-        parser.add_argument("--cross_attention_freq", type=int, default=2)
-        parser.add_argument("--num_query_token", type=int, default=8)
-        parser.add_argument("--bert_num_hidden_layers", type=int, default=-1)
-        # OPT
-        parser.add_argument("--llm_model", type=str, default="facebook/galactica-1.3b")
-        # parser.add_argument('--prompt', type=str, default='a molecule of ')
-        parser.add_argument("--num_beams", type=int, default=1)
-        parser.add_argument("--do_sample", action="store_true", default=False)
-        parser.add_argument("--gen_max_len", type=int, default=256)
-        parser.add_argument("--min_len", type=int, default=8)
-        parser.add_argument("--tune_llm", type=str, default="freeze")
-        parser.add_argument("--peft_config", type=str, default=None)
-        parser.add_argument("--peft_dir", type=str, default="")
-
-        parser.add_argument("--save_every_n_epochs", type=int, default=10)
-        # quantization
-        parser.add_argument("--load_in_8bit", action="store_true", default=False)
-
-        # lora config
-        parser.add_argument("--lora_r", type=int, default=8)
-        parser.add_argument("--lora_alpha", type=int, default=32)
-        parser.add_argument("--lora_dropout", type=int, default=0.1)
-
-        # optimization
-        parser.add_argument(
-            "--weight_decay", type=float, default=0.05, help="optimizer weight decay"
-        )
-        parser.add_argument(
-            "--init_lr", type=float, default=1e-4, help="optimizer init learning rate"
-        )
-        parser.add_argument(
-            "--min_lr", type=float, default=1e-5, help="optimizer min learning rate"
-        )
-        parser.add_argument(
-            "--warmup_lr",
-            type=float,
-            default=1e-6,
-            help="optimizer warmup learning rate",
-        )
-        parser.add_argument(
-            "--warmup_steps", type=int, default=1000, help="optimizer warmup steps"
-        )
-        parser.add_argument(
-            "--lr_decay_rate", type=float, default=0.9, help="optimizer lr decay rate"
-        )
-        parser.add_argument(
-            "--scheduler",
-            type=str,
-            default="linear_warmup_cosine_lr",
-            help="type of scheduler",
-        )  # or linear_warmup_step_lr
-        parser.add_argument(
-            "--optimizer", type=str, default="adamw", help="type of scheduler"
-        )
-        parser.add_argument("--stage1_path", type=str, default="")
-        parser.add_argument("--stage2_path", type=str, default="")
-        parser.add_argument("--init_checkpoint", type=str, default="")
-        # normal resume feature for pytorch lightning Trainer
-        parser.add_argument("--ckpt_path", type=str, default=None)
-        parser.add_argument(
-            "--graph_encoder_ckpt",
-            type=str,
-            default="MolCA/gin_pretrained/graphcl_80.pth",
-        )
-        parser.add_argument("--graph_decoder_ckpt", type=str, default=None)
-
-        parser.add_argument("--used_gnn_layer", type=int, default=-1)
-        parser.add_argument("--gnn_jk", type=str, default="last")
-        parser.add_argument(
-            "--mol_representation",
-            type=str,
-            default="string+graph",
-            choices=["string_only", "graph_only", "string+graph"],
-        )
-        parser.add_argument(
-            "--apply_reg_order_scale", action="store_true", default=False
-        )
-        parser.add_argument("--apply_reg_label_quant", type=int, default=-1)
-        parser.add_argument("--add_selfies_tokens", action="store_true", default=True)
-        parser.add_argument(
-            "--selfies_token_path", type=str, default="MolCA/model/selfies_dict.txt"
-        )
-        return parent_parser

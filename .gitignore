@@ -166,3 +166,4 @@ dataset
 MolCA/results
 *.out
 wandb
+outputs

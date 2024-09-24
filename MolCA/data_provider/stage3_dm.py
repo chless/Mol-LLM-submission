@@ -436,51 +436,6 @@ class Stage3DM(LightningDataModule):
             )
         return loader
 
-    def add_model_specific_args(parent_parser):
-        parser = parent_parser.add_argument_group("Data module")
-        parser.add_argument("--num_workers", type=int, default=4)
-        parser.add_argument("--per_device_batch_size_cls", type=int, default=32)
-        parser.add_argument("--per_device_batch_size_reg", type=int, default=32)
-        parser.add_argument("--per_device_batch_size_rxn", type=int, default=32)
-        parser.add_argument("--per_device_batch_size_rea", type=int, default=32)
-        parser.add_argument("--per_device_batch_size_trn", type=int, default=32)
-        parser.add_argument(
-            "--per_device_inference_batch_size_cls", type=int, default=4
-        )
-        parser.add_argument(
-            "--per_device_inference_batch_size_reg", type=int, default=4
-        )
-        parser.add_argument(
-            "--per_device_inference_batch_size_rxn", type=int, default=4
-        )
-        parser.add_argument(
-            "--per_device_inference_batch_size_rea", type=int, default=4
-        )
-        parser.add_argument(
-            "--per_device_inference_batch_size_trn", type=int, default=4
-        )
-        parser.add_argument("--use_smiles", action="store_true", default=False)
-        parser.add_argument("--root", type=str, default="data/PubChemDataset_v4")
-        parser.add_argument("--prompt_max_len", type=int, default=512)
-        parser.add_argument("--label_max_len", type=int, default=256)
-        parser.add_argument("--truncation", default=1, type=int)
-        parser.add_argument("--padding", default="max_length", type=str)
-        parser.add_argument(
-            "--prompt",
-            type=str,
-            default="[START_I_SMILES]{}[END_I_SMILES]",
-        )  # not used at all in stage 3
-        parser.add_argument("--filtered_cid_path", type=str, default=None)
-
-        # moleculenet dataset
-        parser.add_argument("--subtask_idx", type=int, default=0)
-        parser.add_argument(
-            "--raw_data_root", type=str, default="MolCA/data/multi_task_dataset"
-        )
-        parser.add_argument("--mol_string_randomization_ratio", type=float, default=-1)
-
-        return parent_parser
-
 
 from tqdm import tqdm
 

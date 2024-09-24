@@ -17,7 +17,8 @@ from data_provider.stage3_dm import (
 
 from model.blip2_stage3 import Blip2Stage3
 import json
-import ast
+import hydra
+from omegaconf import OmegaConf, DictConfig
 
 # instruction-tuning for benchmark datasets
 
@@ -37,44 +38,32 @@ class MyDDPStrategy(strategies.DDPStrategy):
         assert self.lightning_module is not None
         self.lightning_module.load_state_dict(checkpoint["state_dict"], strict=strict)
 
+@hydra.main(config_path="configs", config_name="default.yaml")
+def main(cfg):
+    cfg = flatten_dictconfig(cfg)
+    pl.seed_everything(cfg.seed)
 
-def main(args):
-    pl.seed_everything(args.seed)
-    # model
-    if args.task is None:
-        model = Blip2Stage3
-    else:
-        raise NotImplementedError()
+    model = Blip2Stage3
 
     # decide model initialization
-    if args.init_checkpoint:
-        model = model.load_from_checkpoint(
-            args.init_checkpoint, strict=False, args=args
-        )
-        print(f"loaded init checkpoint from {args.init_checkpoint}")
-        ckpt = torch.load(args.init_checkpoint, map_location="cpu")
-    elif args.stage2_path:
-        model = model(args)
-        ckpt = torch.load(args.stage2_path, map_location="cpu")
+    if cfg.stage2_path:
+        model = model(cfg)
+        ckpt = torch.load(cfg.stage2_path, map_location="cpu")
         model.load_state_dict(ckpt["state_dict"], strict=False)
-        print(f"loaded stage2 model from {args.stage2_path}")
-    elif args.stage1_path:
-        model = model(args)
-        model.load_from_stage1_checkpoint(args.stage1_path)
-        print(f"loaded stage1 model from {args.stage1_path}")
+        print(f"loaded stage2 model from {cfg.stage2_path}")
     else:
-        model = model(args)
+        model = model(cfg)
 
     print("total params:", sum(p.numel() for p in model.parameters()))
 
     dm = Stage3DM(
-        mode=args.mode,
-        num_workers=args.num_workers,
-        root=args.root,
+        mode=cfg.mode,
+        num_workers=cfg.num_workers,
+        root=cfg.root,
         tokenizer=model.blip2model.llm_tokenizer,
         fit_llm_input_convention=model.blip2model.fit_llm_input_convention,
         fit_llm_output_convention=model.blip2model.fit_llm_output_convention,
-        args=args,
+        args=cfg,
     )
 
     # callbacks to save model parameters
@@ -83,9 +72,9 @@ def main(args):
     monitoring_metric = "train_total_loss"
     callbacks.append(
         ModelCheckpoint(
-            dirpath=os.path.join(args.logging_dir, args.filename),
+            dirpath=os.path.join(cfg.logging_dir, cfg.filename),
             filename="{step:05d}-{train_total_loss:.3f}",
-            every_n_train_steps=args.every_n_train_steps,
+            every_n_train_steps=cfg.every_n_train_steps,
             save_last=True,
             save_top_k=5,
             save_on_train_epoch_end=True,
@@ -94,79 +83,71 @@ def main(args):
         )
     )
 
-    if len(args.devices.split(",")) > 1:
-        if args.strategy_name == "fsdp":
+    if len(cfg.devices.split(",")) > 1:
+        if cfg.strategy_name == "fsdp":
             strategy = strategies.DDPFullyShardedNativeStrategy()
-        elif args.strategy_name == "deepspeed":
+        elif cfg.strategy_name == "deepspeed":
             strategy = strategies.DeepSpeedStrategy(stage=3)
         else:
             strategy = MyDDPStrategy(find_unused_parameters=True, start_method="spawn")
     else:
         strategy = "auto"
-        args.devices = [eval(args.devices)]
+        cfg.devices = [eval(cfg.devices)]
     # logger setting
-    logger = CSVLogger(save_dir=os.path.join(args.logging_dir, args.filename))
+    logger = CSVLogger(save_dir=os.path.join(cfg.logging_dir, cfg.filename))
 
     wandb_logger = WandbLogger(
-        name=args.filename,
-        project=args.wandb_project,
-        entity=args.wandb_entity,
-        id=args.wandb_id,
+        name=cfg.filename,
+        project=cfg.wandb_project,
+        entity=cfg.wandb_entity,
+        id=cfg.wandb_id,
     )
-    # wandb_logger.watch(model, log="all", log_freq=args.wandb_log_freq)
+    # wandb_logger.watch(model, log="all", log_freq=cfg.wandb_log_freq)
 
     tb_logger = TensorBoardLogger(
-        os.path.join(args.logging_dir, "tensorboard"),
-        name=args.filename,
+        os.path.join(cfg.logging_dir, "tensorboard"),
+        name=cfg.filename,
     )
 
     trainer_args = {
-        "accelerator": args.accelerator,
-        "devices": args.devices,
-        "precision": args.precision,
+        "accelerator": cfg.accelerator,
+        "devices": cfg.devices,
+        "precision": cfg.precision,
         "callbacks": callbacks,
         "strategy": strategy,
         "logger": [logger, wandb_logger, tb_logger],
+        "max_steps": cfg.max_steps,
+        "val_check_interval": cfg.val_check_interval,
+        "accumulate_grad_batches": cfg.accumulate_grad_batches,
     }
-    if args.val_check_interval > 0:
-        trainer_args["val_check_interval"] = args.val_check_interval
-    else:
-        trainer_args["check_val_every_n_epoch"] = args.check_val_every_n_epoch
-    if args.skip_sanity_check:
+
+    if cfg.skip_sanity_check:
         trainer_args["num_sanity_val_steps"] = 0
 
-    if args.max_steps > 0:
-        trainer_args["max_steps"] = args.max_steps
-    else:
-        trainer_args["max_epochs"] = args.max_epochs
-    if args.accumulate_grad_batches > 1:
-        trainer_args["accumulate_grad_batches"] = args.accumulate_grad_batches
-
     trainer = Trainer(**trainer_args)
-    if args.mode in {"pretrain", "ft", "multi_task"}:
-        trainer.fit(model, datamodule=dm, ckpt_path=args.ckpt_path)
+    if cfg.mode in {"pretrain", "ft", "multi_task"}:
+        trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         outputs = trainer.test(model, datamodule=dm)
 
     # TODO: Deprecate eval mode.
     # Previously, molca authors evaluate validation dataset and testset at the same in validation epoch.
     # Now, we separate validation and testset evaluation, as usual.
-    elif args.mode == "eval":
-        trainer.fit_loop.epoch_progress.current.completed = args.caption_eval_epoch - 1
+    elif cfg.mode == "eval":
+        trainer.fit_loop.epoch_progress.current.completed = cfg.caption_eval_epoch - 1
         trainer.validate(model, datamodule=dm)
-    elif args.mode == "test":
+    elif cfg.mode == "test":
         outputs = trainer.test(model, datamodule=dm)
     else:
         raise NotImplementedError()
 
-    if args.filename is not None:
+    if cfg.filename is not None:
         update_result_csv(
-            args=args,
             logger_dir=trainer.logger.log_dir,
             outputs=outputs,
         )
 
 
-def update_result_csv(args, outputs, logger_dir, task_names=None):
+def update_result_csv(outputs, logger_dir, task_names=None):
     # first, read the content in result_csv file
     single_tasks = (
         REGRESSION_BENCHMARKS
@@ -194,52 +175,26 @@ def update_result_csv(args, outputs, logger_dir, task_names=None):
     with open(performance_result_path, "w") as f:
         json.dump(final_output, f, indent=4)
 
-
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--filename", type=str, default="stage2_test")
-    parser.add_argument("--seed", type=int, default=42, help="random seed")
-    # MM settings
-    parser.add_argument("--mode", type=str, default="pretrain")
-    parser.add_argument("--test_on_trainset", action="store_true", default=False)
-    parser.add_argument("--trainset_resize", type=int, default=-1)
-    parser.add_argument("--valset_resize", type=int, default=2400)
-    parser.add_argument("--testset_resize", type=int, default=-1)
-    parser.add_argument("--strategy_name", type=str, default=None)
-    # parser = Trainer.add_argparse_args(parser)
-    parser = Blip2Stage3.add_model_specific_args(parser)  # add model args
-    parser = Stage3DM.add_model_specific_args(parser)
-    parser.add_argument("--accelerator", type=str, default="gpu")
-    parser.add_argument("--devices", type=str, default="0,1,2,3")
-    parser.add_argument("--precision", type=str, default="bf16-mixed")
-    parser.add_argument("--max_steps", type=int, default=50000)
-    parser.add_argument("--max_epochs", type=int, default=10)
-    parser.add_argument("--second_stage_start_step", type=int, default=20000)
-    parser.add_argument("--accumulate_grad_batches", type=int, default=1)
-    parser.add_argument("--every_n_train_steps", type=int, default=1000)
-    parser.add_argument("--task", type=str, default=None)
-    parser.add_argument("--val_check_interval", type=float, default=0.1)
-    parser.add_argument("--check_val_every_n_epoch", type=int, default=1)
-    parser.add_argument("--save_top_k", type=int, default=10)
-    parser.add_argument("--skip_sanity_check", action="store_true", default=False)
-    parser.add_argument("--logging_dir", type=str, default="MolCA/all_checkpoints/")
-    parser.add_argument("--llava_style", type=int, default=0)
-
-    parser.add_argument("--wandb_entity", type=str, default="mol-llm")
-    parser.add_argument("--wandb_project", type=str, default="mol-llm")
-    parser.add_argument("--wandb_log_freq", type=int, default=100)
-    parser.add_argument("--wandb_id", type=str, default=None)
-
-    # added args
-    parser.add_argument("--debug", action="store_true", default=False)
-    args = parser.parse_args()
-
-    print("=========================================")
-    for k, v in sorted(vars(args).items()):
-        print(k, "=", v)
-    print("=========================================")
-    return args
-
+def flatten_dictconfig(config: DictConfig) -> DictConfig:
+    """
+    Flatten a nested DictConfig into a single level DictConfig with keys as the path to the original keys.
+    
+    Args:
+    - config (DictConfig): The nested DictConfig to be flattened.
+    - parent_key (str, optional): The base key to use for prefixing the keys. Defaults to ''.
+    - separator (str, optional): The separator to use between keys. Defaults to '.'.
+    
+    Returns:
+    - DictConfig: The flattened configuration.
+    """
+    items = []
+    for k, v in config.items():
+        new_key = k
+        if isinstance(v, DictConfig):
+            items.extend(flatten_dictconfig(v).items())
+        else:
+            items.append((new_key, v))
+    return OmegaConf.create(dict(items))
 
 if __name__ == "__main__":
-    main(get_args())
+    main()

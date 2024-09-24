@@ -12,6 +12,7 @@ init-env:
 	pip install torch_geometric
 	pip install -U tensorboardX tensorboard
 	pip install wandb
+	pip install hydra-core --upgrade
 
 debug:
 	conda create -n ${ENV_NAME} python=3.10 -y

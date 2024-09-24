@@ -1,0 +1,27 @@
+defaults:
+  - data: multi_task
+  - gnn: moleculeSTM
+  - llm: galactica1.3b
+  - trainer: default
+
+# General settings
+filename: debugging
+seed: 42
+mode: ft
+
+wandb_entity: mol-llm
+wandb_project: mol-llm
+wandb_log_freq: 100
+wandb_id: null
+
+stage2_path: ""
+ckpt_path: null
+
+mol_representation: string+graph
+mol_string_randomization_ratio: -1
+
+trainset_resize: -1
+valset_resize: 2400
+testset_resize: -1
+test_on_trainset: false
+skip_sanity_check: false
