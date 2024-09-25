@@ -28,7 +28,10 @@ warnings.filterwarnings(
     "ignore", category=UserWarning, message="TypedStorage is deprecated"
 )
 warnings.filterwarnings(
-    "ignore", message="Skipped loading"
+    "ignore", message=r".*Skipped loading .*"
+)
+warnings.filterwarnings(
+    "ignore", message=r".*No normalization for .*"
 )
 # for A5000 gpus
 torch.set_float32_matmul_precision(
@@ -41,7 +44,7 @@ class MyDDPStrategy(strategies.DDPStrategy):
         assert self.lightning_module is not None
         self.lightning_module.load_state_dict(checkpoint["state_dict"], strict=strict)
 
-@hydra.main(config_path="configs", config_name="default.yaml")
+@hydra.main(config_path="configs", config_name="default.yaml", version_base=None)
 def main(cfg):
     cfg = flatten_dictconfig(cfg)
     pl.seed_everything(cfg.seed)
