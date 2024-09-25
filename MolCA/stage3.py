@@ -27,6 +27,9 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 warnings.filterwarnings(
     "ignore", category=UserWarning, message="TypedStorage is deprecated"
 )
+warnings.filterwarnings(
+    "ignore", message="Skipped loading"
+)
 # for A5000 gpus
 torch.set_float32_matmul_precision(
     "medium"
