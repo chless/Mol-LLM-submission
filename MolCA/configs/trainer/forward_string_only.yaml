@@ -42,8 +42,8 @@ optimizer: adamw
 
 mol_string_randomization_ratio: -1
 
-trainset_resize: 30
-valset_resize: 30
-testset_resize: 30
+trainset_resize: -1
+valset_resize: 2400
+testset_resize: -1
 test_on_trainset: false
-skip_sanity_check: false
+skip_sanity_check: true
