@@ -212,3 +212,33 @@ smol_name_conversion_i2f = [
     'Provide the molecular formula for the IUPAC named substance <INPUT> .',
     'What is the molecular formula of the compound with this IUPAC name <INPUT> ?'
 ]
+
+smol_forward_synthesis = [
+    "Can you create a molecule based on this reactant?",
+    "Please generate the product molecule that results from the given reactant.",
+    "I need a molecule formed from this reactant.",
+    "What molecule can be formed from the following reactant?",
+    "Could you build a molecule based on this reactant?",
+    "Create a molecular model that is the product of this reactant.",
+    "Please construct the product molecule using the provided reactant.",
+    "Can you form a molecule according to this reactant?",
+    "I am interested in the molecule generated from this reactant.",
+    "Please design a molecule that corresponds to the transformation of this reactant.",
+    "What is the molecule that can be derived from this reactant?",
+    "Can you synthesize a molecule based on this reactant?",
+]
+
+smol_retrosynthesis = [
+    "Can you identify a reactant that can produce this molecule?",
+    "Please generate the reactant molecule that could lead to the given product.",
+    "I need a reactant molecule that forms this product.",
+    "What reactant can be used to form the following product?",
+    "Could you propose a reactant based on this product?",
+    "Create a molecular model of a reactant that yields this product.",
+    "Please suggest a reactant molecule that could synthesize the provided product.",
+    "Can you determine a reactant according to this product?",
+    "I am interested in a reactant that can generate this molecule.",
+    "Please design a reactant molecule that transforms into this product.",
+    "What is the reactant from which this molecule can be derived?",
+    "Can you propose a reactant to synthesize this molecule?",
+]
