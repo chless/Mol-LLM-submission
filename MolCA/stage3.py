@@ -190,11 +190,14 @@ def flatten_dictconfig(config: DictConfig) -> DictConfig:
     Returns:
     - DictConfig: The flattened configuration.
     """
+
+    # only flatten just first level
     items = []
     for k, v in config.items():
         new_key = k
         if isinstance(v, DictConfig):
-            items.extend(flatten_dictconfig(v).items())
+            for kk, vv in v.items():
+                items.append((f"{kk}", vv))
         else:
             items.append((new_key, v))
     return OmegaConf.create(dict(items))
