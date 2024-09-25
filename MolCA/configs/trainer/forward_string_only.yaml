@@ -17,7 +17,7 @@ llava_style: 1
 num_workers: 4
 
 batch_sizes:
-  forward_reaction_prediction: 30
+  forward_reaction_prediction: 24
 inference_batch_sizes:
   forward_reaction_prediction: 30
 
@@ -46,4 +46,3 @@ trainset_resize: -1
 valset_resize: 2400
 testset_resize: -1
 test_on_trainset: false
-skip_sanity_check: true
