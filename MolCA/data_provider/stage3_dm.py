@@ -608,29 +608,9 @@ class MolInstructionDatset(Dataset):
         self.set_necesary_data()
 
     def set_necesary_data(self):
-        self.input_list = self.data["input"]
-        self.label_list = self.data["output"]
-        if self.task in REGRESSION_BENCHMARKS:
-            self.label_list = [float(label) for label in self.label_list]
-
-            self.label_stat = {
-                "avg": np.array(self.label_list).mean(),
-                "std": np.array(self.label_list).std(),
-                "min": np.array(self.label_list).min(),
-                "max": np.array(self.label_list).max(),
-            }
-            # convert label into string
-            self.label_list = [str(label) for label in self.label_list]
-            self.label_stat.update(
-                {
-                    "avg_len": sum([len(label) for label in self.label_list])
-                    / len(self.label_list),
-                    "max_len": max([len(label) for label in self.label_list]),
-                    "min_len": min([len(label) for label in self.label_list]),
-                }
-            )
-
-        self.instruction_list = self.data["instruction"]
+        self.input_list = self.data["input"][:]
+        self.label_list = self.data["output"][:]
+        self.instruction_list = self.data["instruction"][:]
 
         input_list = []
         label_list = []
@@ -731,9 +711,9 @@ class ChEBIDatset(Dataset):
         self.set_necesary_data()
 
     def set_necesary_data(self):
-        self.description_list = self.data["description"]
-        self.selfies_list = self.data["SELFIES"]
-        self.smiles_list = self.data["SMILES"]
+        self.description_list = self.data["description"][:]
+        self.selfies_list = self.data["SELFIES"][:]
+        self.smiles_list = self.data["SMILES"][:]
         self.instruction_list = getattr(instructions, self.task.replace("-", "_"))
 
         input_mol_string_list = []
@@ -893,9 +873,9 @@ class SMolInstructDataset(Dataset):
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
         elif self.task in REACTION_BENCHMARKS:
-            # input = re.sub(r"<SELFIES>\s*", added_tokens.SELFIES[0], input)
-            # input = re.sub(r"\s*</SELFIES>", added_tokens.SELFIES[1], input)
-            pass
+            input_mol_string = raw_input
+            smiles = sf.decoder(input_mol_string)
+            graph = smiles2data(smiles)
 
         label = wrap_label(label, self.task)
         input_mol_string = (
@@ -1191,11 +1171,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
                                 "esol"
                             ]
             ):
-                train_dataset = MoleculeNetDatasetDeepChem(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                    subtask_idx=subtask_idx,
-                )
                 valid_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
@@ -1206,17 +1181,22 @@ class Mol_LLM_Dataset(InMemoryDataset):
                     task_subtask_pair=task_subtask_pair,
                     subtask_idx=subtask_idx,
                 )
-            elif task_name in ["chebi-20-mol2text", "chebi-20-text2mol"]:
-                train_dataset = ChEBIDatset(
+                train_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
+                    subtask_idx=subtask_idx,
                 )
+            elif task_name in ["chebi-20-mol2text", "chebi-20-text2mol"]:
                 valid_dataset = ChEBIDatset(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
                 )
                 test_dataset = ChEBIDatset(
                     data=data_split[2],
+                    task_subtask_pair=task_subtask_pair,
+                )
+                train_dataset = ChEBIDatset(
+                    data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
                 )
             # qm9 in regression benchmark is processed via MolInstructionDataset
@@ -1230,10 +1210,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
                     "retrosynthesis",
                     "qm9_homo", "qm9_lumo", "qm9_homo_lumo_gap"]
             ):
-                train_dataset = MolInstructionDatset(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                )
                 valid_dataset = MolInstructionDatset(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
@@ -1242,10 +1218,14 @@ class Mol_LLM_Dataset(InMemoryDataset):
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
                 )
+                train_dataset = MolInstructionDatset(
+                    data=data_split[0],
+                    task_subtask_pair=task_subtask_pair,
+                )
 
-            train_datasets.append(train_dataset)
             val_datasets.append(valid_dataset)
             test_datasets.append(test_dataset)
+            train_datasets.append(train_dataset)
 
         self.task = self.filename.split("_")[0]
         # save 3 split at the same time, so to skip redundant processing for validation and test set
@@ -1435,7 +1415,7 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
                 insert_core_tags=False,  # loada data w/o core tags such as <SELFIES>, </SELFIES>
                 # cache_dir=os.path.join(self.root, 'cache')
                 )
-            _task = task_name[5:]  # remove smol- from smol-<task_name>
+            _task = re.sub('smol-', '', task_name)  # remove smol- from smol-<task_name>
             
             # DEBUG: to avoid lengthy processing time
             train_dataset = smol_dataset["train"].filter(lambda x: x["task"] == _task)
@@ -1492,7 +1472,7 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
             "smol-name_conversion-i2s": [0],
             "smol-name_conversion-i2f": [0],
             "smol-forward_synthesis": [0],
-            "smol-retrosynthesis": [0]
+            "smol-retrosynthesis": [0],
         }
 
         target_benchmarks = self.get_target_benchmarks()
@@ -1540,11 +1520,6 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
                                 "esol"
                             ]
             ):
-                train_dataset = MoleculeNetDatasetDeepChem(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                    subtask_idx=subtask_idx,
-                )
                 valid_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
@@ -1554,18 +1529,23 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
                     subtask_idx=subtask_idx,
-                )
-            elif task_name in ["chebi-20-mol2text", "chebi-20-text2mol"]:
-                train_dataset = ChEBIDatset(
+                train_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
+                    subtask_idx=subtask_idx,
                 )
+                )
+            elif task_name in ["chebi-20-mol2text", "chebi-20-text2mol"]:
                 valid_dataset = ChEBIDatset(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
                 )
                 test_dataset = ChEBIDatset(
                     data=data_split[2],
+                    task_subtask_pair=task_subtask_pair,
+                )
+                train_dataset = ChEBIDatset(
+                    data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
                 )
             # qm9 in regression benchmark is processed via MolInstructionDataset
@@ -1579,16 +1559,16 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
                     "retrosynthesis",
                     "qm9_homo", "qm9_lumo", "qm9_homo_lumo_gap"]
             ):
-                train_dataset = MolInstructionDatset(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                )
                 valid_dataset = MolInstructionDatset(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
                 )
                 test_dataset = MolInstructionDatset(
                     data=data_split[2],
+                    task_subtask_pair=task_subtask_pair,
+                )
+                train_dataset = MolInstructionDatset(
+                    data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
                 )
             elif task_name in [
@@ -1601,10 +1581,11 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
                 "smol-forward_synthesis",
                 "smol-retrosynthesis"
                 ]:
-                train_dataset = SMolInstructDataset(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                )
+                # data leakage inspection between smol-instruct dataset and mol-instruction dataset
+                # maintain mol-instruction testset without leakage by excluding smol-instruct trainset
+
+
+
                 valid_dataset = SMolInstructDataset(
                     data=data_split[1],
                     task_subtask_pair=task_subtask_pair,
@@ -1613,10 +1594,14 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
                 )
+                train_dataset = SMolInstructDataset(
+                    data=data_split[0],
+                    task_subtask_pair=task_subtask_pair,
+                )
 
-            train_datasets.append(train_dataset)
             val_datasets.append(valid_dataset)
             test_datasets.append(test_dataset)
+            train_datasets.append(train_dataset)
 
         self.task = self.filename.split("_")[0]
         # save 3 split at the same time, so to skip redundant processing for validation and test set
