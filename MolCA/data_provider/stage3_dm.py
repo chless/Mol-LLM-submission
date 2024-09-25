@@ -5,7 +5,7 @@ from pytorch_lightning import LightningDataModule
 import torch_geometric
 
 # from torch_geometric.loader import DataLoader
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch_geometric.loader.dataloader import Collater
 from data_provider.molecule_caption_dataset import MoleculeCaption, MoleculeCaptionV2
 import re
@@ -237,41 +237,17 @@ class Stage3DM(LightningDataModule):
         self.args = args
         self.mode = mode
         self.num_workers = num_workers
-        self.prompt_max_len = args.prompt_max_len
-        self.label_max_len = args.label_max_len
+        self.prompt_max_lens = args.prompt_max_lens
+        self.label_max_lens = args.label_max_lens
         self.args = args
         self.root = root
         self.fit_llm_input_convention = fit_llm_input_convention
         self.fit_llm_output_convention = fit_llm_output_convention
 
-        self.batch_sizes = {
-            "classification": args.per_device_batch_size_cls,
-            "regression": args.per_device_batch_size_reg,
-            "reaction": args.per_device_batch_size_rxn,
-            "reagent": args.per_device_batch_size_rea,
-            "translation": args.per_device_batch_size_trn,
-        }
-        self.inference_batch_sizes = {
-            "classification": args.per_device_inference_batch_size_cls,
-            "regression": args.per_device_inference_batch_size_reg,
-            "reaction": args.per_device_inference_batch_size_rxn,
-            "reagent": args.per_device_inference_batch_size_rea,
-            "translation": args.per_device_inference_batch_size_trn,
-        }
-        self.label_max_lens = {
-            "classification": 6,
-            "regression": 12,
-            "reaction": args.label_max_len,
-            "reagent": args.label_max_len,
-            "translation": args.label_max_len,
-        }
-        self.prompt_max_lens = {
-            "classification": args.prompt_max_len - 6,
-            "regression": args.prompt_max_len - 12,
-            "reaction": args.prompt_max_len,
-            "reagent": args.prompt_max_len,
-            "translation": args.prompt_max_len,
-        }
+        self.batch_sizes = args.batch_sizes
+        self.inference_batch_sizes = args.inference_batch_sizes
+        self.label_max_lens = args.label_max_lens
+        self.prompt_max_lens = args.prompt_max_lens
 
         if root == "multi_task":
             self.task_categories = [
@@ -364,16 +340,6 @@ class Stage3DM(LightningDataModule):
     def val_dataloader(self):
         loader = []
         for task in self.concat_datasets.keys():
-            if task in ["classification", "regression"]:
-                label_max_len = 9
-                prompt_max_len = self.prompt_max_len - 9
-            elif task in ["reagent"]:
-                label_max_len = self.label_max_len
-                prompt_max_len = self.prompt_max_len + self.args.num_query_token
-            else:
-                label_max_len = self.label_max_len
-                prompt_max_len = self.prompt_max_len
-
             loader.append(
                 DataLoader(
                     self.concat_datasets[task]["val"],
@@ -385,8 +351,8 @@ class Stage3DM(LightningDataModule):
                     persistent_workers=True,
                     collate_fn=DataCollater(
                         tokenizer=self.tokenizer,
-                        prompt_max_len=prompt_max_len,
-                        label_max_len=label_max_len,
+                        prompt_max_len=self.prompt_max_lens[task],
+                        label_max_len=self.label_max_lens[task],
                         mol_ph=self.mol_ph_token,
                         mol_token_id=self.mol_token_id,
                         mol_representation=self.mol_representation,
@@ -404,16 +370,6 @@ class Stage3DM(LightningDataModule):
         loader = []
         split = "test" if not self.args.test_on_trainset else "train"
         for task in self.concat_datasets.keys():
-            if task in ["classification", "regression"]:
-                label_max_len = 9
-                prompt_max_len = self.prompt_max_len - 9
-            elif task in ["reagent"]:
-                label_max_len = self.label_max_len
-                prompt_max_len = self.prompt_max_len + self.args.num_query_token
-            else:
-                label_max_len = self.label_max_len
-                prompt_max_len = self.prompt_max_len
-
             loader.append(
                 DataLoader(
                     self.concat_datasets[task][split],
@@ -425,8 +381,8 @@ class Stage3DM(LightningDataModule):
                     persistent_workers=True,
                     collate_fn=DataCollater(
                         tokenizer=self.tokenizer,
-                        prompt_max_len=prompt_max_len,
-                        label_max_len=label_max_len,
+                        prompt_max_len=self.prompt_max_lens[task],
+                        label_max_len=self.label_max_lens[task],
                         mol_ph=self.mol_ph_token,
                         mol_token_id=self.mol_token_id,
                         mol_representation=self.mol_representation,
@@ -785,6 +741,7 @@ class SMolInstructDataset(Dataset):
             total=len(self.data),
             desc=self.task,
         )
+        '''
         import multiprocessing as mp
         num_procs = 200
         with mp.Pool(num_procs) as pool:
@@ -793,9 +750,9 @@ class SMolInstructDataset(Dataset):
                 [(i, raw_inputs[i], raw_outputs[i]) for i in range(len(raw_inputs))])
 
         '''
+        outputs = []
         for i in iter_bar:
-            outputs = self.get_necessary_data(i, raw_inputs[i], raw_outputs[i])
-        '''
+            outputs.append(self.get_necessary_data(i, raw_inputs[i], raw_outputs[i]))
         for o in outputs:
             if isinstance(o, Exception):
                 print(o)
@@ -805,7 +762,7 @@ class SMolInstructDataset(Dataset):
             self.instruction_list.append(o['instruction'])
             self.label_list.append(o['label'])
         
-        print(f"{self.task}: Invalid smiles ratio: {len(self.data)/len(self.label_list)}")
+        print(f"{self.task}: Invalid smiles ratio: {1.0 - len(self.label_list)/len(self.data)}")
 
         
 
@@ -918,6 +875,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
         self.filename = filename  # raw_file_names and processed_file_names use this
         self.start, self.end = added_tokens.SELFIES
         self.resize = resize
+        self.target_benchmarks = self.get_target_benchmarks()
+        self.split = filename.split("_")[-1]
         super(Mol_LLM_Dataset, self).__init__(root, transform, pre_transform)
         self.load(self.processed_paths[0])
         if self.resize:
@@ -1431,14 +1390,6 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
         # subtask index is necessary when loading clintox from deepchem
         # TODO: deprecate this lengthy hardcoded list
         task_subtask_lists = {
-            "smol-molecule_captioning": [0],
-            "smol-molecule_generation": [0],
-            "smol-name_conversion-s2f": [0],
-            "smol-name_conversion-s2i": [0],
-            "smol-name_conversion-i2s": [0],
-            "smol-name_conversion-i2f": [0],
-            "smol-forward_synthesis": [0],
-            "smol-retrosynthesis": [0],
             "qm9_homo": [0],
             "qm9_lumo": [0],
             "qm9_homo_lumo_gap": [0],
@@ -1456,28 +1407,43 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
             "lipo": [0],
             "chebi-20-mol2text": [0],
             "chebi-20-text2mol": [0],
+            "smol-molecule_captioning": [0],
+            "smol-molecule_generation": [0],
+            "smol-name_conversion-s2f": [0],
+            "smol-name_conversion-s2i": [0],
+            "smol-name_conversion-i2s": [0],
+            "smol-name_conversion-i2f": [0],
+            "smol-forward_synthesis": [0],
+            "smol-retrosynthesis": [0],
         }
 
-        target_benchmarks = self.get_target_benchmarks()
 
         # leave task only if it is in target_benchmarks
         task_subtask_pairs = [
-            (task, subtask) if task in target_benchmarks else None
+            (task, subtask) if task in self.target_benchmarks else None
             for task, subtasks in task_subtask_lists.items()
             for subtask in subtasks
         ]
-
         # remove None
-        self.task_subtask_pairs = [t for t in task_subtask_pairs if t]
+        task_subtask_pairs = [t for t in task_subtask_pairs if t]
+
+        self.task_subtask_pairs = []
+        for t in task_subtask_pairs:
+            task_name = t[0]
+            if os.path.exists(f"{self.raw_dir}/{task_name}_val.pth") \
+                and os.path.exists(f"{self.raw_dir}/{task_name}_test.pth") \
+                    and os.path.exists(f"{self.raw_dir}/{task_name}_train.pth"):
+                print(f"{task_name} already exists")
+            else:
+                self.task_subtask_pairs.append(t)
 
         multi_task_datasets = {
             task_name: self.get_dataset(
-                task_name=task_name
-            )  # {task_name: [train, val, test]
-            for task_name in target_benchmarks
+                task_name=task_subtask_pair[0]
+            ) 
+            for task_subtask_pair in self.task_subtask_pairs
         }
 
-        train_datasets, val_datasets, test_datasets = [], [], []
         for task_subtask_pair in tqdm(
             self.task_subtask_pairs, desc="Processing task_subtask_pairs"
         ):
@@ -1542,18 +1508,21 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
                     "retrosynthesis",
                     "qm9_homo", "qm9_lumo", "qm9_homo_lumo_gap"]
             ):
-                valid_dataset = MolInstructionDatset(
-                    data=data_split[1],
-                    task_subtask_pair=task_subtask_pair,
-                )
-                test_dataset = MolInstructionDatset(
-                    data=data_split[2],
-                    task_subtask_pair=task_subtask_pair,
-                )
-                train_dataset = MolInstructionDatset(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                )
+                if not os.path.exists(f"{self.raw_dir}/{task_name}_val.pth"):
+                    valid_dataset = MolInstructionDatset(
+                        data=data_split[1],
+                        task_subtask_pair=task_subtask_pair,
+                    )
+                if not os.path.exists(f"{self.raw_dir}/{task_name}_test.pth"):
+                    test_dataset = MolInstructionDatset(
+                        data=data_split[2],
+                        task_subtask_pair=task_subtask_pair,
+                    )
+                if not os.path.exists(f"{self.raw_dir}/{task_name}_train.pth"):
+                    train_dataset = MolInstructionDatset(
+                        data=data_split[0],
+                        task_subtask_pair=task_subtask_pair,
+                    )
             elif task_name in [
                 "smol-molecule_captioning",
                 "smol-molecule_generation",
@@ -1568,59 +1537,106 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
                 # maintain mol-instruction testset without leakage by excluding smol-instruct trainset
 
 
-
-                if "conversion" in task_name:
+                if not os.path.exists(f"{self.raw_dir}/{task_name}_val.pth"):
                     valid_dataset = SMolInstructDataset(
                         data=data_split[1],
                         task_subtask_pair=task_subtask_pair,
                     )
+                if not os.path.exists(f"{self.raw_dir}/{task_name}_test.pth"):
                     test_dataset = SMolInstructDataset(
                         data=data_split[2],
                         task_subtask_pair=task_subtask_pair,
                     )
-                else:
-                    valid_dataset, test_dataset = None, None
+                if not os.path.exists(f"{self.raw_dir}/{task_name}_train.pth"):
+                    train_dataset = SMolInstructDataset(
+                        data=data_split[0],
+                        task_subtask_pair=task_subtask_pair,
+                    )
+            if valid_dataset is not None:
+                torch.save(valid_dataset, f"{self.raw_dir}/{task_name}_val.pth")
+            if test_dataset is not None:
+                torch.save(test_dataset, f"{self.raw_dir}/{task_name}_test.pth")
+            if train_dataset is not None:
+                torch.save(train_dataset, f"{self.raw_dir}/{task_name}_train.pth")
+        return
 
-                train_dataset = SMolInstructDataset(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                )
-            # in case reaction prediction and translation, test and validation set are fixed as mol-instruction dataset
-            val_datasets.append(valid_dataset if valid_dataset is not None else [])
-            test_datasets.append(test_dataset if test_dataset is not None else [])
-            train_datasets.append(train_dataset)
+        # filter out duplicated data in train and test set
+        concat_datasets["train"] = filter_duplication(concat_datasets["train"], concat_datasets["test"])
 
-        self.task = self.filename.split("_")[0]
-        # save 3 split at the same time, so to skip redundant processing for validation and test set
-        concat_datasets = {"train": [], "val": [], "test": []}
+    # if not all the raw files are exists, download the dataset
+    @property
+    def raw_file_names(self):
+        return [f"{task}_{self.split}.pth" for task in self.target_benchmarks]
 
-        for i in range(len(self.task_subtask_pairs)):
-            task_subtask_pair = self.task_subtask_pairs[i]
-            task_name = task_subtask_pair[0]
+    def process(self):
+        # Process data_list and store in `self.data` and `self.slices`
+        raw_data_list = []
+        for task in self.target_benchmarks:
+            if task in ["smol-forward_synthesis", "smol-retrosynthesis"] and self.split in ["val", "test"]:
+                continue
+            raw_data_list.extend(list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth")))
+        
+        # filter out duplicated data in train and test set for smol-forward_synthesis and smol-retrosynthesis
+        if self.split == "train" and "smol-forward_synthesis" in self.target_benchmarks:
+            test_dataset = torch.load(f"{self.raw_dir}/forward_reaction_prediction_test.pth")
+            raw_data_list = filter_duplication(raw_data_list, test_dataset)
+        elif self.split == "train" and "smol-retrosynthesis" in self.target_benchmarks:
+            test_dataset = torch.load(f"{self.raw_dir}/retrosynthesis_test.pth")
+            raw_data_list = filter_duplication(raw_data_list, test_dataset)
 
-            concat_datasets["train"].append(train_datasets[i])
-            concat_datasets["val"].append(val_datasets[i])
-            concat_datasets["test"].append(test_datasets[i])
-
-        for split in ["train", "val", "test"]:
-            concat_dataset = ConcatDataset(concat_datasets[split])
-            torch.save(
-                concat_dataset,
-                f"{self.raw_dir}/{self.task}_{split}.pth",
+        data_list = []
+        count_fail_conversion = 0
+        iter_bar = tqdm(range(len(raw_data_list)))
+        for i in iter_bar:
+            iter_bar.set_description(
+                f"{self.filename}|Num fail: {count_fail_conversion}|Ratio fail: {count_fail_conversion/(i+1)}"
             )
+            instance = raw_data_list[i]
+            try:
+                if isinstance(instance[0], list):
+                    # reagent prediction dataset
+                    # input string: reactant>>product / output string: reagent
+                    data = PairData(
+                        reactant_x=instance[0][0].x,
+                        reactant_edge_index=instance[0][0].edge_index,
+                        reactant_edge_attr=instance[0][0].edge_attr,
+                        product_x=instance[0][1].x,
+                        product_edge_index=instance[0][1].edge_index,
+                        product_edge_attr=instance[0][1].edge_attr,
+                        y=instance[1],
+                        input_mol_string=instance[2],
+                        task_subtask_pair=instance[3],
+                        instruction=instance[4],
+                    )
+                else:
+                    data = Data(
+                        x=instance[0].x,
+                        edge_index=instance[0].edge_index,
+                        edge_attr=instance[0].edge_attr,
+                        y=instance[1],
+                        input_mol_string=instance[2],
+                        task_subtask_pair=instance[3],
+                        instruction=instance[4],
+                    )
+                data_list.append(data)
+            except:
+                count_fail_conversion += 1
+                continue
 
-        print("Saved dataset for task: ", self.task)
+        self.save(data_list, self.processed_paths[0])
+        print("Saved processed dataset for task: ", self.filename)
 
 def filter_duplication(train_dataset, test_dataset):
     import multiprocessing as mp
     
-    num_procs = 50
+    num_procs = 200
     dup_idx = mp.Manager().list()
     procs = []
-    train_data = train_dataset['input_mol_string'][:]
-    test_data = test_dataset['input_mol_string'][:]
-    indicies = np.arange(len(train_data))
-    chuncked_idx = np.array_split(indicies, num_procs)
+    # mol_strings
+    train_data = [instance[2] for instance in train_dataset]
+    test_data = test_dataset[:][2]
+    indices = np.arange(len(train_data))
+    chuncked_idx = np.array_split(indices, num_procs)
     for i in range(num_procs):
         proc = mp.Process(target=check_duplication, args=(train_data, test_data, chuncked_idx[i], dup_idx))
         procs.append(proc)
@@ -1629,8 +1645,11 @@ def filter_duplication(train_dataset, test_dataset):
         proc.join()
     dup_idx = list(dup_idx)
     print(f"Number of duplicated data: {len(dup_idx)}")
-    train_dataset = train_dataset.filter(lambda x: x['input_mol_string'] not in train_data[dup_idx])
-    return train_dataset
+    # remove data instance corresponding to duplicated index from train_dataset
+    train_idxs = np.arange(len(train_dataset))
+    train_idxs = np.delete(train_idxs, dup_idx)
+    filtered_train_dataset = Subset(train_dataset, train_idxs)
+    return filtered_train_dataset
 
 def check_duplication(train_data, test_data, train_idxs, dup_idx):
     iter_bar = tqdm(range(len(train_idxs)))
