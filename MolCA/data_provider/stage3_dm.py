@@ -502,14 +502,14 @@ class MoleculeNetDatasetDeepChem(Dataset):
 
         if self.task in CLASSIFICATION_BENCHMARKS:
             if self.task in ["clintox"]:
-                self.instruction_list = getattr(
+                self.instruction_templates = getattr(
                     instructions, f"{self.task}_{self.subtask}"
                 )
             else:
-                self.instruction_list = getattr(instructions, self.task)
+                self.instruction_templates = getattr(instructions, self.task)
             self.label_tokens = added_tokens.BOOL
         elif self.task in REGRESSION_BENCHMARKS:
-            self.instruction_list = getattr(instructions, self.task)
+            self.instruction_templates = getattr(instructions, self.task)
             self.label_tokens = added_tokens.FLOAT
         else:
             raise NotImplementedError
@@ -527,40 +527,23 @@ class MoleculeNetDatasetDeepChem(Dataset):
         label = wrap_label(label, self.task)
         graph = smiles2data(smiles)
         # randomly select one instruction from list
-        instruction = self.instruction_list[
-            np.random.choice(len(self.instruction_list))
+        instruction = self.instruction_templates[
+            np.random.choice(len(self.instruction_templates))
         ]
         return graph, label, input_mol_string, instruction
 
     def set_necessary_data(self):
         self.mol_list = self.data.X
         self.label_list = self.data.y[:, self.subtask_idx]
-        if self.task in REGRESSION_BENCHMARKS:
-            self.label_stat = {
-                "avg": np.array(self.label_list).mean(),
-                "std": np.array(self.label_list).std(),
-                "min": np.array(self.label_list).min(),
-                "max": np.array(self.label_list).max(),
-            }
-            # convert label into string
-            self.label_list = [str(label) for label in self.label_list]
-            self.label_stat.update(
-                {
-                    "avg_len": sum([len(label) for label in self.label_list])
-                    / len(self.label_list),
-                    "max_len": max([len(label) for label in self.label_list]),
-                    "min_len": min([len(label) for label in self.label_list]),
-                }
-            )
 
         self.smiles_list = []
         for mol in self.mol_list:
             self.smiles_list.append(Chem.MolToSmiles(mol))
 
-        label_list = []
-        input_mol_string_list = []
-        graph_list = []
-        instruction_list = []
+        self.label_list = []
+        self.input_mol_string_list = []
+        self.graph_list = []
+        self.instruction_list = []
 
         self.count_invalid_smiles = 0
 
@@ -570,10 +553,10 @@ class MoleculeNetDatasetDeepChem(Dataset):
         for i in iter_bar:
             try:
                 graph, label, input_mol_string, instruction = self.get_necessary_data(i)
-                label_list.append(label)
-                input_mol_string_list.append(input_mol_string)
-                graph_list.append(graph)
-                instruction_list.append(instruction)
+                self.label_list.append(label)
+                self.input_mol_string_list.append(input_mol_string)
+                self.graph_list.append(graph)
+                self.instruction_list.append(instruction)
             except Exception as e:
                 self.count_invalid_smiles += 1
         if self.count_invalid_smiles > 0:
@@ -581,11 +564,6 @@ class MoleculeNetDatasetDeepChem(Dataset):
             print(
                 f"{self.task}: Invalid smiles ratio: {self.count_invalid_smiles/len(self.mol_list)}"
             )
-
-        self.label_list = label_list
-        self.input_mol_string_list = input_mol_string_list
-        self.graph_list = graph_list
-        self.instruction_list = instruction_list
 
     def __len__(self):
         return len(self.label_list)
@@ -714,12 +692,12 @@ class ChEBIDatset(Dataset):
         self.description_list = self.data["description"][:]
         self.selfies_list = self.data["SELFIES"][:]
         self.smiles_list = self.data["SMILES"][:]
-        self.instruction_list = getattr(instructions, self.task.replace("-", "_"))
+        self.instruction_templates = getattr(instructions, self.task.replace("-", "_"))
 
-        input_mol_string_list = []
-        graph_list = []
-        instruction_list = []
-        label_list = []
+        self.input_mol_string_list = []
+        self.graph_list = []
+        self.instruction_list = []
+        self.label_list = []
 
         self.count_invalid_smiles = 0
         iter_bar = tqdm(
@@ -730,10 +708,10 @@ class ChEBIDatset(Dataset):
         for i in iter_bar:
             try:
                 graph, label, input_mol_string, instruction = self.get_necessary_data(i)
-                label_list.append(label)
-                input_mol_string_list.append(input_mol_string)
-                graph_list.append(graph)
-                instruction_list.append(instruction)
+                self.label_list.append(label)
+                self.input_mol_string_list.append(input_mol_string)
+                self.graph_list.append(graph)
+                self.instruction_list.append(instruction)
             except Exception as e:
                 self.count_invalid_smiles += 1
         if self.count_invalid_smiles > 0:
@@ -742,17 +720,12 @@ class ChEBIDatset(Dataset):
                 f"{self.task}: Invalid smiles ratio: {self.count_invalid_smiles/len(self.label_list)}"
             )
 
-        self.label_list = label_list
-        self.input_mol_string_list = input_mol_string_list
-        self.graph_list = graph_list
-        self.instruction_list = instruction_list
-
     def __len__(self):
         return len(self.label_list)
 
     def get_necessary_data(self, index):
-        instruction = self.instruction_list[
-            np.random.choice(len(self.instruction_list))
+        instruction = self.instruction_templates[
+            np.random.choice(len(self.instruction_templates))
         ]
         descriptiopn = self.description_list[index]
         selfies = self.selfies_list[index]
@@ -794,16 +767,14 @@ class SMolInstructDataset(Dataset):
         self.data = data
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
-        self.instruction_list = getattr(instructions, self.task.replace("-", "_"))
+        self.instruction_templates = getattr(instructions, self.task.replace("-", "_"))
         self.set_necesary_data()
 
     def set_necesary_data(self):
-        input_mol_string_list = []
-        graph_list = []
-        instruction_list = []
-        label_list = []
-
-        self.count_invalid_smiles = 0
+        self.input_mol_string_list = []
+        self.graph_list = []
+        self.instruction_list = []
+        self.label_list = []
         
         # pre-load data
         raw_inputs = self.data['raw_input'][:]
@@ -814,24 +785,27 @@ class SMolInstructDataset(Dataset):
             total=len(self.data),
             desc=self.task,
         )
+        import multiprocessing as mp
+        num_procs = 200
+        with mp.Pool(num_procs) as pool:
+            outputs = pool.starmap(
+                self.get_necessary_data, 
+                [(i, raw_inputs[i], raw_outputs[i]) for i in range(len(raw_inputs))])
+
+        '''
         for i in iter_bar:
-            try:
-                graph, label, input_mol_string, instruction = self.get_necessary_data(i, raw_inputs[i], raw_outputs[i])
-                label_list.append(label)
-                input_mol_string_list.append(input_mol_string)
-                graph_list.append(graph)
-                instruction_list.append(instruction)
-            except Exception as e:
-                self.count_invalid_smiles += 1
+            outputs = self.get_necessary_data(i, raw_inputs[i], raw_outputs[i])
+        '''
+        for o in outputs:
+            if isinstance(o, Exception):
+                print(o)
+                continue
+            self.input_mol_string_list.append(o['input_mol_string'])
+            self.graph_list.append(o['graph'])
+            self.instruction_list.append(o['instruction'])
+            self.label_list.append(o['label'])
         
-        self.label_list = label_list
-        self.input_mol_string_list = input_mol_string_list
-        self.graph_list = graph_list
-        self.instruction_list = instruction_list
-        
-        if self.count_invalid_smiles > 0:
-            print(f"{self.task}: Number of invalid smiles: {self.count_invalid_smiles}")
-            print(f"{self.task}: Invalid smiles ratio: {self.count_invalid_smiles/len(self.label_list)}")
+        print(f"{self.task}: Invalid smiles ratio: {len(self.data)/len(self.label_list)}")
 
         
 
@@ -839,50 +813,60 @@ class SMolInstructDataset(Dataset):
         return len(self.label_list)
 
     def get_necessary_data(self, index, raw_input, raw_output):
-        raw_input = raw_input
-        label = raw_output
-        instruction = self.instruction_list[
-            np.random.choice(len(self.instruction_list))
+        try:
+            raw_input = raw_input
+            label = raw_output
+            # randomly select one instruction from list
+            instruction = self.instruction_templates[
+                np.random.choice(len(self.instruction_templates))
             ]
 
-        if self.task in TEXT2MOL_BENCHMARKS:
-            """
-            "chebi-20-text2mol",
-            "smol-name_conversion-i2s",
-            "smol-name_conversion-i2f",
-            "smol-molecule_generation",
-            """
-            s_token, e_token = \
-                added_tokens.IUPAC if self.task in ["smol-name_conversion-i2s", "smol-name_conversion-i2f"] \
-                else added_tokens.DESCRIPTION 
+            if self.task in TEXT2MOL_BENCHMARKS:
+                """
+                "chebi-20-text2mol",
+                "smol-name_conversion-i2s",
+                "smol-name_conversion-i2f",
+                "smol-molecule_generation",
+                """
+                s_token, e_token = \
+                    added_tokens.IUPAC if self.task in ["smol-name_conversion-i2s", "smol-name_conversion-i2f"] \
+                    else added_tokens.DESCRIPTION 
+                    
+                description = raw_input
                 
-            description = raw_input
-            
-            instruction += ("\n" + s_token + description + e_token)
-            graph = smiles2data('CCCC') # null smiles, just input for batch processing
-            input_mol_string = "<None>"
-        elif self.task in MOL2TEXT_BENCHMARKS:
-            """
-            "chebi-20-mol2text",
-            "smol-name_conversion-s2f",
-            "smol-name_conversion-s2i",
-            "smol-molecule_captioning",
-            """
-            
-            input_mol_string = raw_input
-            smiles = sf.decoder(input_mol_string)
-            graph = smiles2data(smiles)
-        elif self.task in REACTION_BENCHMARKS:
-            input_mol_string = raw_input
-            smiles = sf.decoder(input_mol_string)
-            graph = smiles2data(smiles)
+                instruction += ("\n" + s_token + description + e_token)
+                graph = smiles2data('CCCC') # null smiles, just input for batch processing
+                input_mol_string = "<None>"
+            elif self.task in MOL2TEXT_BENCHMARKS:
+                """
+                "chebi-20-mol2text",
+                "smol-name_conversion-s2f",
+                "smol-name_conversion-s2i",
+                "smol-molecule_captioning",
+                """
+                
+                input_mol_string = raw_input
+                smiles = sf.decoder(input_mol_string)
+                graph = smiles2data(smiles)
+            elif self.task in REACTION_BENCHMARKS:
+                input_mol_string = raw_input
+                smiles = sf.decoder(input_mol_string)
+                graph = smiles2data(smiles)
 
-        label = wrap_label(label, self.task)
-        input_mol_string = (
-            added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
-        )
+            label = wrap_label(label, self.task)
+            input_mol_string = (
+                added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
+            )
+            output = {
+                "graph": graph,
+                "label": label,
+                "input_mol_string": input_mol_string,
+                "instruction": instruction
+            }
 
-        return graph, label, input_mol_string, instruction
+            return output
+        except Exception as e:
+            return e
 
     # LLM input order: <instruction><qformer_output><smiles_tokens>
     def __getitem__(self, index):
@@ -1060,9 +1044,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
             if "qm9" in task_name:
                 dataset = mol_instruction_dataset["property_prediction"]
                 subtask_name = task_name.split("_")[1]
-                subtask_instructions = getattr(instructions, subtask_name)
+                subtask_instruction_templates = getattr(instructions, subtask_name)
                 dataset = dataset.filter(
-                    lambda x: x["instruction"] in subtask_instructions
+                    lambda x: x["instruction"] in subtask_instruction_templates
                 )
             else:
                 dataset = mol_instruction_dataset[task_name]
@@ -1394,9 +1378,9 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
             if "qm9" in task_name:
                 dataset = mol_instruction_dataset["property_prediction"]
                 subtask_name = task_name.split("_")[1]
-                subtask_instructions = getattr(instructions, subtask_name)
+                subtask_instruction_templates = getattr(instructions, subtask_name)
                 dataset = dataset.filter(
-                    lambda x: x["instruction"] in subtask_instructions
+                    lambda x: x["instruction"] in subtask_instruction_templates
                 )
             else:
                 dataset = mol_instruction_dataset[task_name]
@@ -1413,7 +1397,6 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
                 "osunlp/SMolInstruct", 
                 use_selfies=True,
                 insert_core_tags=False,  # loada data w/o core tags such as <SELFIES>, </SELFIES>
-                # cache_dir=os.path.join(self.root, 'cache')
                 )
             _task = re.sub('smol-', '', task_name)  # remove smol- from smol-<task_name>
             
@@ -1448,6 +1431,14 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
         # subtask index is necessary when loading clintox from deepchem
         # TODO: deprecate this lengthy hardcoded list
         task_subtask_lists = {
+            "smol-molecule_captioning": [0],
+            "smol-molecule_generation": [0],
+            "smol-name_conversion-s2f": [0],
+            "smol-name_conversion-s2i": [0],
+            "smol-name_conversion-i2s": [0],
+            "smol-name_conversion-i2f": [0],
+            "smol-forward_synthesis": [0],
+            "smol-retrosynthesis": [0],
             "qm9_homo": [0],
             "qm9_lumo": [0],
             "qm9_homo_lumo_gap": [0],
@@ -1465,14 +1456,6 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
             "lipo": [0],
             "chebi-20-mol2text": [0],
             "chebi-20-text2mol": [0],
-            "smol-molecule_captioning": [0],
-            "smol-molecule_generation": [0],
-            "smol-name_conversion-s2f": [0],
-            "smol-name_conversion-s2i": [0],
-            "smol-name_conversion-i2s": [0],
-            "smol-name_conversion-i2f": [0],
-            "smol-forward_synthesis": [0],
-            "smol-retrosynthesis": [0],
         }
 
         target_benchmarks = self.get_target_benchmarks()
@@ -1586,21 +1569,25 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
 
 
 
-                valid_dataset = SMolInstructDataset(
-                    data=data_split[1],
-                    task_subtask_pair=task_subtask_pair,
-                )
-                test_dataset = SMolInstructDataset(
-                    data=data_split[2],
-                    task_subtask_pair=task_subtask_pair,
-                )
+                if "conversion" in task_name:
+                    valid_dataset = SMolInstructDataset(
+                        data=data_split[1],
+                        task_subtask_pair=task_subtask_pair,
+                    )
+                    test_dataset = SMolInstructDataset(
+                        data=data_split[2],
+                        task_subtask_pair=task_subtask_pair,
+                    )
+                else:
+                    valid_dataset, test_dataset = None, None
+
                 train_dataset = SMolInstructDataset(
                     data=data_split[0],
                     task_subtask_pair=task_subtask_pair,
                 )
-
-            val_datasets.append(valid_dataset)
-            test_datasets.append(test_dataset)
+            # in case reaction prediction and translation, test and validation set are fixed as mol-instruction dataset
+            val_datasets.append(valid_dataset if valid_dataset is not None else [])
+            test_datasets.append(test_dataset if test_dataset is not None else [])
             train_datasets.append(train_dataset)
 
         self.task = self.filename.split("_")[0]
@@ -1624,7 +1611,34 @@ class Mol_LLM_SMol_Dataset(Mol_LLM_Dataset):
 
         print("Saved dataset for task: ", self.task)
 
+def filter_duplication(train_dataset, test_dataset):
+    import multiprocessing as mp
+    
+    num_procs = 50
+    dup_idx = mp.Manager().list()
+    procs = []
+    train_data = train_dataset['input_mol_string'][:]
+    test_data = test_dataset['input_mol_string'][:]
+    indicies = np.arange(len(train_data))
+    chuncked_idx = np.array_split(indicies, num_procs)
+    for i in range(num_procs):
+        proc = mp.Process(target=check_duplication, args=(train_data, test_data, chuncked_idx[i], dup_idx))
+        procs.append(proc)
+        proc.start()
+    for proc in procs:
+        proc.join()
+    dup_idx = list(dup_idx)
+    print(f"Number of duplicated data: {len(dup_idx)}")
+    train_dataset = train_dataset.filter(lambda x: x['input_mol_string'] not in train_data[dup_idx])
+    return train_dataset
 
+def check_duplication(train_data, test_data, train_idxs, dup_idx):
+    iter_bar = tqdm(range(len(train_idxs)))
+    checked_dup = []
+    for i in tqdm(iter_bar):
+        if train_data[train_idxs[i]] in test_data:
+            checked_dup.append(train_idxs[i])
+    dup_idx.extend(checked_dup)
 
 if __name__ == "__main__":
     dm = Stage3DM(
