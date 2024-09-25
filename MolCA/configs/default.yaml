@@ -2,7 +2,7 @@ defaults:
   - data: multi_task
   - gnn: moleculeSTM
   - llm: galactica1.3b
-  - trainer: default
+  - trainer: multi_task_string_only
 
 # General settings
 filename: debugging
@@ -16,12 +16,3 @@ wandb_id: null
 
 stage2_path: ""
 ckpt_path: null
-
-mol_representation: string+graph
-mol_string_randomization_ratio: -1
-
-trainset_resize: -1
-valset_resize: 2400
-testset_resize: -1
-test_on_trainset: false
-skip_sanity_check: false

@@ -16,8 +16,4 @@ selfies_token_path: "/home/chanhui-lee/text-mol/MolCA/model/selfies_dict.txt"
 add_selfies_tokens: true
 prompt: "[START_I_SMILES]{}[END_I_SMILES]"
 
-prompt_max_len: 256
-label_max_len: 256
-gen_max_len: 256
 num_beams: 1
-min_len: 8

@@ -1,0 +1,64 @@
+strategy_name: null
+accelerator: gpu
+devices: "0,1,2,3"
+precision: bf16-mixed
+max_steps: 100000
+second_stage_start_step: 20000
+accumulate_grad_batches: 8
+every_n_train_steps: 1000
+task: null
+val_check_interval: 1
+check_val_every_n_epoch: 1
+save_top_k: 10
+logging_dir: "/home/chanhui-lee/text-mol/MolCA/all_checkpoints/"
+llava_style: 1
+num_workers: 4
+
+batch_sizes:
+  classification: 6
+  regression: 6
+  reaction: 6
+  reagent: 6
+  translation: 6
+inference_batch_sizes:
+  classification: 60
+  regression: 60
+  reaction: 30
+  reagent: 30
+  translation: 30
+
+truncation: 1
+padding: max_length
+
+prompt_max_len:
+  classification: 250
+  regression: 244
+  reaction: 256
+  reagent: 256
+  translation: 256
+label_max_len:
+  classification: 6
+  regression: 12
+  reaction: 256
+  reagent: 256
+  translation: 256
+min_len: 8
+gen_max_len: 256
+
+weight_decay: 0.05
+init_lr: 0.001
+min_lr: 0.00001
+warmup_lr: 0.000001
+warmup_steps: 1000
+lr_decay_rate: 0.9
+scheduler: None
+optimizer: adamw
+
+mol_representation: string+graph
+mol_string_randomization_ratio: -1
+
+trainset_resize: -1
+valset_resize: 2400
+testset_resize: -1
+test_on_trainset: false
+skip_sanity_check: false
