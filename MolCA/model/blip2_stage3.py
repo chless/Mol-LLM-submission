@@ -257,6 +257,7 @@ class Blip2Stage3(pl.LightningModule):
                 batch_size=total_batch_size,
                 sync_dist=False,
             )
+            # log dataset specific losses
             for key in outputs.keys():
                 task_subtask_pairs = batches[key][3]
                 instance_losses = outputs[key]["instance_loss"]
@@ -320,12 +321,34 @@ class Blip2Stage3(pl.LightningModule):
             )
             key = self.args.root
 
-            self.log(
-                f"train/{key}_loss",
-                float(outputs["loss"]),
-                batch_size=batch_size,
-                sync_dist=False,
-            )
+            # log dataset specific losses
+            task_subtask_pairs = batch[3]
+            instance_losses = outputs["instance_loss"]
+
+            for task_subtask_pair in task_subtask_pairs:
+                if task_subtask_pair not in self.dataset_losses.keys():
+                    self.dataset_losses[task_subtask_pair] = []
+
+            for i in range(instance_losses.shape[0]):
+                task_subtask_pair = task_subtask_pairs[i]
+                # calculate average loss
+                self.dataset_losses[task_subtask_pair].append(instance_losses[i])
+
+                while (
+                    len(self.dataset_losses[task_subtask_pair])
+                    > self.num_moving_samples
+                ):
+                    self.dataset_losses[task_subtask_pair].pop(0)
+
+            for dataset in self.dataset_losses.keys():
+                self.log(
+                    f"train/{dataset}/loss",
+                    sum(self.dataset_losses[dataset])
+                    / len(self.dataset_losses[dataset]),
+                    batch_size=len(self.dataset_losses[dataset]),
+                    sync_dist=False,
+                )
+
             total_loss = outputs["loss"]
             total_batch_size = batch_size
             self.log(
