@@ -83,20 +83,20 @@ class Blip2Stage3(pl.LightningModule):
             blip2model = Blip2T5
         else:
             raise NotImplementedError()
-        
+
         self.blip2model = blip2model(
-                args.bert_name,
-                args.gin_num_layers,
-                args.gin_hidden_dim,
-                args.drop_ratio,
-                args.tune_gnn,
-                args.num_query_token,
-                args.cross_attention_freq,
-                args.tune_llm,
-                args.peft_dir,
-                args.llm_model,
-                args.prompt,
-                args,
+            args.bert_name,
+            args.gin_num_layers,
+            args.gin_hidden_dim,
+            args.drop_ratio,
+            args.tune_gnn,
+            args.num_query_token,
+            args.cross_attention_freq,
+            args.tune_llm,
+            args.peft_dir,
+            args.llm_model,
+            args.prompt,
+            args,
         )
         self.tokenizer = self.blip2model.init_tokenizer()
         self.num_devices = (
@@ -305,18 +305,6 @@ class Blip2Stage3(pl.LightningModule):
                 batch_size=total_batch_size,
                 sync_dist=False,
             )
-            """
-            for key in batches.keys():
-                self.evaluation_in_train_step(
-                    batch=batches[key],
-                    predictions=self.blip2model.llm_tokenizer.batch_decode(
-                        outputs[key]["logits"].argmax(dim=-1)
-                    ),
-                    logits=outputs[key]["logits"].clone().detach().cpu(),
-                )
-            if (self.trainer.global_step + 1) % self.args.val_check_interval == 0:
-                self.on_train_evaluation_end()
-            """
 
             return total_loss
         elif isinstance(batch, list) and len(batch) == 1:
