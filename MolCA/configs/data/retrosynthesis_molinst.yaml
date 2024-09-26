@@ -1,0 +1,8 @@
+raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/retrosynthesis_molinst_0926"
+root: "retrosynthesis"
+target_benchmarks: [
+  "retrosynthesis",
+]
+
+# to download smol instruct dataset
+trust_remote_code: true
