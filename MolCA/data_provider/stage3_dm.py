@@ -946,7 +946,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
             "qm9_homo_lumo_gap",
         ]:
             mol_instruction_dataset = load_dataset(
-                "zjunlp/Mol-Instructions", "Molecule-oriented Instructions"
+                "zjunlp/Mol-Instructions", "Molecule-oriented Instructions",
+                trust_remote_code=True
             )
             if "qm9" in task_name:
                 dataset = mol_instruction_dataset["property_prediction"]
