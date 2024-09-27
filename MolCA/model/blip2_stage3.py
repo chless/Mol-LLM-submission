@@ -322,7 +322,7 @@ class Blip2Stage3(pl.LightningModule):
             key = self.args.root
 
             # log dataset specific losses
-            task_subtask_pairs = batch[3]
+            task_subtask_pairs = batch[0][3]
             instance_losses = outputs["instance_loss"]
 
             for task_subtask_pair in task_subtask_pairs:
