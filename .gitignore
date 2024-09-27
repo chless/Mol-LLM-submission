@@ -167,3 +167,4 @@ MolCA/results
 *.out
 wandb
 outputs
+*.pth
