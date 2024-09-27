@@ -5,4 +5,4 @@ python3 MolCA/stage3.py \
 ++devices=$gpus \
 ++filename=retrosynthesis_molinst_galac1.3b_string_only_0926 \
 data=retrosynthesis_molinst \
-trainer=retro_molinst_string_only \
+trainer=vram80gb \
