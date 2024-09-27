@@ -9,12 +9,12 @@ second_stage_start_step: 2000
 accumulate_grad_batches: 8
 every_n_train_steps: 200
 task: null
-val_check_interval: 2500
 check_val_every_n_epoch: 1
 save_top_k: 10
 logging_dir: "/home/chanhui-lee/text-mol/MolCA/all_checkpoints/"
 llava_style: 1
 num_workers: 4
+skip_sanity_check: false
 
 batch_sizes:
   short: 48
@@ -50,4 +50,3 @@ trainset_resize: -1
 valset_resize: 2400
 testset_resize: -1
 test_on_trainset: false
-skip_sanity_check: false

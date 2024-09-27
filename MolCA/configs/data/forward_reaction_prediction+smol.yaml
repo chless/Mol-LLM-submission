@@ -3,5 +3,11 @@ target_benchmarks:
     - "forward_reaction_prediction"
     - "smol-forward_synthesis"
 
+val_check_interval: 2500
+trainset_resize: -1
+valset_resize: 2400
+testset_resize: -1
+test_on_trainset: false
+
 # to download smol instruct dataset
 trust_remote_code: true
