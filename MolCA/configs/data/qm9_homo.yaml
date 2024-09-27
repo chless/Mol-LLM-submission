@@ -1,7 +1,7 @@
+raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/qm9_homo_0927"
 target_benchmarks:
   short: 
-    - "forward_reaction_prediction"
-    - "smol-forward_synthesis"
+    - "qm9_homo"
 
 # to download smol instruct dataset
 trust_remote_code: true

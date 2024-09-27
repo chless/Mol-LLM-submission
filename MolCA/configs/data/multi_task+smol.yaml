@@ -1,2 +1,32 @@
-raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task+smol_0924"
-root: "multi_task+smol"
+raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
+target_benchmarks:
+  short:
+    - bace
+    - bbbp
+    - clintox
+    - toxcast
+    - sider
+    - tox21
+    - hiv
+    - qm9_homo
+    - qm9_lumo
+    - qm9_homo_lumo_gap
+    - esol
+    - lipo
+  long:
+    - forward_reaction_prediction
+    - retrosynthesis
+    - reagent_prediction
+    - chebi-20-text2mol
+    - chebi-20-mol2text
+    - smol-forward_synthesis
+    - smol-retrosynthesis
+    - smol-molecule_captioning
+    - smol-molecule_generation
+    - smol-name_conversion-s2f
+    - smol-name_conversion-s2i
+    - smol-name_conversion-i2s
+    - smol-name_conversion-i2f
+
+# to download smol instruct dataset
+trust_remote_code: true
