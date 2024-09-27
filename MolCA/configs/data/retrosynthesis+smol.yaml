@@ -1,6 +1,7 @@
-raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/retrosynthesis_molinst_0926"
+raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/retrosynthesis+smol_0925"
 root: "retrosynthesis"
 target_benchmarks: [
+  "smol-retrosynthesis",
   "retrosynthesis",
 ]
 
