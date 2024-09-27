@@ -65,7 +65,6 @@ def main(cfg):
     dm = Stage3DM(
         mode=cfg.mode,
         num_workers=cfg.num_workers,
-        root=cfg.root,
         tokenizer=model.blip2model.llm_tokenizer,
         fit_llm_input_convention=model.blip2model.fit_llm_input_convention,
         fit_llm_output_convention=model.blip2model.fit_llm_output_convention,

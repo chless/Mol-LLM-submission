@@ -319,7 +319,6 @@ class Blip2Stage3(pl.LightningModule):
                 batch_size=batch_size,
                 sync_dist=False,
             )
-            key = self.args.root
 
             # log dataset specific losses
             task_subtask_pairs = batch[0][3]
