@@ -901,55 +901,12 @@ class Mol_LLM_Dataset(InMemoryDataset):
     def raw_file_names(self):
         return [f"{task}_{self.split}.pth" for task in self.target_benchmarks]
 
-
     @property
     def processed_file_names(self):
         return f"{self.filename}.pt"
 
     def get_target_benchmarks(self):
-        if "target_benchmarks" in self.args:
-            target_benchmarks = self.args.target_benchmarks[self.task]
-        elif "classification" in self.filename:
-            target_benchmarks = [
-                "bace",
-                "bbbp",
-                "clintox",
-                "toxcast",
-                "sider",
-                "tox21",
-                "hiv",
-            ]
-        elif "regression" in self.filename:
-            target_benchmarks = [
-                "qm9_homo",
-                "qm9_lumo",
-                "qm9_homo_lumo_gap",
-                "esol",
-                "lipo",
-            ]
-
-        elif "reaction" in self.filename:
-            target_benchmarks = [
-                "forward_reaction_prediction",
-                "retrosynthesis",
-                "smol-forward_synthesis",
-                "smol-retrosynthesis",
-            ]
-        elif "reagent" in self.filename:
-            target_benchmarks = ["reagent_prediction"]
-        elif "translation" in self.filename:
-            target_benchmarks = [
-                "chebi-20-text2mol",
-                "chebi-20-mol2text",
-                "smol-molecule_captioning",
-                "smol-molecule_generation",
-                "smol-name_conversion-s2f",
-                "smol-name_conversion-s2i",
-                "smol-name_conversion-i2s",
-                "smol-name_conversion-i2f",
-            ]
-
-        return target_benchmarks
+        return self.args.target_benchmarks[self.task]
     
     def get_dataset(self, task_name):
         base_path = f"dataset/{task_name}"
