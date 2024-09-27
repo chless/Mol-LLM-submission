@@ -46,6 +46,7 @@ optimizer: adamw
 
 mol_string_randomization_ratio: -1
 
+val_check_interval: 2500
 trainset_resize: -1
 valset_resize: 2400
 testset_resize: -1

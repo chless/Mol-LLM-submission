@@ -44,4 +44,10 @@ lr_decay_rate: 0.9
 scheduler: None
 optimizer: adamw
 
+val_check_interval: 2500
+trainset_resize: -1
+valset_resize: 2400
+testset_resize: -1
+test_on_trainset: false
+
 mol_string_randomization_ratio: -1
