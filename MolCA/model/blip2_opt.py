@@ -190,7 +190,7 @@ class Blip2OPT(Blip2Base):
 
     def fit_llm_output_convention(self, llm_output):
         # TODO: if train galactica next time, use the commented code. The code is commented currently because previously trained model is not aligned with.
-        #llm_output += self.llm_tokenizer.eos_token
+        # llm_output += self.llm_tokenizer.eos_token
         return llm_output
 
     def set_llm_model(self, llm_model):
@@ -241,7 +241,12 @@ class Blip2OPT(Blip2Base):
         additional_tokens = [
             token for sublist in additional_tokens for token in sublist
         ]
-            
+        if "smol" not in self.args.root:
+            additional_tokens.remove("<IUPAC>")
+            additional_tokens.remove("</IUPAC>")
+            additional_tokens.remove("<MOLFORMULA>")
+            additional_tokens.remove("</MOLFORMULA>")
+
         self.llm_tokenizer.add_tokens(additional_tokens)
 
         self.mol_token = added_tokens.MOL_EMBEDDING[0]
@@ -372,7 +377,7 @@ class Blip2OPT(Blip2Base):
             "loss": outputs.loss,
             "instance_loss": outputs.instance_loss,
             "logits": outputs.logits,
-            }
+        }
         return results
 
     def inject_graph_embeds2prompt_embeds(self, prompt_embeds, prompt_tokens, graphs):
@@ -518,13 +523,18 @@ class Blip2OPT(Blip2Base):
         output_text = [text.strip() for text in output_text]
         outputs.predictions = output_text
         return outputs
-    
+
+
 _CONFIG_FOR_DOC = "OPTConfig"
+
+
 class OPTForCausalLM_Custom(OPTForCausalLM):
     def __init__(self, config):
         super().__init__(config)
 
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -612,11 +622,19 @@ class OPTForCausalLM_Custom(OPTForCausalLM):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious. I'm just a little bit of a weirdo."
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model.decoder(
@@ -678,11 +696,12 @@ class OPTForCausalLM_Custom(OPTForCausalLM):
             attentions=outputs.attentions,
             instance_loss=instance_loss,
         )
-    
+
 
 from transformers.modeling_outputs import ModelOutput
 from dataclasses import dataclass
-    
+
+
 @dataclass
 class CausalLMOutputWithPast_Custom(ModelOutput):
     """
