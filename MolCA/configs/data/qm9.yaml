@@ -4,6 +4,3 @@ target_benchmarks:
     - "qm9_homo"
     - "qm9_lumo"
     - "qm9_homo_lumo_gap"
-
-# to download smol instruct dataset
-trust_remote_code: true
