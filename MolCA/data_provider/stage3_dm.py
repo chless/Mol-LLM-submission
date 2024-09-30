@@ -1041,7 +1041,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
             "qm9_homo_lumo_gap",
         ]:
             mol_instruction_dataset = load_dataset(
-                "zjunlp/Mol-Instructions", "Molecule-oriented Instructions"
+                "zjunlp/Mol-Instructions", "Molecule-oriented Instructions",
+                trust_remote_code=True
             )
             if "qm9" in task_name:
                 dataset = mol_instruction_dataset["property_prediction"]
@@ -1278,7 +1279,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             ] and self.split in ["val", "test"]:
                 continue
             raw_data_list.extend(
-                list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth"))
+                list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth", map_location="cpu"))
             )
 
         # filter out duplicated data in train and test set for smol-forward_synthesis and smol-retrosynthesis
