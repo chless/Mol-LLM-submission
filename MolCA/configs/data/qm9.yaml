@@ -1,0 +1,9 @@
+raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/qm9_0928"
+target_benchmarks:
+  short: 
+    - "qm9_homo"
+    - "qm9_lumo"
+    - "qm9_homo_lumo_gap"
+
+# to download smol instruct dataset
+trust_remote_code: true
