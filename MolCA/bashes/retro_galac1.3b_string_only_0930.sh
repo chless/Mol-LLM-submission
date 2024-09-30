@@ -6,4 +6,4 @@ python3 MolCA/stage3.py \
 ++filename=retrosynthesis+smol_galac1.3b_string_only_0930 \
 data=retrosynthesis+smol \
 trainer=vram80gb \
-++ckpt_path="'MolCA/all_checkpoints/retrosynthesis_galac1.3b_string_only_0925/last-v1.ckpt'"
+++ckpt_path="'MolCA/all_checkpoints/retrosynthesis_galac1.3b_string_only_0925/step=38400-train_total_loss=0.125.ckpt'"
