@@ -1,2 +1,0 @@
-gpus=$1
-python MolCA/stage2.py --devices $gpus --filename chebi_evaluation --stage2_path "MolCA/all_checkpoints/MolCA/archived/chebi.ckpt" --llm_model 'facebook/galactica-1.3b' --mode eval --prompt '[START_I_SMILES]{}[END_I_SMILES]. ' --tune_gnn --tune_llm lora --inference_batch_size 8 --root "MolCA/data/ChEBI-20_data" --peft_dir "MolCA/all_checkpoints/MolCA/archived/chebi_lora" --init_checkpoint MolCA/all_checkpoints/MolCA/archived/chebi.ckpt

@@ -28,7 +28,10 @@ warnings.filterwarnings(
     "ignore", category=UserWarning, message="TypedStorage is deprecated"
 )
 warnings.filterwarnings(
-    "ignore", message="Skipped loading"
+    "ignore", message=r".*Skipped loading .*"
+)
+warnings.filterwarnings(
+    "ignore", message=r".*No normalization for .*"
 )
 # for A5000 gpus
 torch.set_float32_matmul_precision(
@@ -41,7 +44,7 @@ class MyDDPStrategy(strategies.DDPStrategy):
         assert self.lightning_module is not None
         self.lightning_module.load_state_dict(checkpoint["state_dict"], strict=strict)
 
-@hydra.main(config_path="configs", config_name="default.yaml")
+@hydra.main(config_path="configs", config_name="default.yaml", version_base=None)
 def main(cfg):
     cfg = flatten_dictconfig(cfg)
     pl.seed_everything(cfg.seed)
@@ -62,7 +65,6 @@ def main(cfg):
     dm = Stage3DM(
         mode=cfg.mode,
         num_workers=cfg.num_workers,
-        root=cfg.root,
         tokenizer=model.blip2model.llm_tokenizer,
         fit_llm_input_convention=model.blip2model.fit_llm_input_convention,
         fit_llm_output_convention=model.blip2model.fit_llm_output_convention,
@@ -190,11 +192,14 @@ def flatten_dictconfig(config: DictConfig) -> DictConfig:
     Returns:
     - DictConfig: The flattened configuration.
     """
+
+    # only flatten just first level
     items = []
     for k, v in config.items():
         new_key = k
         if isinstance(v, DictConfig):
-            items.extend(flatten_dictconfig(v).items())
+            for kk, vv in v.items():
+                items.append((f"{kk}", vv))
         else:
             items.append((new_key, v))
     return OmegaConf.create(dict(items))

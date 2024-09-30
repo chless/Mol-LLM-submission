@@ -1,9 +1,0 @@
-raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/forward_reaction_prediction_0925"
-root: "forward_reaction_prediction"
-target_benchmarks: [
-  "smol-forward_synthesis",
-  "forward_reaction_prediction",
-]
-
-# to download smol instruct dataset
-trust_remote_code: true
