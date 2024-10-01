@@ -312,7 +312,7 @@ class Blip2Stage3(pl.LightningModule):
             batch_size = batch[0][1].input_ids.size(0)
             ##============== Overall Loss ===================##
 
-            outputs = self.blip2model(batch[0][:-1])
+            outputs = self.blip2model(batch[0])
             self.log(
                 "lr",
                 self.trainer.optimizers[0].param_groups[0]["lr"],
@@ -505,7 +505,8 @@ class Blip2Stage3(pl.LightningModule):
         self.eval_dataset_losses = {}
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
-        graphs, prompt_tokens, texts, tasks = batch
+        graphs, prompt_tokens, texts = batch
+        tasks = graphs.task_subtask_pair
 
         samples = {"graphs": graphs, "prompt_tokens": prompt_tokens}
         outputs = self.blip2model.generate(
@@ -537,7 +538,7 @@ class Blip2Stage3(pl.LightningModule):
         self.list_probs.append(probs)
 
         batch_size = texts.input_ids.shape[0]
-        outputs = self.blip2model(batch[:-1])  # omit tasks when inputting to the model
+        outputs = self.blip2model(batch)  # omit tasks when inputting to the model
         ##============== Overall Loss ===================##
 
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
