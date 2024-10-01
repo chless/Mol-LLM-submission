@@ -376,7 +376,8 @@ class Blip2OPT(Blip2Base):
         return results
 
     def inject_graph_embeds2prompt_embeds(self, prompt_embeds, prompt_tokens, graphs):
-        if "reactant_x" in graphs.keys():
+        tasks = graphs.task_subtask_pair
+        if "reagent_prediction/reagent_prediction" in graphs.keys():
             mol_token_sequence = []
             for mol in ["reactant", "product"]:
                 mol_x = graphs[f"{mol}_x"]
