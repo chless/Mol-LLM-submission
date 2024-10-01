@@ -2,20 +2,16 @@
 # Licensed under the MIT License.
 import torch
 from pytorch_lightning import LightningDataModule
-import torch_geometric
 
 # from torch_geometric.loader import DataLoader
 from torch.utils.data import DataLoader, Subset
 from torch_geometric.loader.dataloader import Collater
-from data_provider.molecule_caption_dataset import MoleculeCaption, MoleculeCaptionV2
 import re
 from torch.utils.data import DataLoader, Dataset
 from torch_geometric.data import InMemoryDataset, Data
 import os
 
 import deepchem as dc
-from deepchem.splits.splitters import ScaffoldSplitter
-from torch.utils.data import ConcatDataset
 from datasets import load_dataset
 from data_provider import instructions
 import numpy as np
@@ -23,6 +19,8 @@ import selfies as sf
 from tqdm import tqdm
 import model.added_tokens as added_tokens
 import random
+from typing import Any
+
 
 # we split individual characters inside special tokens like [START_DNA]
 # TODO: change this ugly I_SMILES things to regular special token, and add the special token to vocab whichever LLM
@@ -38,7 +36,6 @@ CUSTOM_SEQ_RE = re.compile(r"(<SELFIES>)(.*?)(</SELFIES>)")
 def prepare_llm_input(
     mol_string,
     instruction,
-    task,
     mol_ph,
     mol_representation,
 ):
@@ -104,35 +101,26 @@ class DataCollater:
         graphs, label_texts, input_mol_string, tasks, instructions = zip(*batch)
 
         if isinstance(graphs[0], PairData):
-            reactant_batch = torch.tensor([], dtype=torch.int64)
-            product_batch = torch.tensor([], dtype=torch.int64)
+            additional_batch = torch.tensor([], dtype=torch.int64)
             for i in range(len(graphs)):
-                reactant_num_nodes = graphs[i].reactant_x.size(0)
-                reactant_node_indexing_tensor = torch.tensor(
-                    [i] * reactant_num_nodes, dtype=torch.int64
+                additional_num_nodes = graphs[i].additional_x.size(0)
+                additional_node_indexing_tensor = torch.tensor(
+                    [i] * additional_num_nodes, dtype=torch.int64
                 )
-                reactant_batch = torch.cat(
-                    (reactant_batch, reactant_node_indexing_tensor), 0
-                )
-                product_num_nodes = graphs[i].product_x.size(0)
-                product_node_indexing_tensor = torch.tensor(
-                    [i] * product_num_nodes, dtype=torch.int64
-                )
-                product_batch = torch.cat(
-                    (product_batch, product_node_indexing_tensor), 0
+                additional_batch = torch.cat(
+                    (additional_batch, additional_node_indexing_tensor), 0
                 )
 
         graphs = self.collater(graphs)
+
         if isinstance(graphs, PairData):
-            graphs.reactant_batch = reactant_batch
-            graphs.product_batch = product_batch
+            graphs.additional_batch = additional_batch
 
         ## deal with prompt
         input_texts = [
             prepare_llm_input(
                 mol_string=mol_string,
                 instruction=instruction,
-                task=task.split("/")[0],
                 mol_ph=self.mol_ph,
                 mol_representation=self.mol_representation,
             )
@@ -169,7 +157,7 @@ class DataCollater:
             return_tensors="pt",
             return_attention_mask=True,
         )
-        return graphs, input_tokens, label_tokens, tasks
+        return graphs, input_tokens, label_tokens
 
 
 # binary classification
@@ -828,14 +816,13 @@ def smiles2data(smiles):
     data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
     return data
 
-
 # torch_geometric.data.Data variants for paired graph data, i.e. reagent prediction
 class PairData(Data):
-    def __inc__(self, key, value, *args, **kwargs):
-        if key == "reactant_edge_index":
-            return self.reactant_x.size(0)
-        if key == "product_edge_index":
-            return self.product_x.size(0)
+    def __inc__(self, key: str, value: Any, *args, **kwargs) -> Any:
+        if key == "edge_index":
+            return self.x.size(0)
+        if key == "additional_edge_index":
+            return self.additional_x.size(0)
         return super().__inc__(key, value, *args, **kwargs)
 
 
@@ -949,7 +936,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 "zjunlp/Mol-Instructions", "Molecule-oriented Instructions",
                 trust_remote_code=True
             )
-            if "qm9" in task_name:
+            if "qm9_" in task_name:
                 dataset = mol_instruction_dataset["property_prediction"]
                 subtask_name = task_name.split("_")[1]
                 subtask_instruction_templates = getattr(instructions, subtask_name)
@@ -1299,18 +1286,35 @@ class Mol_LLM_Dataset(InMemoryDataset):
             iter_bar.set_description(
                 f"{self.filename}|Num fail: {count_fail_conversion}|Ratio fail: {count_fail_conversion/(i+1)}"
             )
+            # graph, label, input_mol_string, task_subtask_pair, instruction
             instance = raw_data_list[i]
             try:
-                if isinstance(instance[0], list):
-                    # reagent prediction dataset
+                if "long" in self.filename:
+                    # batch processing requires uniform data structure.
+                    # for reagent prediction, the input is a pair of graphs
                     # input string: reactant>>product / output string: reagent
+                    # maps reactant: first graph, product: second graph
+                    if isinstance(instance[0], list):
+                        pass
+                    # for other tasks, the input is a single graph, but convert the single graph to a pair of graphs
+                    # wit dummy graph corresponding to 'CCCC' for batch processing
+                    else:
+                        dummy_graph = smiles2data("CC")
+                        instance = [
+                            [instance[0], dummy_graph],
+                            instance[1],
+                            instance[2],
+                            instance[3],
+                            instance[4],
+                        ]
+
                     data = PairData(
-                        reactant_x=instance[0][0].x,
-                        reactant_edge_index=instance[0][0].edge_index,
-                        reactant_edge_attr=instance[0][0].edge_attr,
-                        product_x=instance[0][1].x,
-                        product_edge_index=instance[0][1].edge_index,
-                        product_edge_attr=instance[0][1].edge_attr,
+                        x=instance[0][0].x,
+                        edge_index=instance[0][0].edge_index,
+                        edge_attr=instance[0][0].edge_attr,
+                        additional_x=instance[0][1].x,
+                        additional_edge_index=instance[0][1].edge_index,
+                        additional_edge_attr=instance[0][1].edge_attr,
                         y=instance[1],
                         input_mol_string=instance[2],
                         task_subtask_pair=instance[3],
