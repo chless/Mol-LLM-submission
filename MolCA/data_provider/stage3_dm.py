@@ -243,7 +243,7 @@ class Stage3DM(LightningDataModule):
             for task in self.task_categories
         }
         for task in self.concat_datasets.keys():
-            for split in ["train", "val", "test"]:
+            for split in ["test", "val", "train"]:
                 if split == "val":
                     resize = args.valset_resize if args.valset_resize > 0 else None
                 elif split == "test":
@@ -816,6 +816,7 @@ def smiles2data(smiles):
     data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
     return data
 
+
 # torch_geometric.data.Data variants for paired graph data, i.e. reagent prediction
 class PairData(Data):
     def __inc__(self, key: str, value: Any, *args, **kwargs) -> Any:
@@ -841,7 +842,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         self.filename = filename  # raw_file_names and processed_file_names use this
         self.start, self.end = added_tokens.SELFIES
         self.resize = resize
-        self.task = '_'.join(filename.split("_")[:-1])
+        self.task = "_".join(filename.split("_")[:-1])
         self.split = filename.split("_")[-1]
         self.target_benchmarks = self.get_target_benchmarks()
         super(Mol_LLM_Dataset, self).__init__(root, transform, pre_transform)
@@ -894,7 +895,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
     def get_target_benchmarks(self):
         return self.args.target_benchmarks[self.task]
-    
+
     def get_dataset(self, task_name):
         base_path = f"dataset/{task_name}"
         os.makedirs(base_path, exist_ok=True)
@@ -933,8 +934,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
             "qm9_homo_lumo_gap",
         ]:
             mol_instruction_dataset = load_dataset(
-                "zjunlp/Mol-Instructions", "Molecule-oriented Instructions",
-                trust_remote_code=True
+                "zjunlp/Mol-Instructions",
+                "Molecule-oriented Instructions",
+                trust_remote_code=True,
             )
             if "qm9_" in task_name:
                 dataset = mol_instruction_dataset["property_prediction"]
@@ -1028,8 +1030,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
             "qm9_homo_lumo_gap",
         ]:
             mol_instruction_dataset = load_dataset(
-                "zjunlp/Mol-Instructions", "Molecule-oriented Instructions",
-                trust_remote_code=True
+                "zjunlp/Mol-Instructions",
+                "Molecule-oriented Instructions",
+                trust_remote_code=True,
             )
             if "qm9" in task_name:
                 dataset = mol_instruction_dataset["property_prediction"]
@@ -1084,7 +1087,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             pass
 
         return tasks, train_dataset, valid_dataset, test_dataset
-    
+
     def download(self):
         # subtask index is necessary when loading clintox from deepchem
         # TODO: deprecate this lengthy hardcoded list
@@ -1266,7 +1269,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
             ] and self.split in ["val", "test"]:
                 continue
             raw_data_list.extend(
-                list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth", map_location="cpu"))
+                list(
+                    torch.load(
+                        f"{self.raw_dir}/{task}_{self.split}.pth", map_location="cpu"
+                    )
+                )
             )
 
         # filter out duplicated data in train and test set for smol-forward_synthesis and smol-retrosynthesis
@@ -1349,6 +1356,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         instruction = data.instruction
 
         return data, label, input_mol_string, task_subtask_pair, instruction
+
 
 def filter_duplication(train_dataset, test_dataset):
     import multiprocessing as mp
