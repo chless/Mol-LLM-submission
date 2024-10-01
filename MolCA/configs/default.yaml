@@ -2,7 +2,7 @@ defaults:
   - data: multi_task
   - gnn: moleculeSTM
   - llm: galactica1.3b
-  - trainer: multi_task_string_only
+  - trainer: vram80gb
 
 # General settings
 filename: debugging
