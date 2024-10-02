@@ -230,27 +230,15 @@ class Blip2Stage3(pl.LightningModule):
         if self.scheduler:
             self.scheduler.step(self.trainer.current_epoch, self.trainer.global_step)
 
-        if isinstance(batch, list) and len(batch) == 5:
-            batch_sizes = [b[1].input_ids.size(0) for b in batch]
-            total_batch_size = sum(batch_sizes)
-            ##============== Overall Loss ===================##
-            batches = {
-                "classification": batch[0],
-                "regression": batch[1],
-                "reaction": batch[2],
-                "reagent": batch[3],
-                "translation": batch[4],
-            }
+        if isinstance(batch, list):
+            batch_sizes = self.args.batch_sizes
+            total_batch_size = sum(batch_sizes.values())
 
-            outputs = {
-                "classification": self.blip2model(batches["classification"][:-1]),
-                "regression": self.blip2model(
-                    batches["regression"][:-1], task="regression"
-                ),
-                "reaction": self.blip2model(batches["reaction"][:-1]),
-                "reagent": self.blip2model(batches["reagent"][:-1]),
-                "translation": self.blip2model(batches["translation"][:-1]),
-            }
+            batch_partisions = list(self.args.batch_sizes.keys())
+            outputs = {}
+            for i in range(len(batch)):
+                outputs[batch_partisions[i]] = self.blip2model(batch[i])
+
             self.log(
                 "lr",
                 self.trainer.optimizers[0].param_groups[0]["lr"],
@@ -258,8 +246,8 @@ class Blip2Stage3(pl.LightningModule):
                 sync_dist=False,
             )
             # log dataset specific losses
-            for key in outputs.keys():
-                task_subtask_pairs = batches[key][3]
+            for i, key in enumerate(outputs):
+                task_subtask_pairs = batch[i][0].task_subtask_pair
                 instance_losses = outputs[key]["instance_loss"]
 
                 for task_subtask_pair in task_subtask_pairs:
@@ -286,13 +274,12 @@ class Blip2Stage3(pl.LightningModule):
                     sync_dist=False,
                 )
 
-            total_loss = (
-                outputs["classification"]["loss"] * batch_sizes[0]
-                + outputs["regression"]["loss"] * batch_sizes[1]
-                + outputs["reaction"]["loss"] * batch_sizes[2]
-                + outputs["reagent"]["loss"] * batch_sizes[3]
-                + outputs["translation"]["loss"] * batch_sizes[4]
-            ) / sum(batch_sizes)
+            total_loss = sum(
+                [
+                    outputs[key]["loss"] * batch_sizes[key] / total_batch_size
+                    for key in outputs.keys()
+                ]
+            )
 
             self.log(
                 "train/total_loss",
@@ -306,64 +293,9 @@ class Blip2Stage3(pl.LightningModule):
                 batch_size=total_batch_size,
                 sync_dist=False,
             )
-
             return total_loss
-        elif isinstance(batch, list) and len(batch) == 1:
-            batch_size = batch[0][1].input_ids.size(0)
-            ##============== Overall Loss ===================##
-
-            outputs = self.blip2model(batch[0])
-            self.log(
-                "lr",
-                self.trainer.optimizers[0].param_groups[0]["lr"],
-                batch_size=batch_size,
-                sync_dist=False,
-            )
-
-            # log dataset specific losses
-            task_subtask_pairs = batch[0][0].task_subtask_pair
-            instance_losses = outputs["instance_loss"]
-
-            for task_subtask_pair in task_subtask_pairs:
-                if task_subtask_pair not in self.dataset_losses.keys():
-                    self.dataset_losses[task_subtask_pair] = []
-
-            for i in range(instance_losses.shape[0]):
-                task_subtask_pair = task_subtask_pairs[i]
-                # calculate average loss
-                self.dataset_losses[task_subtask_pair].append(instance_losses[i])
-
-                while (
-                    len(self.dataset_losses[task_subtask_pair])
-                    > self.num_moving_samples
-                ):
-                    self.dataset_losses[task_subtask_pair].pop(0)
-
-            for dataset in self.dataset_losses.keys():
-                self.log(
-                    f"train/{dataset}/loss",
-                    sum(self.dataset_losses[dataset])
-                    / len(self.dataset_losses[dataset]),
-                    batch_size=len(self.dataset_losses[dataset]),
-                    sync_dist=False,
-                )
-
-            total_loss = outputs["loss"]
-            total_batch_size = batch_size
-            self.log(
-                "train/total_loss",
-                float(total_loss),
-                batch_size=total_batch_size,
-                sync_dist=False,
-            )
-            self.log(
-                "train_total_loss",
-                float(total_loss),
-                batch_size=total_batch_size,
-                sync_dist=False,
-            )
-
-            return total_loss
+        else:
+            raise NotImplementedError()
 
     def on_train_epoch_start(self) -> None:
         if self.blip2model.llm_tokenizer.mol_string_randomization_ratio > 0:
