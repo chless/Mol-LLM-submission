@@ -190,7 +190,7 @@ class Blip2OPT(Blip2Base):
 
     def fit_llm_output_convention(self, llm_output):
         # TODO: if train galactica next time, use the commented code. The code is commented currently because previously trained model is not aligned with.
-        # llm_output += self.llm_tokenizer.eos_token
+        llm_output += self.llm_tokenizer.eos_token
         return llm_output
 
     def set_llm_model(self, llm_model):
