@@ -421,9 +421,11 @@ class Blip2OPT(Blip2Base):
         for data_idx in range(prompt_tokens.is_mol_token.shape[0]):
             # only inject mol tokens to the prompt embeds when there is mol token in the prompt
             mol_token_indices = prompt_tokens.is_mol_token[data_idx]
-            num_mol_tokens_prompt = mol_token_indices.sum()
-            if prompt_embeds[data_idx, mol_token_indices].shape[0]:
-                prompt_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :num_mol_tokens_prompt]
+            num_mol_tokens_in_prompt = mol_token_indices.sum().item()
+            if num_mol_tokens_in_prompt:
+                prompt_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :num_mol_tokens_in_prompt]
+            else:
+                pass
         return prompt_embeds
 
     @torch.no_grad()
