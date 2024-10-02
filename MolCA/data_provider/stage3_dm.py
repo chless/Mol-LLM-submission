@@ -254,11 +254,13 @@ class Stage3DM(LightningDataModule):
                     raise NotImplementedError
 
                 if split == "val":
-                    split = "test"
+                    filename = f"{task}_test"
+                else:
+                    filename = f"{task}_{split}"
 
                 self.concat_datasets[task][split] = Mol_LLM_Dataset(
                     root=self.args.raw_data_root,
-                    filename=f"{task}_{split}",
+                    filename=filename,
                     resize=resize,
                     args=self.args,
                 )
@@ -1181,11 +1183,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
                     data=data_split[2],
                     task_subtask_pair=task_subtask_pair,
                     subtask_idx=subtask_idx,
-                    train_dataset=MoleculeNetDatasetDeepChem(
-                        data=data_split[0],
-                        task_subtask_pair=task_subtask_pair,
-                        subtask_idx=subtask_idx,
-                    ),
+                )
+                train_dataset = MoleculeNetDatasetDeepChem(
+                    data=data_split[0],
+                    task_subtask_pair=task_subtask_pair,
+                    subtask_idx=subtask_idx,
                 )
             elif task_name in ["chebi-20-mol2text", "chebi-20-text2mol"]:
                 valid_dataset = ChEBIDatset(
