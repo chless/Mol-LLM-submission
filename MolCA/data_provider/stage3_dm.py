@@ -253,6 +253,9 @@ class Stage3DM(LightningDataModule):
                 else:
                     raise NotImplementedError
 
+                if split == "val":
+                    split = "test"
+
                 self.concat_datasets[task][split] = Mol_LLM_Dataset(
                     root=self.args.raw_data_root,
                     filename=f"{task}_{split}",
