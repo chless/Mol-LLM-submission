@@ -231,6 +231,7 @@ class Blip2Stage3(pl.LightningModule):
             self.scheduler.step(self.trainer.current_epoch, self.trainer.global_step)
 
         if isinstance(batch, list):
+            #TODO: IMPORTANT!! get tie batch index and key specified in config
             batch_sizes = self.args.batch_sizes
             total_batch_size = sum(batch_sizes.values())
 
