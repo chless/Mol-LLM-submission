@@ -377,13 +377,14 @@ class Blip2OPT(Blip2Base):
 
     def inject_graph_embeds2prompt_embeds(self, prompt_embeds, prompt_tokens, graphs):
         tasks = graphs.task_subtask_pair
-        if "reagent_prediction/reagent_prediction" in graphs.keys():
+        double_mol_idxs = [True if "reagent_prediction" in task else False for task in tasks]
+        if "additional_x" in graphs.keys():
             mol_token_sequence = []
-            for mol in ["reactant", "product"]:
-                mol_x = graphs[f"{mol}_x"]
-                mol_edge_index = graphs[f"{mol}_edge_index"]
-                mol_edge_attr = graphs[f"{mol}_edge_attr"]
-                mol_batch = graphs[f"{mol}_batch"]
+            for prefix in ["", "additional_"]:
+                mol_x = graphs[f"{prefix}x"]
+                mol_edge_index = graphs[f"{prefix}edge_index"]
+                mol_edge_attr = graphs[f"{prefix}edge_attr"]
+                mol_batch = graphs[f"{prefix}batch"]
                 mol_embeds, mol_masks = self.graph_encoder(
                     mol_x, mol_edge_index, mol_edge_attr, mol_batch
                 )
@@ -400,18 +401,6 @@ class Blip2OPT(Blip2Base):
                 mol_tokens = self.opt_proj(query_output.last_hidden_state)
                 mol_token_sequence.append(mol_tokens)
             mol_tokens = torch.cat(mol_token_sequence, dim=1)
-            for i in range(prompt_tokens.is_mol_token.shape[0]):
-                # only inject mol tokens to the prompt embeds when there is mol token in the prompt
-                if prompt_embeds[i][prompt_tokens.is_mol_token[i]].shape[0]:
-                    # there are cases that mol token is truncated, which make error in vectorized operation
-                    for j in range(
-                        prompt_embeds[i][prompt_tokens.is_mol_token[i]].shape[0]
-                    ):
-                        prompt_embeds[i][prompt_tokens.is_mol_token[i]][j] = mol_tokens[
-                            i
-                        ][j]
-
-            # prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
 
         else:
             graph_embeds, graph_masks = self.graph_encoder(graphs)
@@ -426,16 +415,17 @@ class Blip2OPT(Blip2Base):
                 return_dict=True,
             )
             mol_tokens = self.opt_proj(query_output.last_hidden_state)
-            for i in range(prompt_tokens.is_mol_token.shape[0]):
-                # only inject mol tokens to the prompt embeds when there is mol token in the prompt
-                if prompt_embeds[i][prompt_tokens.is_mol_token[i]].shape[0]:
-                    # there are cases that mol token is truncated, which make error in vectorized operation
-                    for j in range(
-                        prompt_embeds[i][prompt_tokens.is_mol_token[i]].shape[0]
-                    ):
-                        prompt_embeds[i][prompt_tokens.is_mol_token[i]][j] = mol_tokens[
-                            i
-                        ][j]
+
+        # [Batch_size, Sequence_length, Hidden_size]
+        # data_idx over Batch_size, query_idx over Sequence_length
+        for data_idx in range(prompt_tokens.is_mol_token.shape[0]):
+            # only inject mol tokens to the prompt embeds when there is mol token in the prompt
+            mol_token_indices = prompt_tokens.is_mol_token[data_idx]
+            num_mol_tokens_in_prompt = mol_token_indices.sum().item()
+            if num_mol_tokens_in_prompt:
+                prompt_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :num_mol_tokens_in_prompt]
+            else:
+                pass
         return prompt_embeds
 
     @torch.no_grad()
