@@ -401,18 +401,6 @@ class Blip2OPT(Blip2Base):
                 mol_tokens = self.opt_proj(query_output.last_hidden_state)
                 mol_token_sequence.append(mol_tokens)
             mol_tokens = torch.cat(mol_token_sequence, dim=1)
-            for i in range(prompt_tokens.is_mol_token.shape[0]):
-                # only inject mol tokens to the prompt embeds when there is mol token in the prompt
-                if prompt_embeds[i][prompt_tokens.is_mol_token[i]].shape[0]:
-                    # there are cases that mol token is truncated, which make error in vectorized operation
-                    for j in range(
-                        prompt_embeds[i][prompt_tokens.is_mol_token[i]].shape[0]
-                    ):
-                        prompt_embeds[i][prompt_tokens.is_mol_token[i]][j] = mol_tokens[
-                            i
-                        ][j]
-
-            # prompt_embeds[prompt_tokens.is_mol_token] = mol_tokens.flatten(0, 1)
 
         else:
             graph_embeds, graph_masks = self.graph_encoder(graphs)
@@ -427,13 +415,15 @@ class Blip2OPT(Blip2Base):
                 return_dict=True,
             )
             mol_tokens = self.opt_proj(query_output.last_hidden_state)
-            # [Batch_size, Sequence_length, Hidden_size]
-            # data_idx over Batch_size, query_idx over Sequence_length
-            for data_idx in range(prompt_tokens.is_mol_token.shape[0]):
-                # only inject mol tokens to the prompt embeds when there is mol token in the prompt
-                mol_token_indices = prompt_tokens.is_mol_token[data_idx]
-                if prompt_embeds[data_idx, mol_token_indices].shape[0]:
-                    prompt_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :mol_token_indices.shape[0]]
+
+        # [Batch_size, Sequence_length, Hidden_size]
+        # data_idx over Batch_size, query_idx over Sequence_length
+        for data_idx in range(prompt_tokens.is_mol_token.shape[0]):
+            # only inject mol tokens to the prompt embeds when there is mol token in the prompt
+            mol_token_indices = prompt_tokens.is_mol_token[data_idx]
+            num_mol_tokens_prompt = mol_token_indices.sum()
+            if prompt_embeds[data_idx, mol_token_indices].shape[0]:
+                prompt_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :num_mol_tokens_prompt]
         return prompt_embeds
 
     @torch.no_grad()
