@@ -377,13 +377,14 @@ class Blip2OPT(Blip2Base):
 
     def inject_graph_embeds2prompt_embeds(self, prompt_embeds, prompt_tokens, graphs):
         tasks = graphs.task_subtask_pair
-        if "reagent_prediction/reagent_prediction" in graphs.keys():
+        double_mol_idxs = [True if "reagent_prediction" in task else False for task in tasks]
+        if "additional_x" in graphs.keys():
             mol_token_sequence = []
-            for mol in ["reactant", "product"]:
-                mol_x = graphs[f"{mol}_x"]
-                mol_edge_index = graphs[f"{mol}_edge_index"]
-                mol_edge_attr = graphs[f"{mol}_edge_attr"]
-                mol_batch = graphs[f"{mol}_batch"]
+            for prefix in ["", "additional_"]:
+                mol_x = graphs[f"{prefix}x"]
+                mol_edge_index = graphs[f"{prefix}edge_index"]
+                mol_edge_attr = graphs[f"{prefix}edge_attr"]
+                mol_batch = graphs[f"{prefix}batch"]
                 mol_embeds, mol_masks = self.graph_encoder(
                     mol_x, mol_edge_index, mol_edge_attr, mol_batch
                 )
