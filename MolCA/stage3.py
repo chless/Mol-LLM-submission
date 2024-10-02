@@ -27,12 +27,8 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 warnings.filterwarnings(
     "ignore", category=UserWarning, message="TypedStorage is deprecated"
 )
-warnings.filterwarnings(
-    "ignore", message=r".*Skipped loading .*"
-)
-warnings.filterwarnings(
-    "ignore", message=r".*No normalization for .*"
-)
+warnings.filterwarnings("ignore", message=r".*Skipped loading .*")
+warnings.filterwarnings("ignore", message=r".*No normalization for .*")
 # for A5000 gpus
 torch.set_float32_matmul_precision(
     "medium"
@@ -43,6 +39,7 @@ class MyDDPStrategy(strategies.DDPStrategy):
     def load_model_state_dict(self, checkpoint, strict=False):
         assert self.lightning_module is not None
         self.lightning_module.load_state_dict(checkpoint["state_dict"], strict=strict)
+
 
 @hydra.main(config_path="configs", config_name="default.yaml", version_base=None)
 def main(cfg):
@@ -123,6 +120,7 @@ def main(cfg):
         "logger": [logger, wandb_logger, tb_logger],
         "max_steps": cfg.max_steps,
         "val_check_interval": cfg.val_check_interval,
+        "check_val_every_n_epoch": cfg.check_val_every_n_epoch,
         "accumulate_grad_batches": cfg.accumulate_grad_batches,
     }
 
@@ -180,15 +178,16 @@ def update_result_csv(outputs, logger_dir, task_names=None):
     with open(performance_result_path, "w") as f:
         json.dump(final_output, f, indent=4)
 
+
 def flatten_dictconfig(config: DictConfig) -> DictConfig:
     """
     Flatten a nested DictConfig into a single level DictConfig with keys as the path to the original keys.
-    
+
     Args:
     - config (DictConfig): The nested DictConfig to be flattened.
     - parent_key (str, optional): The base key to use for prefixing the keys. Defaults to ''.
     - separator (str, optional): The separator to use between keys. Defaults to '.'.
-    
+
     Returns:
     - DictConfig: The flattened configuration.
     """
@@ -203,6 +202,7 @@ def flatten_dictconfig(config: DictConfig) -> DictConfig:
         else:
             items.append((new_key, v))
     return OmegaConf.create(dict(items))
+
 
 if __name__ == "__main__":
     main()
