@@ -446,7 +446,7 @@ class MoleculeNetDatasetDeepChem(Dataset):
         input_mol_string = (
             added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
         )
-        label = self.label_list[index]
+        label = self.raw_outputs[index]
         label = wrap_label(label, self.task)
         graph = smiles2data(smiles)
         # randomly select one instruction from list
@@ -456,11 +456,11 @@ class MoleculeNetDatasetDeepChem(Dataset):
         return graph, label, input_mol_string, instruction
 
     def set_necessary_data(self):
-        self.mol_list = self.data.X
-        self.label_list = self.data.y[:, self.subtask_idx]
+        self.raw_inputs = self.data.X
+        self.raw_outputs = self.data.y[:, self.subtask_idx]
 
         self.smiles_list = []
-        for mol in self.mol_list:
+        for mol in self.raw_inputs:
             self.smiles_list.append(Chem.MolToSmiles(mol))
 
         self.label_list = []
@@ -471,7 +471,7 @@ class MoleculeNetDatasetDeepChem(Dataset):
         self.count_invalid_smiles = 0
 
         iter_bar = tqdm(
-            range(len(self.mol_list)), total=len(self.mol_list), desc=self.task
+            range(len(self.raw_inputs)), total=len(self.raw_inputs), desc=self.task
         )
         for i in iter_bar:
             try:
@@ -485,7 +485,7 @@ class MoleculeNetDatasetDeepChem(Dataset):
         if self.count_invalid_smiles > 0:
             print(f"{self.task}: Number of invalid smiles: {self.count_invalid_smiles}")
             print(
-                f"{self.task}: Invalid smiles ratio: {self.count_invalid_smiles/len(self.mol_list)}"
+                f"{self.task}: Invalid smiles ratio: {self.count_invalid_smiles/len(self.raw_inputs)}"
             )
 
     def __len__(self):
@@ -1273,13 +1273,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 "smol-retrosynthesis",
             ] and self.split in ["val", "test"]:
                 continue
-            raw_data_list.extend(
-                list(
-                    torch.load(
-                        f"{self.raw_dir}/{task}_{self.split}.pth", map_location="cpu"
-                    )
-                )
-            )
+            raw_data = list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth"))
+            raw_data_list.extend(raw_data)
 
         # filter out duplicated data in train and test set for smol-forward_synthesis and smol-retrosynthesis
         if self.split == "train" and "smol-forward_synthesis" in self.target_benchmarks:
