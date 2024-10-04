@@ -196,14 +196,19 @@ chebi_20_text2mol = [
 ]
 
 smol_name_conversion_s2f = [
-    '<INPUT> is the SMILES representation of a molecule. What is its molecular formula?',
-    'Convert the SMILES representation of a molecule <INPUT> into molecular formula.',
+    # '<INPUT> is the SMILES representation of a molecule. What is its molecular formula?',
+    # 'Convert the SMILES representation of a molecule <INPUT> into molecular formula.',
+    '<INPUT> is the SELFIES representation of a molecule. What is its molecular formula?',
+    'Convert the SELFIES representation of a molecule <INPUT> into molecular formula.',
     'What is the formula of the molecule <INPUT> ?',
     'Can you give the molecular molecular formula of <INPUT> ?',
     'Please write the molecular formula of the molecule <INPUT> .',
-    'Given the SMILES representation <INPUT>, what would be its molecular formula?',
-    'The SMILES representation <INPUT> represents a specific molecule. Can you reveal its molecular formula?',
-    'Considering the SMILES code <INPUT>, can you determine the corresponding molecular formula?',
+    # 'Given the SMILES representation <INPUT>, what would be its molecular formula?',
+    # 'The SMILES representation <INPUT> represents a specific molecule. Can you reveal its molecular formula?',
+    # 'Considering the SMILES code <INPUT>, can you determine the corresponding molecular formula?',
+    'Given the SELFIES representation <INPUT>, what would be its molecular formula?',
+    'The SELFIES representation <INPUT> represents a specific molecule. Can you reveal its molecular formula?',
+    'Considering the SELFIES code <INPUT>, can you determine the corresponding molecular formula?',
     'Can you tell me the molecular formula of <INPUT> ?',
     "I'd like to know the molecular formula of <INPUT> . Can you tell me?",
     'What is the molecular formula for the molecule denoted by <INPUT> ?',
@@ -211,34 +216,55 @@ smol_name_conversion_s2f = [
     'Please provide the molecular formula for <INPUT> .'
 ]
 smol_name_conversion_s2i = [
-    '<INPUT> is the SMILES representation of a molecule. What is its IUPAC name?',
-    'Convert the SMILES representation of a molecule <INPUT> into IUPAC name.',
+    # '<INPUT> is the SMILES representation of a molecule. What is its IUPAC name?',
+    # 'Convert the SMILES representation of a molecule <INPUT> into IUPAC name.',
+    '<INPUT> is the SELFIES representation of a molecule. What is its IUPAC name?',
+    'Convert the SELFIES representation of a molecule <INPUT> into IUPAC name.',
     'What is the IUPAC name of the molecule <INPUT> ?',
     'Can you give the IUPAC name of the molecule <INPUT> ?',
     'Please write the IUPAC name of the molecule <INPUT> .',
-    '<INPUT> The above is a SMILES representation. Write the IUPAC name of the corresponding molecule.',
-    'Determine the IUPAC name for the molecule represented by the following SMILES representation: <INPUT> .',
-    'What is the IUPAC name for the molecule whose SMILES representation is <INPUT> ?',
+    # '<INPUT> The above is a SMILES representation. Write the IUPAC name of the corresponding molecule.',
+    # 'Determine the IUPAC name for the molecule represented by the following SMILES representation: <INPUT> .',
+    # 'What is the IUPAC name for the molecule whose SMILES representation is <INPUT> ?',
+    '<INPUT> The above is a SELFIES representation. Write the IUPAC name of the corresponding molecule.',
+    'Determine the IUPAC name for the molecule represented by the following SELFIES representation: <INPUT> .',
+    'What is the IUPAC name for the molecule whose SELFIES representation is <INPUT> ?',
     'Determine the IUPAC name for the molecule denoted by <INPUT> .',
-    'Translate the given SMILES formula of a molecule <INPUT> into its IUPAC name.',
+    # 'Translate the given SMILES formula of a molecule <INPUT> into its IUPAC name.',
+    'Translate the given SELFIES formula of a molecule <INPUT> into its IUPAC name.',
     'Provide the IUPAC name for the molecule represented as <INPUT> .',
-    'Convert the following SMILES notation <INPUT> into its IUPAC nomenclature.',
-    'Turn the given SMILES symbol of a molecule <INPUT> into its respective IUPAC name.'
+    # 'Convert the following SMILES notation <INPUT> into its IUPAC nomenclature.',
+    # 'Turn the given SMILES symbol of a molecule <INPUT> into its respective IUPAC name.'
+    'Convert the following SELFIES notation <INPUT> into its IUPAC nomenclature.',
+    'Turn the given SELFIES symbol of a molecule <INPUT> into its respective IUPAC name.'
 ]
 smol_name_conversion_i2s = [
-    '<INPUT> is the IUPAC name of a molecule. Please give its SMILES representation.',
-    'Convert the IUPAC name of a molecule <INPUT> into SMILES representation.',
-    'What is the SMILES representation of the molecule with IUPAC name <INPUT> ?',
-    'Can you give the SMILES notation of the molecule <INPUT> ?',
-    'Please write the SMILES representation of the molecule <INPUT> .',
-    '<INPUT> The above is the IUPAC name of a molecule. Write its SMILES notation.',
-    'The IUPAC name of a certain molecule is <INPUT> . Can you provide its SMILES representation?',
-    'Please identify the SMILES representation of the molecule named <INPUT> .',
-    'For the molecule with <INPUT> as the IUPAC name, what is the corresponding SMILES representation?',
-    'What is the SMILES notation for <INPUT> ?',
-    'Could you provide the SMILES for <INPUT> ?',
-    'Can you tell me the SMILES representation for the molecule <INPUT> ?',
-    'What is the SMILES representation for <INPUT> ?'
+    # '<INPUT> is the IUPAC name of a molecule. Please give its SMILES representation.',
+    # 'Convert the IUPAC name of a molecule <INPUT> into SMILES representation.',
+    # 'What is the SMILES representation of the molecule with IUPAC name <INPUT> ?',
+    # 'Can you give the SMILES notation of the molecule <INPUT> ?',
+    # 'Please write the SMILES representation of the molecule <INPUT> .',
+    # '<INPUT> The above is the IUPAC name of a molecule. Write its SMILES notation.',
+    # 'The IUPAC name of a certain molecule is <INPUT> . Can you provide its SMILES representation?',
+    # 'Please identify the SMILES representation of the molecule named <INPUT> .',
+    # 'For the molecule with <INPUT> as the IUPAC name, what is the corresponding SMILES representation?',
+    # 'What is the SMILES notation for <INPUT> ?',
+    # 'Could you provide the SMILES for <INPUT> ?',
+    # 'Can you tell me the SMILES representation for the molecule <INPUT> ?',
+    # 'What is the SMILES representation for <INPUT> ?'
+    '<INPUT> is the IUPAC name of a molecule. Please give its SELFIES representation.',
+    'Convert the IUPAC name of a molecule <INPUT> into SELFIES representation.',
+    'What is the SELFIES representation of the molecule with IUPAC name <INPUT> ?',
+    'Can you give the SELFIES notation of the molecule <INPUT> ?',
+    'Please write the SELFIES representation of the molecule <INPUT> .',
+    '<INPUT> The above is the IUPAC name of a molecule. Write its SELFIES notation.',
+    'The IUPAC name of a certain molecule is <INPUT> . Can you provide its SELFIES representation?',
+    'Please identify the SELFIES representation of the molecule named <INPUT> .',
+    'For the molecule with <INPUT> as the IUPAC name, what is the corresponding SELFIES representation?',
+    'What is the SELFIES notation for <INPUT> ?',
+    'Could you provide the SELFIES for <INPUT> ?',
+    'Can you tell me the SELFIES representation for the molecule <INPUT> ?',
+    'What is the SELFIES representation for <INPUT> ?'
 ]
 smol_name_conversion_i2f = [
     '<INPUT> is the IUPAC name of a molecule. Please give its molecular formula.',
@@ -285,3 +311,66 @@ smol_retrosynthesis = [
     "What is the reactant from which this molecule can be derived?",
     "Can you propose a reactant to synthesize this molecule?",
 ]
+
+smol_molecule_generation = [
+    # smol, if want to use, need to change the stage3_dm.py
+    # 'Based on the given information, generate a molecule that meets the desired specifications: <INPUT>',
+    # 'Give me a molecule that satisfies the conditions outlined in the description: <INPUT>',
+    # 'Generate a molecule based on this description: <INPUT>',
+    # 'Can you create a molecule that matches the given characteristics? <INPUT>',
+    # 'I need a molecule that meets the following conditions: <INPUT> Please represent the molecule in SMILES.',
+    # 'Suppose there is a molecule that meets the following description: <INPUT> Please write the SMILES representation of it.',
+    # '<INPUT> Use the above information to create a molecule.',
+    # 'Build a molecule that meets the requirement: <INPUT>',
+    # 'Generate a molecule that fulfills the requirement: <INPUT>',
+    # 'Conceptualize a molecule that meets the specified attribute(s): <INPUT>',
+    # 'Come up with a molecule based on the description: <INPUT>',
+    # 'Could you please return a molecule that adheres to this description? <INPUT>',
+    # 'I give you a description of a molecule, and you need to return one molecule in SMILES that meets the description. The description: <INPUT>'
+    
+    # mol-llm
+    "Can you create a molecule based on this structural description?",
+    "Please generate a molecule that matches the given molecular structure.",
+    "I need a molecule constructed from this description of its structure.",
+    "What molecule can be formed from the following structural details?",
+    "Could you build a molecule based on these structural characteristics?",
+    "Create a molecular model that fits this structural description.",
+    "Please construct a molecule using the provided structure details.",
+    "Can you form a molecule according to this description of its structure?",
+    "I am interested in a molecule generated from these structural features.",
+    "Please design a molecule that corresponds to this structural overview.",
+    "What is the molecule that can be derived from these structural description?",
+    "Can you synthesize a molecule based on this structural information?",
+ ]
+
+smol_molecule_captioning = [
+    # smol, if want to use, need to change the stage3_dm.py
+    # 'Could you give me a brief introduction to this molecule? <INPUT>',
+    # 'Describe this molecule: <INPUT>',
+    # 'Please give me some details about this molecule. <INPUT>',
+    # 'Please provide a brief introduction to this molecule. <INPUT>',
+    # 'Tell me something about this molecule: <INPUT>',
+    # '<INPUT> The above is a compound. Could you please tell me something about it?',
+    # '<INPUT> What do you know about the molecule?',
+    # 'Here is a molecule represented with SMILE: <INPUT> . Please describe it in natural language.',
+    # 'Can you briefly describe the molecular encoded by this SMILES notation? <INPUT>',
+    # 'I need a brief explanation of the molecule denoted in this SMILES notation. <INPUT>',
+    # "I'd like a short overview about this molecule. Can you do that? <INPUT>",
+    # 'May I have a capsulized explanation for this molecule? <INPUT>',
+    # 'What can you tell me about this molecule? <INPUT>'
+    
+    # mol-llm
+    "Can you describe the molecular structure of this compound?",
+    "Please provide a detailed description of the molecular structure.",
+    "I would like to know the structural features of this molecule, could you describe them?",
+    "What is the molecular structure of this compound?",
+    "Could you give me a description focusing on the molecular structure?",
+    "What are the key structural characteristics of this molecule?",
+    "Please provide a comprehensive overview of the molecular structure.",
+    "Could you tell me about the arrangement of atoms in this molecule?",
+    "I am interested in the molecular structure, can you describe it?",
+    "Please provide me with a detailed structural description of this molecule.",
+    "What is the structural layout and geometry of this molecule?",
+    "Can you give me an overview of the molecular structure?",
+    
+ ]
