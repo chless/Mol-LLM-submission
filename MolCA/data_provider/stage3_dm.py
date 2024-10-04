@@ -63,6 +63,8 @@ def prepare_llm_input(
     if (
         "<INPUT>" in instruction and not "<None>" in mol_string
     ):  # for LlaSMol whose input contains <INPUT>
+        # name conversion tasks are included
+        # if you use LlaSMol instruction for M2T, replace <INPUT> with mol_string
         llm_prompt = instruction.replace("<INPUT>", mol_string_converted)
     elif not "<None>" in mol_string:
         llm_prompt = instruction + mol_string_converted
@@ -839,6 +841,15 @@ class PairData(Data):
         return super().__inc__(key, value, *args, **kwargs)
 
 
+
+smol2molllm ={
+    # "smol-forward_synthesis": "forward_reaction_prediction",
+    # "smol-retrosynthesis": "retrosynthesis",
+    "smol-molecule_generation": "chebi-20-text2mol",
+    "smol-molecule_captioning": "chebi-20-mol2text",
+}
+
+
 # Initialize with the data_list from ConcatDataset
 class Mol_LLM_Dataset(InMemoryDataset):
     def __init__(
@@ -1276,11 +1287,38 @@ class Mol_LLM_Dataset(InMemoryDataset):
             if task in [
                 "smol-forward_synthesis",
                 "smol-retrosynthesis",
+                
+                # "smol-name_conversion-s2f",
+                # "smol-name_conversion-s2i",
+                # "smol-name_conversion-i2s",
+                # "smol-name_conversion-i2f",
             ] and self.split in ["val", "test"]:
                 continue
-            raw_data_list.extend(
-                list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth", map_location="cpu"))
-            )
+            
+            elif task in [  # not used in validation and test set
+                "smol-molecule_captioning",
+                "smol-molecule_generation",
+            ]:
+                if self.split in ["val", "test"]:
+                    if smol2molllm[task] not in self.target_benchmarks:
+                        # need to load Mol-LLM dataset for validation and test
+                        raw_data = list(torch.load(f"{self.raw_dir}/{smol2molllm[task]}_{self.split}.pth", map_location="cpu"))
+                    else:
+                        continue
+                else:
+                    # TODO filter out
+                    raw_data = list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth", map_location="cpu"))
+                    test_dataset = torch.load(f"{self.raw_dir}/{smol2molllm[task]}_test.pth")
+                    val_dataset = torch.load(f"{self.raw_dir}/{smol2molllm[task]}_val.pth")
+                    
+                    raw_data = filter_duplication_translation(
+                                    raw_data, val_dataset, test_dataset, 
+                                    task="T2M" if task == "smol-molecule_generation" else "M2T"
+                                )
+            else:
+                raw_data = list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth", map_location="cpu"))
+            
+            raw_data_list.extend(raw_data)
 
         # filter out duplicated data in train and test set for smol-forward_synthesis and smol-retrosynthesis
         if self.split == "train" and "smol-forward_synthesis" in self.target_benchmarks:
@@ -1291,7 +1329,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         elif self.split == "train" and "smol-retrosynthesis" in self.target_benchmarks:
             test_dataset = torch.load(f"{self.raw_dir}/retrosynthesis_test.pth")
             raw_data_list = filter_duplication(raw_data_list, test_dataset)
-
+        
         data_list = []
         count_fail_conversion = 0
         iter_bar = tqdm(range(len(raw_data_list)))
@@ -1374,6 +1412,82 @@ def filter_duplication(train_dataset, test_dataset):
     filtered_train_dataset = Subset(train_dataset, train_idxs)
     return filtered_train_dataset
 
+def filter_duplication_translation(train_dataset, val_dataset, test_dataset, task=None):
+    """
+    input and output in val_dataset and test_dataset should not be in train_dataset
+    
+    T2M
+        input: description
+        output: mol
+    M2T
+        input: mol
+        output: description
+    
+    
+    each data tuple: graph, label, input_mol_string, self.task_subtask_pair, instruction
+    """
+    
+    assert task is not None, "task should be specified for translation"
+    
+    def extract_description(data):
+        try:
+            return re.search(r"(?<=<DESCRIPTION>).*?(?=</DESCRIPTION>)", data, re.DOTALL).group()
+        except:
+            print(f"Error in extracting description: {data}")
+            raise ValueError("Error in extracting description")
+    def extract_selfies(data):
+        return re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", data).group()
+    
+    
+    train_label = []
+    train_input = []
+    
+    if task == 'T2M':
+        # for instance in train_dataset:
+        for instance in tqdm(train_dataset):
+            train_label.append(extract_selfies(instance[1]))
+            train_input.append(extract_description(instance[4]))
+        
+        val_label = list(map(lambda x: extract_selfies(x), val_dataset[:][1]))
+        test_label = list(map(lambda x: extract_selfies(x), test_dataset[:][1]))
+        
+        val_input = list(map(lambda x: extract_description(x), val_dataset[:][4]))
+        test_input = list(map(lambda x: extract_description(x), test_dataset[:][4]))
+        
+    elif task == 'M2T':
+        for instance in train_dataset:    
+            train_label.append(extract_description(instance[1]))
+            train_input.append(extract_selfies(instance[2]))
+        
+        val_label = list(map(lambda x: extract_description(x), val_dataset[:][1]))
+        test_label = list(map(lambda x: extract_description(x), test_dataset[:][1]))
+        
+        val_input = list(map(lambda x: extract_selfies(x), val_dataset[:][2]))
+        test_input = list(map(lambda x: extract_selfies(x), test_dataset[:][2]))
+
+    else:
+        raise NotImplementedError("task should be either T2M or M2T for removing duplication in translation task")
+
+    # Convert val_input, val_label, test_input, and test_label to sets for fast lookup
+    val_input_set = set(val_input)
+    val_label_set = set(val_label)
+    test_input_set = set(test_input)
+    test_label_set = set(test_label)
+
+    train_idxs = [
+        idx for idx, (train_in, train_lb) in enumerate(zip(train_input, train_label))
+        if train_in not in val_input_set and train_in not in test_input_set and
+        train_lb not in val_label_set and train_lb not in test_label_set
+    ]
+
+    print(f"Number of duplicated data: {len(train_dataset) - len(train_idxs)} for {task}")
+
+    filtered_train_dataset = Subset(train_dataset, train_idxs)
+    
+    return filtered_train_dataset
+
+    
+    
 
 def check_duplication(train_data, test_data, train_idxs, dup_idx):
     iter_bar = tqdm(range(len(train_idxs)))
