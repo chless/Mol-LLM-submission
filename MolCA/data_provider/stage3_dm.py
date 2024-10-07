@@ -923,7 +923,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         elif task_name == "qm9_others":
             loading_fn = dc.molnet.load_qm9
         elif "chebi-20" in task_name:
-            dataset = load_dataset("liupf/ChEBI-20-MM")
+            dataset = load_dataset("liupf/ChEBI-20-MM", trust_remote_code=True)
             train_dataset = dataset["train"]
             valid_dataset = dataset["validation"]
             test_dataset = dataset["test"]
@@ -962,107 +962,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
             test_dataset = dataset.filter(lambda x: "test" in x["metadata"])
             tasks = [task_name]
         elif "smol" in task_name:
-            # smol_dataset = load_dataset("osunlp/SMolInstruct", use_selfies=True)
             smol_dataset = load_dataset(
                 "osunlp/SMolInstruct",
                 use_selfies=True,
                 insert_core_tags=False,  # loada data w/o core tags such as <SELFIES>, </SELFIES>
-            )
-            _task = re.sub("smol-", "", task_name)  # remove smol- from smol-<task_name>
-
-            # DEBUG: to avoid lengthy processing time
-            train_dataset = smol_dataset["train"].filter(lambda x: x["task"] == _task)
-            valid_dataset = smol_dataset["validation"].filter(
-                lambda x: x["task"] == _task
-            )
-            test_dataset = smol_dataset["test"].filter(lambda x: x["task"] == _task)
-            tasks = [task_name]
-        else:
-            raise NotImplementedError
-
-        # dataset from deepchem
-        if (
-            task_name in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS
-            and "qm9" not in task_name
-        ):
-            tasks, datasets, transformers = loading_fn(
-                featurizer="Raw",
-                splitter="scaffold",
-                save_dir=base_path,
-                data_dir=base_path,
-                reload=True,
-            )
-            train_dataset, valid_dataset, test_dataset = datasets
-        else:
-            # dataset from mol-instruction is already loaded
-            pass
-
-        return tasks, train_dataset, valid_dataset, test_dataset
-
-    def get_dataset(self, task_name):
-        base_path = f"dataset/{task_name}"
-        os.makedirs(base_path, exist_ok=True)
-
-        # get dataset from deepchem
-        if task_name == "bace":
-            loading_fn = dc.molnet.load_bace_classification
-        elif task_name in [
-            "bbbp",
-            "clintox",
-            "toxcast",
-            "sider",
-            "tox21",
-            "hiv",
-            "lipo",
-        ]:
-            loading_fn = getattr(dc.molnet, f"load_{task_name}")
-        elif task_name == "esol":
-            loading_fn = dc.molnet.load_delaney
-        elif "chebi-20" in task_name:
-            dataset = load_dataset("liupf/ChEBI-20-MM")
-            train_dataset = dataset["train"]
-            valid_dataset = dataset["validation"]
-            test_dataset = dataset["test"]
-            tasks = [task_name]
-
-        # mol-instruction datasets
-        elif task_name in [
-            "chebi-20-text2mol",
-            "chebi-20-mol2text",
-            "reagent_prediction",
-            "forward_reaction_prediction",
-            "retrosynthesis",
-            "qm9_homo",
-            "qm9_lumo",
-            "qm9_homo_lumo_gap",
-        ]:
-            mol_instruction_dataset = load_dataset(
-                "zjunlp/Mol-Instructions",
-                "Molecule-oriented Instructions",
                 trust_remote_code=True,
-            )
-            if "qm9" in task_name:
-                dataset = mol_instruction_dataset["property_prediction"]
-                subtask_name = task_name.split("_")[1]
-                subtask_instruction_templates = getattr(instructions, subtask_name)
-                dataset = dataset.filter(
-                    lambda x: x["instruction"] in subtask_instruction_templates
-                )
-            else:
-                dataset = mol_instruction_dataset[task_name]
-
-            train_dataset = dataset.filter(lambda x: "train" in x["metadata"])
-            split = train_dataset.train_test_split(test_size=0.02, shuffle=True)
-            train_dataset, valid_dataset = split["train"], split["test"]
-
-            test_dataset = dataset.filter(lambda x: "test" in x["metadata"])
-            tasks = [task_name]
-        elif "smol" in task_name:
-            # smol_dataset = load_dataset("osunlp/SMolInstruct", use_selfies=True)
-            smol_dataset = load_dataset(
-                "osunlp/SMolInstruct",
-                use_selfies=True,
-                insert_core_tags=False,  # loada data w/o core tags such as <SELFIES>, </SELFIES>
             )
             _task = re.sub("smol-", "", task_name)  # remove smol- from smol-<task_name>
 
