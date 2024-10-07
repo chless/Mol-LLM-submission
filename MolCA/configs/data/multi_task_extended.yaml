@@ -22,3 +22,11 @@ target_benchmarks:
     - chebi-20-mol2text
     - smol-forward_synthesis
     - smol-retrosynthesis
+
+duplication_check_train:
+ - smol-forward_synthesis
+ - smol-retrosynthesis
+
+duplication_check_test:
+ - forward_reaction
+ - retrosynthesis
