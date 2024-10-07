@@ -20,6 +20,8 @@ from tqdm import tqdm
 import model.added_tokens as added_tokens
 import random
 from typing import Any
+import copy
+from torch_geometric.data.separate import separate
 
 
 # we split individual characters inside special tokens like [START_DNA]
@@ -233,37 +235,35 @@ class Stage3DM(LightningDataModule):
 
         self.batch_sizes = args.batch_sizes
         self.inference_batch_sizes = args.inference_batch_sizes
-        self.label_max_lens = args.label_max_lens
-        self.prompt_max_lens = args.prompt_max_lens
+        # use sequence length of longer tasks (concat of short dataset is done in propcess method)
+        self.label_max_lens = args.label_max_lens["long"]
+        self.prompt_max_lens = args.prompt_max_lens["long"]
 
         self.task_categories = list(self.args.target_benchmarks.keys())
 
-        self.concat_datasets = {
-            task: {"train": None, "val": None, "test": None}
-            for task in self.task_categories
-        }
-        for task in self.concat_datasets.keys():
-            for split in ["test", "val", "train"]:
-                if split == "val":
-                    resize = args.valset_resize if args.valset_resize > 0 else None
-                elif split == "test":
-                    resize = args.testset_resize if args.testset_resize > 0 else None
-                elif split == "train":
-                    resize = args.trainset_resize if args.trainset_resize > 0 else None
-                else:
-                    raise NotImplementedError
+        self.concat_datasets = {"train": None, "val": None, "test": None}
+ 
+        for split in ["test", "val", "train"]:
+            if split == "val":
+                resize = args.valset_resize if args.valset_resize > 0 else None
+            elif split == "test":
+                resize = args.testset_resize if args.testset_resize > 0 else None
+            elif split == "train":
+                resize = args.trainset_resize if args.trainset_resize > 0 else None
+            else:
+                raise NotImplementedError
 
-                if split == "val":
-                    filename = f"{task}_test"
-                else:
-                    filename = f"{task}_{split}"
+            if split == "val":
+                data_split = f"test"
+            else:
+                data_split = f"{split}"
 
-                self.concat_datasets[task][split] = Mol_LLM_Dataset(
-                    root=self.args.raw_data_root,
-                    filename=filename,
-                    resize=resize,
-                    args=self.args,
-                )
+            self.concat_datasets[split] = Mol_LLM_Dataset(
+                root=self.args.raw_data_root,
+                split=data_split,
+                resize=resize,
+                args=self.args,
+            )
 
         self.init_tokenizer(tokenizer)
         self.mol_ph_token = "<mol>" * self.args.num_query_token
@@ -278,90 +278,77 @@ class Stage3DM(LightningDataModule):
         # self.tokenizer.mol_token_id = tokenizer("<mol>", add_special_tokens=False).input_ids[0]
 
     def train_dataloader(self):
-        loader = []
-        for task in self.concat_datasets.keys():
-            loader.append(
-                DataLoader(
-                    self.concat_datasets[task]["train"],
-                    batch_size=self.batch_sizes[task],
-                    shuffle=True,
-                    num_workers=self.num_workers,
-                    pin_memory=True,
-                    drop_last=True,
-                    persistent_workers=True,
-                    collate_fn=DataCollater(
-                        tokenizer=self.tokenizer,
-                        prompt_max_len=self.prompt_max_lens[task],
-                        label_max_len=self.label_max_lens[task],
-                        mol_ph=self.mol_ph_token,
-                        mol_token_id=self.mol_token_id,
-                        mol_representation=self.mol_representation,
-                        model=self.args.llm_model,
-                        truncation=self.args.truncation,
-                        padding=self.args.padding,
-                        fit_llm_input_convention=self.fit_llm_input_convention,
-                        fit_llm_output_convention=self.fit_llm_output_convention,
-                    ),
-                )
-            )
+        loader = DataLoader(
+            self.concat_datasets["train"],
+            batch_size=self.batch_sizes,
+            shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            drop_last=True,
+            persistent_workers=True,
+            collate_fn=DataCollater(
+                tokenizer=self.tokenizer,
+                prompt_max_len=self.prompt_max_lens,
+                label_max_len=self.label_max_lens,
+                mol_ph=self.mol_ph_token,
+                mol_token_id=self.mol_token_id,
+                mol_representation=self.mol_representation,
+                model=self.args.llm_model,
+                truncation=self.args.truncation,
+                padding=self.args.padding,
+                fit_llm_input_convention=self.fit_llm_input_convention,
+                fit_llm_output_convention=self.fit_llm_output_convention,
+            ))
         return loader
 
     def val_dataloader(self):
-        loader = []
-        for task in self.concat_datasets.keys():
-            loader.append(
-                DataLoader(
-                    self.concat_datasets[task]["val"],
-                    batch_size=self.inference_batch_sizes[task],
-                    shuffle=False,
-                    num_workers=self.num_workers,
-                    pin_memory=True,
-                    drop_last=False,
-                    persistent_workers=True,
-                    collate_fn=DataCollater(
-                        tokenizer=self.tokenizer,
-                        prompt_max_len=self.prompt_max_lens[task],
-                        label_max_len=self.label_max_lens[task],
-                        mol_ph=self.mol_ph_token,
-                        mol_token_id=self.mol_token_id,
-                        mol_representation=self.mol_representation,
-                        model=self.args.llm_model,
-                        truncation=self.args.truncation,
-                        padding=self.args.padding,
-                        fit_llm_input_convention=self.fit_llm_input_convention,
-                        fit_llm_output_convention=self.fit_llm_output_convention,
-                    ),
-                )
+        loader = DataLoader(
+                self.concat_datasets["val"],
+                batch_size=self.inference_batch_sizes,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=True,
+                drop_last=False,
+                persistent_workers=True,
+                collate_fn=DataCollater(
+                    tokenizer=self.tokenizer,
+                    prompt_max_len=self.prompt_max_lens,
+                    label_max_len=self.label_max_lens,
+                    mol_ph=self.mol_ph_token,
+                    mol_token_id=self.mol_token_id,
+                    mol_representation=self.mol_representation,
+                    model=self.args.llm_model,
+                    truncation=self.args.truncation,
+                    padding=self.args.padding,
+                    fit_llm_input_convention=self.fit_llm_input_convention,
+                    fit_llm_output_convention=self.fit_llm_output_convention,
+                ),
             )
         return loader
 
     def test_dataloader(self):
-        loader = []
         split = "test" if not self.args.test_on_trainset else "train"
-        for task in self.concat_datasets.keys():
-            loader.append(
-                DataLoader(
-                    self.concat_datasets[task][split],
-                    batch_size=self.inference_batch_sizes[task],
-                    shuffle=False,
-                    num_workers=self.num_workers,
-                    pin_memory=True,
-                    drop_last=False,
-                    persistent_workers=True,
-                    collate_fn=DataCollater(
-                        tokenizer=self.tokenizer,
-                        prompt_max_len=self.prompt_max_lens[task],
-                        label_max_len=self.label_max_lens[task],
-                        mol_ph=self.mol_ph_token,
-                        mol_token_id=self.mol_token_id,
-                        mol_representation=self.mol_representation,
-                        model=self.args.llm_model,
-                        truncation=self.args.truncation,
-                        padding=self.args.padding,
-                        fit_llm_input_convention=self.fit_llm_input_convention,
-                        fit_llm_output_convention=self.fit_llm_output_convention,
-                    ),
-                )
+        loader = DataLoader(
+                self.concat_datasets[split],
+                batch_size=self.inference_batch_sizes,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=True,
+                drop_last=False,
+                persistent_workers=True,
+                collate_fn=DataCollater(
+                    tokenizer=self.tokenizer,
+                    prompt_max_len=self.prompt_max_lens,
+                    label_max_len=self.label_max_lens,
+                    mol_ph=self.mol_ph_token,
+                    mol_token_id=self.mol_token_id,
+                    mol_representation=self.mol_representation,
+                    model=self.args.llm_model,
+                    truncation=self.args.truncation,
+                    padding=self.args.padding,
+                    fit_llm_input_convention=self.fit_llm_input_convention,
+                    fit_llm_output_convention=self.fit_llm_output_convention,
+                ),
             )
         return loader
 
@@ -837,23 +824,29 @@ class Mol_LLM_Dataset(InMemoryDataset):
     def __init__(
         self,
         root,
-        filename,
+        split,
         transform=None,
         pre_transform=None,
         resize=None,
         args=None,
     ):
         self.args = args
-        self.filename = filename  # raw_file_names and processed_file_names use this
         self.start, self.end = added_tokens.SELFIES
+        self.pair_separator = "<SEP>" # model do not see seperator token
         self.resize = resize
-        self.task = "_".join(filename.split("_")[:-1])
-        self.split = filename.split("_")[-1]
-        self.target_benchmarks = self.get_target_benchmarks()
+        self.split = split
+        self.total_target_behchmarks = self.get_target_benchmarks()
         super(Mol_LLM_Dataset, self).__init__(root, transform, pre_transform)
-        self.load(self.processed_paths[0])
+
+        # load datasets
+        self.data_dict = {}
+        for task in self.total_target_behchmarks:
+            self.data_dict[task] = torch.load(os.path.join(self.processed_dir, f"{task}_{self.split}.pt"))
+
+        # pack two data instances of short datasets
+        self.collate_datasets()
+
         if self.resize:
-            self.shuffle_dataset()
             self.reduce_dataset_size(self.resize)
 
     def shuffle_dataset(self):
@@ -892,14 +885,21 @@ class Mol_LLM_Dataset(InMemoryDataset):
     # if not all the raw files are exists, download the dataset
     @property
     def raw_file_names(self):
-        return [f"{task}_{self.split}.pth" for task in self.target_benchmarks]
+        raw_files = [f"{task}_{self.split}.pth" for task in self.total_target_behchmarks]
+        return raw_files
 
     @property
     def processed_file_names(self):
-        return f"{self.filename}.pt"
-
+        processed_file_names = [f"{task}_{self.split}.pt" for task in self.total_target_behchmarks]
+        return processed_file_names
+    
     def get_target_benchmarks(self):
-        return self.args.target_benchmarks[self.task]
+        # get aggregated list of dictionary of list
+        target_benchmarks = []
+        for task in self.args.target_benchmarks.keys():
+            target_benchmarks += self.args.target_benchmarks[task]
+
+        return target_benchmarks
 
     def get_dataset(self, task_name):
         base_path = f"dataset/{task_name}"
@@ -920,6 +920,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
             loading_fn = getattr(dc.molnet, f"load_{task_name}")
         elif task_name == "esol":
             loading_fn = dc.molnet.load_delaney
+        elif task_name == "qm9_others":
+            loading_fn = dc.molnet.load_qm9
         elif "chebi-20" in task_name:
             dataset = load_dataset("liupf/ChEBI-20-MM")
             train_dataset = dataset["train"]
@@ -1126,7 +1128,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
         # leave task only if it is in target_benchmarks
         task_subtask_pairs = [
-            (task, subtask) if task in self.target_benchmarks else None
+            (task, subtask) if task in self.total_target_behchmarks else None
             for task, subtasks in task_subtask_lists.items()
             for subtask in subtasks
         ]
@@ -1263,95 +1265,147 @@ class Mol_LLM_Dataset(InMemoryDataset):
             if train_dataset is not None:
                 torch.save(train_dataset, f"{self.raw_dir}/{task_name}_train.pth")
         return
+    
+    def collate_datasets(self):
+        datasets = []
+        if hasattr(self.args.target_benchmarks, "short"):
+            short_data = [self.data_dict[task] for task in self.args.target_benchmarks["short"]]
+            # merge list of list into list
+            short_data = [item for sublist in short_data for item in sublist]
+            #shuffle list of data
+            random.shuffle(short_data)
+            # shuffle short_data
+            short_data = self.pack_pair2single(short_data)
+            datasets.extend(short_data)
+        if hasattr(self.args.target_benchmarks, "long"):
+            long_data = [self.data_dict[task] for task in self.args.target_benchmarks["long"]]
+            # merge list of list into list
+            long_data = [item for sublist in long_data for item in sublist]
+            random.shuffle(long_data)
+            datasets.extend(long_data)
+
+        collated_data = self.collate(datasets)
+        return collated_data
+
+    def pack_pair2single(self, data_list):
+        # chunk data into pairs
+        data_len = len(data_list)
+        packed_data_list = []
+        if len(data_list) % 2 != 0:
+            if self.split == "train":
+                data_list = data_list[:-1]
+            else:
+                data_list.append(data_list[-1])
+                data_list[-1].task_subtask_pair = "dummy/ignore_this_instance"
+                print("Data len is odd. Appending dummy data to make it even.")
+
+        for i in range(0, len(data_list), 2):
+            packed_y = data_list[i].y + self.pair_separator + data_list[i + 1].y
+            packed_input_mol_string = data_list[i].input_mol_string + self.pair_separator + data_list[i + 1].input_mol_string
+            packed_task_subtask_pair = data_list[i].task_subtask_pair + self.pair_separator + data_list[i + 1].task_subtask_pair
+            packed_instruction = data_list[i].instruction + self.pair_separator + data_list[i + 1].instruction
+            packed_data = PairData(
+                x=data_list[i].x,
+                edge_index=data_list[i].edge_index,
+                edge_attr=data_list[i].edge_attr,
+                additional_x=data_list[i + 1].x,
+                additional_edge_index=data_list[i + 1].edge_index,
+                additional_edge_attr=data_list[i + 1].edge_attr,
+                y=packed_y,
+                input_mol_string=packed_input_mol_string,
+                task_subtask_pair=packed_task_subtask_pair,
+                instruction=packed_instruction
+            )
+            packed_data_list.append(packed_data)
+        print("Data packing done. Data len before packing: ", data_len, "Data len after packing: ", len(packed_data_list))
+        return packed_data_list
 
     def process(self):
         # Process data_list and store in `self.data` and `self.slices`
-        raw_data_list = []
-        for task in self.target_benchmarks:
-            if task in [
-                "smol-forward_synthesis",
-                "smol-retrosynthesis",
-            ] and self.split in ["val", "test"]:
-                continue
-            raw_data = list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth"))
-            raw_data_list.extend(raw_data)
+        for key in self.args.target_benchmarks.keys():
 
-        # filter out duplicated data in train and test set for smol-forward_synthesis and smol-retrosynthesis
-        if self.split == "train" and "smol-forward_synthesis" in self.target_benchmarks:
-            test_dataset = torch.load(
-                f"{self.raw_dir}/forward_reaction_prediction_test.pth"
-            )
-            raw_data_list = filter_duplication(raw_data_list, test_dataset)
-        elif self.split == "train" and "smol-retrosynthesis" in self.target_benchmarks:
-            test_dataset = torch.load(f"{self.raw_dir}/retrosynthesis_test.pth")
-            raw_data_list = filter_duplication(raw_data_list, test_dataset)
+            for i, task in enumerate(self.args.target_benchmarks[key]):
+                if os.path.exists(f"{self.raw_dir}/{task}_{self.split}.pt"):
+                    print(f"{task}_{self.split}.pt already exists")
+                    continue
 
-        data_list = []
-        count_fail_conversion = 0
-        iter_bar = tqdm(range(len(raw_data_list)))
-        for i in iter_bar:
-            iter_bar.set_description(
-                f"{self.filename}|Num fail: {count_fail_conversion}|Ratio fail: {count_fail_conversion/(i+1)}"
-            )
-            # graph, label, input_mol_string, task_subtask_pair, instruction
-            instance = raw_data_list[i]
-            try:
-                if "long" in self.filename:
-                    # batch processing requires uniform data structure.
-                    # for reagent prediction, the input is a pair of graphs
-                    # input string: reactant>>product / output string: reagent
-                    # maps reactant: first graph, product: second graph
-                    if isinstance(instance[0], list):
-                        pass
-                    # for other tasks, the input is a single graph, but convert the single graph to a pair of graphs
-                    # wit dummy graph corresponding to 'CCCC' for batch processing
-                    else:
-                        dummy_graph = smiles2data("CC")
-                        instance = [
-                            [instance[0], dummy_graph],
-                            instance[1],
-                            instance[2],
-                            instance[3],
-                            instance[4],
-                        ]
-
-                    data = PairData(
-                        x=instance[0][0].x,
-                        edge_index=instance[0][0].edge_index,
-                        edge_attr=instance[0][0].edge_attr,
-                        additional_x=instance[0][1].x,
-                        additional_edge_index=instance[0][1].edge_index,
-                        additional_edge_attr=instance[0][1].edge_attr,
-                        y=instance[1],
-                        input_mol_string=instance[2],
-                        task_subtask_pair=instance[3],
-                        instruction=instance[4],
-                    )
+                # data leakage check: not use val, test set of the tasks subject to duplication check
+                if hasattr(self.args, "duplication_check_train") and task in self.args.duplication_check_train and self.split in ["val", "test"]:
+                    continue
+                elif hasattr(self.args, "duplication_check_train") and task in self.args.duplication_check_train and self.split == "train":
+                    test_task = self.args.duplication_check_test[i]
+                    test_data = torch.load(f"{self.raw_dir}/{test_task}_test.pth")
+                    train_data = list(torch.load(f"{self.raw_dir}/{task}_train.pth"))
+                    raw_data_list = filter_duplication(train_data, test_data)
                 else:
-                    data = Data(
-                        x=instance[0].x,
-                        edge_index=instance[0].edge_index,
-                        edge_attr=instance[0].edge_attr,
-                        y=instance[1],
-                        input_mol_string=instance[2],
-                        task_subtask_pair=instance[3],
-                        instruction=instance[4],
-                    )
-                data_list.append(data)
-            except:
-                count_fail_conversion += 1
-                continue
+                    raw_data_list = list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth"))
 
-        self.save(data_list, self.processed_paths[0])
-        print("Saved processed dataset for task: ", self.filename)
+                # process raw_data_list
+                processed_data_list = []
+                count_failed_conversion = 0
+
+                iter_bar = tqdm(range(len(raw_data_list)))
+                for i in iter_bar:
+                    iter_bar.set_description(
+                        f"{task}-{self.split}|Num fail: {count_failed_conversion}|Ratio fail: {count_failed_conversion/(i+1)}"
+                    )
+                    # graph, label, input_mol_string, task_subtask_pair, instruction
+                    instance = raw_data_list[i]
+                    try:
+                        if task in self.args.target_benchmarks["long"]:
+                            # batch processing requires uniform data structure.
+                            # for reagent prediction, the input is a pair of graphs
+                            # input string: reactant>>product / output string: reagent
+                            # maps reactant: first graph, product: second graph
+                            if isinstance(instance[0], list):
+                                pass
+                            # for other tasks, the input is a single graph, but convert the single graph to a pair of graphs
+                            # wit dummy graph corresponding to 'CCCC' for batch processing
+                            else:
+                                dummy_graph = smiles2data("CC")
+                                instance = [
+                                    [instance[0], dummy_graph],
+                                    instance[1],
+                                    instance[2],
+                                    instance[3],
+                                    instance[4],
+                                ]
+
+                            data = PairData(
+                                x=instance[0][0].x,
+                                edge_index=instance[0][0].edge_index,
+                                edge_attr=instance[0][0].edge_attr,
+                                additional_x=instance[0][1].x,
+                                additional_edge_index=instance[0][1].edge_index,
+                                additional_edge_attr=instance[0][1].edge_attr,
+                                y=instance[1],
+                                input_mol_string=instance[2],
+                                task_subtask_pair=instance[3],
+                                instruction=instance[4],
+                            )
+                        else:
+                            data = Data(
+                                x=instance[0].x,
+                                edge_index=instance[0].edge_index,
+                                edge_attr=instance[0].edge_attr,
+                                y=instance[1],
+                                input_mol_string=instance[2],
+                                task_subtask_pair=instance[3],
+                                instruction=instance[4],
+                            )
+
+                        processed_data_list.append(data)
+                    except:
+                        count_failed_conversion += 1
+                        continue
+
+                torch.save(processed_data_list, os.path.join(self.processed_dir, f"{task}_{self.split}.pt"))
+        print("Processing done")
 
     def __getitem__(self, index):
         data = self.get(index)
         label = data.y
-        if hasattr(data, "smiles_prompt"):
-            input_mol_string = data.smiles_prompt
-        else:
-            input_mol_string = data.input_mol_string
+        input_mol_string = data.input_mol_string
         task_subtask_pair = data.task_subtask_pair
         instruction = data.instruction
 
