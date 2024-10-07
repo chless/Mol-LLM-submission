@@ -1288,10 +1288,10 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 "smol-forward_synthesis",
                 "smol-retrosynthesis",
                 
-                # "smol-name_conversion-s2f",
-                # "smol-name_conversion-s2i",
-                # "smol-name_conversion-i2s",
-                # "smol-name_conversion-i2f",
+                "smol-name_conversion-s2f",
+                "smol-name_conversion-s2i",
+                "smol-name_conversion-i2s",
+                "smol-name_conversion-i2f",
             ] and self.split in ["val", "test"]:
                 continue
             
