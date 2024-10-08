@@ -51,3 +51,5 @@ trainset_resize: -1
 valset_resize: -1
 testset_resize: -1
 test_on_trainset: false
+
+apply_sequence_packing: true
