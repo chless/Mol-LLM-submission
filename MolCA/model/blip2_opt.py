@@ -244,9 +244,10 @@ class Blip2OPT(Blip2Base):
 
         self.llm_tokenizer.add_tokens(additional_tokens)
 
-        self.mol_token = added_tokens.MOL_EMBEDDING[0]
+        self.llm_tokenizer.mol_token = added_tokens.MOL_EMBEDDING[0]
+        self.llm_tokenizer.mol_ph_token = self.llm_tokenizer.mol_token * self.args.num_query_token
         self.llm_tokenizer.mol_token_id = self.llm_tokenizer(
-            self.mol_token, add_special_tokens=False
+            self.llm_tokenizer.mol_token, add_special_tokens=False
         ).input_ids[0]
 
     def merge_and_initialize_lora(self):
