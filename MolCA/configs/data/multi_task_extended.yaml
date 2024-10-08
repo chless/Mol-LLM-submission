@@ -11,7 +11,6 @@ target_benchmarks:
     - qm9_homo
     - qm9_lumo
     - qm9_homo_lumo_gap
-    - qm9_others
     - esol
     - lipo
   long:
