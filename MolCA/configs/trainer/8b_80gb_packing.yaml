@@ -21,14 +21,12 @@ inference_batch_size: 18
 truncation: 1
 padding: max_length
 
-prompt_max_lens:
-  short: 244
-  long: 256
-label_max_lens:
-  short: 12
-  long: 256
+max_length: 1024
 gen_max_len: 256
 min_len: 8
+
+apply_sequence_packing: true
+max_packing_size: -1
 
 weight_decay: 0.05
 init_lr: 0.0001
@@ -47,5 +45,3 @@ trainset_resize: -1
 valset_resize: -1
 testset_resize: -1
 test_on_trainset: false
-
-apply_sequence_packing: true

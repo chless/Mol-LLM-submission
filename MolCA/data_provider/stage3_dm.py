@@ -1,30 +1,26 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-import torch
-from pytorch_lightning import LightningDataModule
-
-# from torch_geometric.loader import DataLoader
-from torch.utils.data import DataLoader, Subset
-from torch_geometric.loader.dataloader import Collater
-import re
-from torch.utils.data import DataLoader, Dataset
-from torch_geometric.data import InMemoryDataset, Data
 import os
+import random
+import re
 
 import deepchem as dc
-from datasets import load_dataset
-from data_provider import instructions
 import numpy as np
 import selfies as sf
-from tqdm import tqdm
-import model.added_tokens as added_tokens
-import random
-from typing import Any
-import copy
-from torch_geometric.data.separate import separate
-
-from tqdm import tqdm
+import torch
+from datasets import load_dataset
 from rdkit import Chem
+from torch.utils.data import DataLoader, Dataset, Subset
+from torch_geometric.data import Data, InMemoryDataset
+from torch_geometric.data.separate import separate
+from torch_geometric.loader.dataloader import Collater
+from tqdm import tqdm
+from typing import List, Dict, Any
+
+from data_provider import instructions
+import model.added_tokens as added_tokens
+from pytorch_lightning import LightningDataModule
+from transformers.tokenization_utils_base import BatchEncoding
 
 
 # we split individual characters inside special tokens like [START_DNA]
@@ -83,7 +79,8 @@ class DataCollater:
         max_length,
         truncation,
         padding,
-        mode
+        mode,
+        apply_sequence_packing=False
     ):
         self.max_length = max_length
         self.tokenizer = tokenizer
@@ -91,6 +88,7 @@ class DataCollater:
         self.truncation = bool(truncation)
         self.padding = padding
         self.mode = mode
+        self.apply_sequence_packing = apply_sequence_packing
 
     def __call__(self, batch):
         target_texts = [instance.integrated_seq['target_text'] for instance in batch]
@@ -128,6 +126,10 @@ class DataCollater:
         )
         input_tokens['is_mol_token'] = input_tokens.input_ids == self.tokenizer.mol_token_id
 
+        if self.apply_sequence_packing:
+            input_attention_mask = get_attention_mask_for_packed_sequence(input_tokens.input_ids, self.tokenizer.eos_token_id)
+            input_tokens.attention_mask = input_attention_mask
+
         target_tokens = self.tokenizer(
             text=target_texts,
             truncation=self.truncation,
@@ -138,6 +140,20 @@ class DataCollater:
             return_attention_mask=True,
         )
         return batch, input_tokens, target_tokens
+    
+def get_attention_mask_for_packed_sequence(x, token_id, eos: bool = True):
+    B, T = x.shape
+    eos_idx = (x.view(-1) == token_id).nonzero(as_tuple=True)[0] + eos
+    eos_idx_expanded = torch.cat([eos_idx, torch.arange(0,B*T+1,T)]).unique().sort()[0]
+    normalized_idx = eos_idx_expanded - (eos_idx_expanded // T) * T
+    normalized_idx = torch.where(normalized_idx == 0, T, normalized_idx)
+    reps = normalized_idx[1:] - normalized_idx[:-1]
+    reps = torch.where(reps < 1, normalized_idx[1:], reps)
+    repeated_idx = torch.repeat_interleave(normalized_idx[1:], reps).view(B,1,T).expand(-1,T,-1)
+    mask_indices = torch.arange(T).view(1,-1,1).expand(B, -1, T)
+    mask = torch.ones(T, T, dtype=torch.bool).tril().expand(B, -1, -1)
+    mask = mask.masked_fill(mask_indices >= repeated_idx, False)
+    return mask
 
 
 # binary classification
@@ -248,6 +264,7 @@ class Stage3DM(LightningDataModule):
             )
 
         self.init_tokenizer(tokenizer)
+        self._seq_separator = "<_SEP_>" # only for convinent evaluation. llm not see this token
 
     def init_tokenizer(self, tokenizer):
         self.tokenizer = tokenizer
@@ -267,7 +284,8 @@ class Stage3DM(LightningDataModule):
                     max_length=self.max_length,
                     truncation=self.args.truncation,
                     padding=self.args.padding,
-                    mode="train"
+                    mode="train",
+                    apply_sequence_packing=self.args.apply_sequence_packing
                 ))
         return loader
 
@@ -1226,29 +1244,43 @@ class Mol_LLM_Dataset(InMemoryDataset):
         # chunk data into pairs
         data_len = len(data_list)
         packed_data_list = []
-        if len(data_list) % 2 != 0:
-            data_list.append(data_list[0])
+        data_length_list = [len(d.integrated_seq['input_ids']) for d in data_list]
 
-        for i in range(0, len(data_list), 2):
-            instance = data_list[i]
-            packed_y = data_list[i].y + self._separator + data_list[i + 1].y
-            packed_input_mol_string = data_list[i].input_mol_string + self._separator + data_list[i + 1].input_mol_string
-            packed_task_subtask_pair = data_list[i].task_subtask_pair + self._separator + data_list[i + 1].task_subtask_pair
-            packed_instruction = data_list[i].instruction + self._separator + data_list[i + 1].instruction
-            packed_data = PairData(
-                x=data_list[i].x,
-                edge_index=data_list[i].edge_index,
-                edge_attr=data_list[i].edge_attr,
-                additional_x=data_list[i + 1].x,
-                additional_edge_index=data_list[i + 1].edge_index,
-                additional_edge_attr=data_list[i + 1].edge_attr,
-                y=packed_y,
-                input_mol_string=packed_input_mol_string,
-                task_subtask_pair=packed_task_subtask_pair,
-                instruction=packed_instruction
+        grouped_idx_list = group_data_idx_by_length(
+            lengths=data_length_list,
+            max_length=self.args.max_length,
+            max_size=self.args.max_packing_size,
             )
-            packed_data_list.append(packed_data)
-        print("Data packing done. Data len before packing: ", data_len, "Data len after packing: ", len(packed_data_list))
+
+        for grouped_idx in grouped_idx_list:
+            # TODO: implement packing graph data later
+            packed_x = data_list[grouped_idx[0]].x
+            packed_edge_index = data_list[grouped_idx[0]].edge_index
+            packed_edge_attr = data_list[grouped_idx[0]].edge_attr
+
+            packed_input_texts = [instance.integrated_seq['input_text'] for instance in [data_list[i] for i in grouped_idx]]
+            packed_input_texts = "".join(packed_input_texts)
+
+            packed_target_texts = [instance.integrated_seq['target_text'] for instance in [data_list[i] for i in grouped_idx]]
+            packed_target_texts = "".join(packed_target_texts)
+            packed_task_subtask_pairs = [instance.integrated_seq['task_subtask_pairs'] for instance in [data_list[i] for i in grouped_idx]]
+            packed_integrated_seq = dict(
+                input_text=packed_input_texts,
+                target_text=packed_target_texts,
+                task_subtask_pairs=packed_task_subtask_pairs,
+            )
+
+            packed_instance = Data(
+                x=packed_x,
+                edge_index=packed_edge_index,
+                edge_attr=packed_edge_attr,
+                integrated_seq=packed_integrated_seq,
+            )
+            packed_data_list.append(packed_instance)
+
+
+
+        print("Data packing done. \n Data len before packing: ", data_len, "Data len after packing: ", len(packed_data_list))
         return packed_data_list
 
     def process(self):
@@ -1376,6 +1408,104 @@ def check_duplication(train_data, test_data, train_idxs, dup_idx):
         if train_data[train_idxs[i]] in test_data:
             checked_dup.append(train_idxs[i])
     dup_idx.extend(checked_dup)
+
+def group_data_idx_by_length(
+    lengths: List[int], max_length: int, max_size: int = -1
+) -> List[List[int]]:
+    """given lengths of data points, we merge consecutive data points into a new data point, as long as the concatenated length is less than max_length
+    Args:
+        lengths (List[int]): List of lengths of data points
+        max_length (int): the concatenated length must be less than or equal max_length
+        max_size: if != -1; the maximum number of consecutive items being merged; max_size: -1 --> no limit for number of items being merged
+
+    max_size: the maximum number of data points being merged
+    For example, lengths=[1, 3, 2, 2, 6, 4, 2, 6, 5]; max_length=10
+    if max_size=-1 --> [[0,1,2,3], [4, 5], [6,7], [8]]
+    if max_size=3 --> [[0,1,2], [3,4], [5, 6], [7], [8]]
+
+    Returns:
+        _type_: groups of indices: [[index1, index2, ...], [], ...]
+    """
+    result = []
+    current_concatenated_length = 0
+    current_list = []
+    for i in range(len(lengths)):
+        cur_length = lengths[i]
+        if cur_length + current_concatenated_length <= max_length and (
+            max_size == -1 or len(current_list) < max_size
+        ):
+            current_concatenated_length += cur_length
+            current_list.append(i)
+        else:  # current_list is done, create a new one
+            if len(current_list) > 0:
+                result.append(current_list)
+            current_list = [i]
+            current_concatenated_length = cur_length
+
+    if len(current_list) > 0:
+        result.append(current_list)
+
+    # assert to make sure no indices were missing
+    assert sum([len(indices) for indices in result]) == len(lengths)
+    return result
+
+def pack_data_points_FA(
+    data_points: List[Dict], tokenizer: Any, model_max_length: int
+) -> Dict:
+    """This method is used to pack multiple data_points into a single data point usable for Flash Attention
+
+    For example, we want to pack 2 inputs with padding_size=right:
+    input1= {"input_ids": token_ids1, "labels": label_ids1}
+    input2= {"input_ids": token_ids2, "labels": label_ids2}
+    --> output would be:
+
+    output = {"input_ids": token_ids1 + token_ids + [pad_token, ...]} padding to tokenizer.model_max_length
+    output["labels"] =  label_ids1 + label_ids2 + [-100, -100, ...]
+    output["attention_mask"] = [1,...,1, 2,...,2, 0...0]
+        number of 1s = len(input_ids1)
+        number of 2s = len(input_ids2)
+        number of 0s = padding_length
+
+    Args:
+        data_points (List[Dict]): List of data points to pack: [{"input_ids": xxx, "labels": xxx}, ...]
+        tokenizer (Any): _description_
+
+    Returns:
+        Dict: final single data point
+    """
+    input_ids = []
+    lengths = []
+    label_ids = []
+    attention_mask = []
+
+    for index, item in enumerate(data_points):
+        input_ids += item["input_ids"]
+        # assert item["labels"][0] == -100 # This is to make sure that the first token won't be included in computing loss
+        labels = list(item["labels"])
+        labels[0] = -100
+        label_ids += labels
+        lengths.append(len(item["input_ids"]))
+        attention_mask += [index + 1 for _ in range(len(item["input_ids"]))]
+
+    pad_leng = model_max_length - len(input_ids)  # padding to model_max_length
+
+    if tokenizer.padding_side == "right":
+        input_ids = input_ids + [tokenizer.pad_token_id for _ in range(pad_leng)]
+        label_ids = label_ids + [-100 for _ in range(pad_leng)]
+        attention_mask = attention_mask + [0 for _ in range(pad_leng)]
+    else:
+        input_ids = [tokenizer.pad_token_id for _ in range(pad_leng)] + input_ids
+        label_ids = [-100 for _ in range(pad_leng)] + label_ids
+        attention_mask = [0 for _ in range(pad_leng)] + attention_mask
+
+    assert len(input_ids) == len(label_ids) == len(attention_mask) == model_max_length
+    return {
+        "input_ids": torch.tensor(input_ids),
+        "labels": torch.tensor(label_ids),
+        "attention_mask": torch.tensor(
+            attention_mask
+        ),  # unsqueeze <-- because the shape is: B x 1 x N x N
+    }
 
 
 if __name__ == "__main__":

@@ -308,12 +308,6 @@ class Blip2OPT(Blip2Base):
     def forward(self, batch):
         graphs, input_tokens, target_tokens = batch
         
-        # TODO: currently not using, but not determined to derprecate or not
-        if self.args.mol_string_randomization_ratio > 0:
-            input_tokens.input_ids = self.random_replace_mol_string(
-                input_tokens.input_ids
-            )
-
         # preprare targets to ignore pad tokens in the loss calculation
         targets = target_tokens.input_ids.masked_fill(
             target_tokens.input_ids == self.llm_tokenizer.pad_token_id, -100
@@ -363,8 +357,6 @@ class Blip2OPT(Blip2Base):
         return results
 
     def inject_graph_embeds2input_embeds(self, input_embeds, input_tokens, graphs):
-        tasks = graphs.integrated_seq['task_subtask_pairs']
-        double_mol_idxs = [True if "reagent_prediction" in task else False for task in tasks]
         if "additional_x" in graphs.keys():
             mol_token_sequence = []
             for prefix in ["", "additional_"]:
