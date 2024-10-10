@@ -23,6 +23,9 @@ from typing import Any
 import copy
 from torch_geometric.data.separate import separate
 
+from tqdm import tqdm
+from rdkit import Chem
+
 
 # we split individual characters inside special tokens like [START_DNA]
 # TODO: change this ugly I_SMILES things to regular special token, and add the special token to vocab whichever LLM
@@ -77,26 +80,30 @@ class DataCollater:
     def __init__(
         self,
         tokenizer,
-        prompt_max_len,
-        label_max_len,
+        max_length,
         truncation,
         padding,
+        mode
     ):
-        self.prompt_max_len = prompt_max_len
-        self.label_max_len = label_max_len
+        self.max_length = max_length
         self.tokenizer = tokenizer
         self.collater = Collater([], [])
         self.truncation = bool(truncation)
         self.padding = padding
+        self.mode = mode
 
     def __call__(self, batch):
-        graphs = batch
-        input_texts = batch.tokenized_seq
+        target_texts = [instance.integrated_seq['target_text'] for instance in batch]
+        if self.mode == "eval":
+            input_texts = [instance.integrated_seq['prompt_text'] for instance in batch]
+        else:
+            input_texts = [instance.integrated_seq['input_text'] for instance in batch]
+            
 
-        if isinstance(graphs[0], PairData):
+        if isinstance(batch[0], PairData):
             additional_batch = torch.tensor([], dtype=torch.int64)
-            for i in range(len(graphs)):
-                additional_num_nodes = graphs[i].additional_x.size(0)
+            for i in range(len(batch)):
+                additional_num_nodes = batch[i].additional_x.size(0)
                 additional_node_indexing_tensor = torch.tensor(
                     [i] * additional_num_nodes, dtype=torch.int64
                 )
@@ -104,37 +111,33 @@ class DataCollater:
                     (additional_batch, additional_node_indexing_tensor), 0
                 )
 
-        graphs = self.collater(graphs)
+        batch = self.collater(batch)
 
-        if isinstance(graphs, PairData):
-            graphs.additional_batch = additional_batch
-
-        '''
-        ## deal with prompt
-        input_texts = [
-            prepare_llm_input(
-                mol_string=mol_string,
-                instruction=instruction,
-                mol_ph=self.mol_ph,
-                mol_representation=self.mol_representation,
-            )
-            for mol_string, instruction in zip(
-                input_mol_string, instructions
-            )
-        ]
-        '''
+        if isinstance(batch, PairData):
+            batch.additional_batch = additional_batch
 
         self.tokenizer.padding_side = "right"
-        tokens = self.tokenizer(
+        input_tokens = self.tokenizer(
             text=input_texts,
             truncation=self.truncation,
             padding=self.padding,
             add_special_tokens=False,
-            max_length=self.label_max_len,
+            max_length=self.max_length,
             return_tensors="pt",
             return_attention_mask=True,
         )
-        return graphs, tokens
+        input_tokens['is_mol_token'] = input_tokens.input_ids == self.tokenizer.mol_token_id
+
+        target_tokens = self.tokenizer(
+            text=target_texts,
+            truncation=self.truncation,
+            padding=self.padding,
+            add_special_tokens=False,
+            max_length=self.max_length,
+            return_tensors="pt",
+            return_attention_mask=True,
+        )
+        return batch, input_tokens, target_tokens
 
 
 # binary classification
@@ -208,9 +211,7 @@ class Stage3DM(LightningDataModule):
 
         self.batch_size = args.batch_size
         self.inference_batch_size = args.inference_batch_size
-        # use sequence length of longer tasks (concat of short dataset is done in propcess method)
-        self.label_max_lens = args.label_max_lens["long"]
-        self.prompt_max_lens = args.prompt_max_lens["long"]
+        self.max_length = args.max_length
 
         self.mol_representation = args.mol_representation
         self.task_categories = list(self.args.target_benchmarks.keys())
@@ -238,6 +239,7 @@ class Stage3DM(LightningDataModule):
             self.concat_datasets[split] = Mol_LLM_Dataset(
                 root=self.args.raw_data_root,
                 split=data_split,
+                mode=split,
                 tokenizer=tokenizer,
                 fit_llm_input_convention=self.fit_llm_input_convention,
                 fit_llm_output_convention=self.fit_llm_output_convention,
@@ -246,14 +248,6 @@ class Stage3DM(LightningDataModule):
             )
 
         self.init_tokenizer(tokenizer)
-
-        self.collater = DataCollater(
-                    tokenizer=self.tokenizer,
-                    prompt_max_len=self.prompt_max_lens,
-                    label_max_len=self.label_max_lens,
-                    truncation=self.args.truncation,
-                    padding=self.args.padding,
-                )
 
     def init_tokenizer(self, tokenizer):
         self.tokenizer = tokenizer
@@ -268,7 +262,13 @@ class Stage3DM(LightningDataModule):
             pin_memory=True,
             drop_last=True,
             persistent_workers=True,
-            collate_fn=self.collater)
+            collate_fn=DataCollater(
+                    tokenizer=self.tokenizer,
+                    max_length=self.max_length,
+                    truncation=self.args.truncation,
+                    padding=self.args.padding,
+                    mode="train"
+                ))
         return loader
 
     def val_dataloader(self):
@@ -280,8 +280,13 @@ class Stage3DM(LightningDataModule):
                 pin_memory=True,
                 drop_last=False,
                 persistent_workers=True,
-                collate_fn=self.collater,
-            )
+                collate_fn=DataCollater(
+                        tokenizer=self.tokenizer,
+                        max_length=self.max_length,
+                        truncation=self.args.truncation,
+                        padding=self.args.padding,
+                        mode="eval"
+                    ))
         return loader
 
     def test_dataloader(self):
@@ -293,15 +298,14 @@ class Stage3DM(LightningDataModule):
                 pin_memory=True,
                 drop_last=False,
                 persistent_workers=True,
-                collate_fn=self.collater,
-            )
+                collate_fn=DataCollater(
+                        tokenizer=self.tokenizer,
+                        max_length=self.max_length,
+                        truncation=self.args.truncation,
+                        padding=self.args.padding,
+                        mode="eval"
+                    ))
         return loader
-
-
-from tqdm import tqdm
-
-from rdkit import Chem
-
 
 def wrap_label(label, task):
 
@@ -779,6 +783,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         self,
         root,
         split,
+        mode,
         tokenizer,
         fit_llm_input_convention,
         fit_llm_output_convention,
@@ -789,6 +794,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
     ):
         self.args = args
         self.split = split
+        self.mode = mode
         self.tokenizer = tokenizer
         self.start, self.end = added_tokens.SELFIES
         self.resize = resize
@@ -1156,8 +1162,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
         data_list = self.prepare_tokens(data_list)
         
-        #if self.args.apply_sequence_packing and self.split == "train":
-        #    data_list = self.pack_data_instances(data_list)
+        if self.args.apply_sequence_packing and self.mode == "train":
+            data_list = self.pack_data_instances(data_list)
 
         return self.collate(data_list)
     
@@ -1180,24 +1186,27 @@ class Mol_LLM_Dataset(InMemoryDataset):
             task_subtask_pair = instance.task_subtask_pair
 
             # NOTE: getting tensor is faster that getting list, but become problematic when using collate, due to different tensor size
-            tokenized_seq = self.tokenizer(
+            integrated_seq = self.tokenizer(
                 text=llm_prompt + label,
                 return_attention_mask=True,
                 return_length=True,
                 return_token_type_ids=False,
                 )
-            tokenized_seq['input_length'] = self.tokenizer(llm_prompt, return_length=True).length
-            tokenized_seq['label_length'] = self.tokenizer(label, return_length=True).length
-            tokenized_seq['task_subtask_pair'] = task_subtask_pair
-            tokenized_seq['is_mol_token'] = [t == self.tokenizer.mol_token_id for t in tokenized_seq['input_ids']]
-            tokenized_seq['text'] = llm_prompt + label
+            integrated_seq['prompt_tokens'] = self.tokenizer(llm_prompt, return_length=True)
+            integrated_seq['label_tokens'] = self.tokenizer(label, return_length=True)
+
+            integrated_seq['task_subtask_pairs'] = task_subtask_pair
+
+            integrated_seq['input_text'] = llm_prompt + label
+            integrated_seq['target_text'] = integrated_seq['prompt_tokens'].length[0] * self.tokenizer.pad_token + label
+            integrated_seq['prompt_text'] = llm_prompt
             
             if isinstance(instance, Data):
                 prepared_instance = Data(
                     x=instance.x,
                     edge_index=instance.edge_index,
                     edge_attr=instance.edge_attr,
-                    tokenized_seq=tokenized_seq,
+                    integrated_seq=integrated_seq,
                 )
             elif isinstance(instance, PairData):
                 prepared_instance = PairData(
@@ -1207,7 +1216,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                     additional_x=instance.additional_x,
                     additional_edge_index=instance.additional_edge_index,
                     additional_edge_attr=instance.additional_edge_attr,
-                    tokenized_seq=tokenized_seq
+                    integrated_seq=integrated_seq
 
                 )
             prepared_data_list.append(prepared_instance)
@@ -1221,6 +1230,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             data_list.append(data_list[0])
 
         for i in range(0, len(data_list), 2):
+            instance = data_list[i]
             packed_y = data_list[i].y + self._separator + data_list[i + 1].y
             packed_input_mol_string = data_list[i].input_mol_string + self._separator + data_list[i + 1].input_mol_string
             packed_task_subtask_pair = data_list[i].task_subtask_pair + self._separator + data_list[i + 1].task_subtask_pair
@@ -1327,12 +1337,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
     def __getitem__(self, index):
         data = self.get(index)
-        label = data.y
-        input_mol_string = data.input_mol_string
-        task_subtask_pair = data.task_subtask_pair
-        instruction = data.instruction
-
-        return data, label, input_mol_string, task_subtask_pair, instruction
+        return data
 
 
 def filter_duplication(train_dataset, test_dataset):

@@ -282,8 +282,8 @@ class Blip2OPT(Blip2Base):
         else:
             raise NotImplementedError()
 
-    def random_replace_mol_string(self, prompt_tokens_input_ids):
-        ids = prompt_tokens_input_ids
+    def random_replace_mol_string(self, input_tokens_input_ids):
+        ids = input_tokens_input_ids
         tokenizer = self.llm_tokenizer
         mol_string_randomization_ratio = tokenizer.mol_string_randomization_ratio
         total_selfies_token_ids = tokenizer.selfies_token_ids
@@ -305,45 +305,31 @@ class Blip2OPT(Blip2Base):
         )
         return partial_random_replaced
 
-    def forward(self, batch, task=None):
-        # graph, smiles tokens, molecule description tokens
-        graphs, prompt_tokens, text_tokens = batch
-        device = prompt_tokens.input_ids.device
-
+    def forward(self, batch):
+        graphs, input_tokens, target_tokens = batch
+        
+        # TODO: currently not using, but not determined to derprecate or not
         if self.args.mol_string_randomization_ratio > 0:
-            prompt_tokens.input_ids = self.random_replace_mol_string(
-                prompt_tokens.input_ids
+            input_tokens.input_ids = self.random_replace_mol_string(
+                input_tokens.input_ids
             )
 
-        empty_targets = (
-            torch.ones(prompt_tokens.attention_mask.shape, dtype=torch.long)
-            .to(device)
-            .fill_(-100)
+        # preprare targets to ignore pad tokens in the loss calculation
+        targets = target_tokens.input_ids.masked_fill(
+            target_tokens.input_ids == self.llm_tokenizer.pad_token_id, -100
         )
-        targets = text_tokens.input_ids.masked_fill(
-            text_tokens.input_ids == self.llm_tokenizer.pad_token_id, -100
-        )
-        targets = torch.cat([empty_targets, targets], dim=1)
 
-        prompt_embeds = self.llm_model.get_input_embeddings()(prompt_tokens.input_ids)
-        # Prompt_embeds takes 139 tokens, but the model only takes 8 tokens.
-        # Though we use original setting of MolCA, this is unecessary context length comsumption.
+        input_embeds = self.llm_model.get_input_embeddings()(input_tokens.input_ids)
         if "graph" in self.args.mol_representation:
-            prompt_embeds = self.inject_graph_embeds2prompt_embeds(
-                prompt_embeds=prompt_embeds,
-                prompt_tokens=prompt_tokens,
+            input_embeds = self.inject_graph_embeds2input_embeds(
+                input_embeds=input_embeds,
+                input_tokens=input_tokens,
                 graphs=graphs,
             )
 
-        inputs_embeds = self.llm_model.get_input_embeddings()(text_tokens.input_ids)
-        inputs_embeds = torch.cat((prompt_embeds, inputs_embeds), dim=1)
-        attention_mask = torch.cat(
-            [prompt_tokens.attention_mask, text_tokens.attention_mask], dim=1
-        )
-
         outputs = self.llm_model(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
+            inputs_embeds=input_embeds,
+            attention_mask=input_tokens.attention_mask,
             return_dict=True,
             labels=targets,
         )
@@ -376,8 +362,8 @@ class Blip2OPT(Blip2Base):
         }
         return results
 
-    def inject_graph_embeds2prompt_embeds(self, prompt_embeds, prompt_tokens, graphs):
-        tasks = graphs.task_subtask_pair
+    def inject_graph_embeds2input_embeds(self, input_embeds, input_tokens, graphs):
+        tasks = graphs.integrated_seq['task_subtask_pairs']
         double_mol_idxs = [True if "reagent_prediction" in task else False for task in tasks]
         if "additional_x" in graphs.keys():
             mol_token_sequence = []
@@ -419,15 +405,16 @@ class Blip2OPT(Blip2Base):
 
         # [Batch_size, Sequence_length, Hidden_size]
         # data_idx over Batch_size, query_idx over Sequence_length
-        for data_idx in range(prompt_tokens.is_mol_token.shape[0]):
+        for data_idx in range(input_tokens.is_mol_token.shape[0]):
             # only inject mol tokens to the prompt embeds when there is mol token in the prompt
-            mol_token_indices = prompt_tokens.is_mol_token[data_idx]
+            mol_token_indices = input_tokens.is_mol_token[data_idx]
             num_mol_tokens_in_prompt = mol_token_indices.sum().item()
             if num_mol_tokens_in_prompt:
-                prompt_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :num_mol_tokens_in_prompt]
+                # TODO: fix the bug that shapes are not matched.
+                input_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :num_mol_tokens_in_prompt]
             else:
                 pass
-        return prompt_embeds
+        return input_embeds
 
     @torch.no_grad()
     def generate(
@@ -457,19 +444,19 @@ class Blip2OPT(Blip2Base):
             captions (list): A list of strings of length batch_size * num_captions.
         """
         graphs = samples["graphs"]
-        prompt_tokens = samples["prompt_tokens"]
+        input_tokens = samples["input_tokens"]
 
-        prompt_embeds = self.llm_model.get_input_embeddings()(prompt_tokens.input_ids)
+        input_embeds = self.llm_model.get_input_embeddings()(input_tokens.input_ids)
         if "graph" in self.args.mol_representation:
-            prompt_embeds = self.inject_graph_embeds2prompt_embeds(
-                prompt_embeds=prompt_embeds,
-                prompt_tokens=prompt_tokens,
+            input_embeds = self.inject_graph_embeds2input_embeds(
+                input_embeds=input_embeds,
+                input_tokens=input_tokens,
                 graphs=graphs,
             )
 
         outputs = self.llm_model.generate(
-            inputs_embeds=prompt_embeds,
-            attention_mask=prompt_tokens.attention_mask,
+            inputs_embeds=input_embeds,
+            attention_mask=input_tokens.attention_mask,
             do_sample=do_sample,
             top_p=top_p,
             temperature=temperature,
