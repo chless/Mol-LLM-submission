@@ -1,4 +1,4 @@
-raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_extended_1006"
+raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
 target_benchmarks:
   short:
     - bace
