@@ -21,7 +21,7 @@ inference_batch_size: 18
 truncation: 1
 padding: max_length
 
-max_length: 6912
+max_length: 4096
 gen_max_len: 256
 min_len: 8
 
@@ -41,7 +41,7 @@ mol_string_randomization_ratio: -1
 
 val_check_interval: 4000
 check_val_every_n_epoch: null
-trainset_resize: -1
+trainset_resize: 10000
 valset_resize: -1
 testset_resize: -1
 test_on_trainset: false
