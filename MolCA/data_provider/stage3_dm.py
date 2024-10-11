@@ -129,9 +129,10 @@ class DataCollater:
 
         if self.apply_sequence_packing:
             input_attention_mask = get_attention_mask_for_packed_sequence(
-                input_tokens.input_ids, self.tokenizer.eos_token_id
+                x=input_tokens.input_ids, 
+                eos_token_id=self.tokenizer.eos_token_id,
             )
-            input_tokens.attention_mask = input_attention_mask
+            input_tokens['attention_mask'] = input_attention_mask
 
         target_tokens = self.tokenizer(
             text=target_texts,
@@ -145,24 +146,24 @@ class DataCollater:
         return batch, input_tokens, target_tokens
 
 
-def get_attention_mask_for_packed_sequence(x, token_id, eos: bool = True):
+def get_attention_mask_for_packed_sequence(x, eos_token_id, include_eos: bool = True):
     B, T = x.shape
-    eos_idx = (x.view(-1) == token_id).nonzero(as_tuple=True)[0] + eos
+    eos_idx = (x.view(-1) == eos_token_id).nonzero(as_tuple=True)[0] + include_eos
     eos_idx_expanded = (
         torch.cat([eos_idx, torch.arange(0, B * T + 1, T)]).unique().sort()[0]
     )
     normalized_idx = eos_idx_expanded - (eos_idx_expanded // T) * T
     normalized_idx = torch.where(normalized_idx == 0, T, normalized_idx)
-    reps = normalized_idx[1:] - normalized_idx[:-1]
-    reps = torch.where(reps < 1, normalized_idx[1:], reps)
-    repeated_idx = (
-        torch.repeat_interleave(normalized_idx[1:], reps)
+    reps = normalized_idx[1:] - normalized_idx[:-1] # num of tokens in sequences including eos count
+    reps = torch.where(reps < 1, normalized_idx[1:], reps) # reps < 1 means the token is the first token of the sequence
+    idxs_seq_marked = (
+        torch.repeat_interleave(normalized_idx[1:], reps) # normalized_idx[1:] represent all the distinct sequences and padding sequences
         .view(B, 1, T)
         .expand(-1, T, -1)
     )
     mask_indices = torch.arange(T).view(1, -1, 1).expand(B, -1, T)
     mask = torch.ones(T, T, dtype=torch.bool).tril().expand(B, -1, -1)
-    mask = mask.masked_fill(mask_indices >= repeated_idx, False)
+    mask = mask.masked_fill(mask_indices >= idxs_seq_marked, False).unsqueeze(1) # to fit the shape [B, 1, T, T]
     return mask
 
 
