@@ -15,20 +15,18 @@ num_workers: 4
 skip_sanity_check: false
 
 accumulate_grad_batches: 8
-batch_sizes: 18
-inference_batch_sizes: 18
+batch_size: 1
+inference_batch_size: 18
 
 truncation: 1
 padding: max_length
+max_length: 512
 
-prompt_max_lens:
-  short: 244
-  long: 256
-label_max_lens:
-  short: 12
-  long: 256
 gen_max_len: 256
 min_len: 8
+
+apply_sequence_packing: true
+max_packing_size: -1
 
 weight_decay: 0.05
 init_lr: 0.0001
@@ -43,7 +41,7 @@ mol_string_randomization_ratio: -1
 
 val_check_interval: 4000
 check_val_every_n_epoch: null
-trainset_resize: -1
+trainset_resize: 10000
 valset_resize: -1
 testset_resize: -1
 test_on_trainset: false
