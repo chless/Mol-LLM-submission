@@ -25,7 +25,7 @@ max_length: 512
 gen_max_len: 256
 min_len: 8
 
-apply_sequence_packing: true
+apply_sequence_packing: false
 max_packing_size: -1
 
 weight_decay: 0.05
