@@ -1,6 +1,5 @@
 raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
 target_benchmarks:
-  short:
     - bace
     - bbbp
     - clintox
@@ -13,7 +12,6 @@ target_benchmarks:
     - qm9_homo_lumo_gap
     - esol
     - lipo
-  long:
     - forward_reaction_prediction
     - retrosynthesis
     - reagent_prediction

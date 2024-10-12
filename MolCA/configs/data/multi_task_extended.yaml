@@ -1,26 +1,24 @@
-raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
+raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_extended_1012"
 target_benchmarks:
-  short:
-    - bace
-    - bbbp
-    - clintox
-    - toxcast
-    - sider
-    - tox21
-    - hiv
-    - qm9_homo
-    - qm9_lumo
-    - qm9_homo_lumo_gap
-    - esol
-    - lipo
-  long:
-    - forward_reaction_prediction
-    - retrosynthesis
-    - reagent_prediction
-    - chebi-20-text2mol
-    - chebi-20-mol2text
-    - smol-forward_synthesis
-    - smol-retrosynthesis
+  - bace
+  - bbbp
+  - clintox
+  - toxcast
+  - sider
+  - tox21
+  - hiv
+  - qm9_homo
+  - qm9_lumo
+  - qm9_homo_lumo_gap
+  - esol
+  - lipo
+  - forward_reaction_prediction
+  - retrosynthesis
+  - reagent_prediction
+  - chebi-20-text2mol
+  - chebi-20-mol2text
+  - smol-forward_synthesis
+  - smol-retrosynthesis
 
 duplication_check_train:
  - smol-forward_synthesis
