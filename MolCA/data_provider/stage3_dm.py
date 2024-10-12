@@ -91,11 +91,11 @@ class DataCollater:
         self.apply_sequence_packing = apply_sequence_packing
 
     def __call__(self, batch):
-        target_texts = [instance.integrated_seq["target_text"] for instance in batch]
+        target_texts = [instance.target_text for instance in batch]
         if self.mode == "eval":
-            input_texts = [instance.integrated_seq["prompt_text"] for instance in batch]
+            input_texts = [instance.prompt_text for instance in batch]
         else:
-            input_texts = [instance.integrated_seq["input_text"] for instance in batch]
+            input_texts = [instance.input_text for instance in batch]
 
         if isinstance(batch[0], PairData):
             additional_batch = torch.tensor([], dtype=torch.int64)
@@ -129,10 +129,10 @@ class DataCollater:
 
         if self.apply_sequence_packing:
             input_attention_mask = get_attention_mask_for_packed_sequence(
-                x=input_tokens.input_ids, 
+                x=input_tokens.input_ids,
                 eos_token_id=self.tokenizer.eos_token_id,
             )
-            input_tokens['attention_mask'] = input_attention_mask
+            input_tokens["attention_mask"] = input_attention_mask
 
         target_tokens = self.tokenizer(
             text=target_texts,
@@ -154,16 +154,24 @@ def get_attention_mask_for_packed_sequence(x, eos_token_id, include_eos: bool = 
     )
     normalized_idx = eos_idx_expanded - (eos_idx_expanded // T) * T
     normalized_idx = torch.where(normalized_idx == 0, T, normalized_idx)
-    reps = normalized_idx[1:] - normalized_idx[:-1] # num of tokens in sequences including eos count
-    reps = torch.where(reps < 1, normalized_idx[1:], reps) # reps < 1 means the token is the first token of the sequence
+    reps = (
+        normalized_idx[1:] - normalized_idx[:-1]
+    )  # num of tokens in sequences including eos count
+    reps = torch.where(
+        reps < 1, normalized_idx[1:], reps
+    )  # reps < 1 means the token is the first token of the sequence
     idxs_seq_marked = (
-        torch.repeat_interleave(normalized_idx[1:], reps) # normalized_idx[1:] represent all the distinct sequences and padding sequences
+        torch.repeat_interleave(
+            normalized_idx[1:], reps
+        )  # normalized_idx[1:] represent all the distinct sequences and padding sequences
         .view(B, 1, T)
         .expand(-1, T, -1)
     )
     mask_indices = torch.arange(T).view(1, -1, 1).expand(B, -1, T)
     mask = torch.ones(T, T, dtype=torch.bool).tril().expand(B, -1, -1)
-    mask = mask.masked_fill(mask_indices >= idxs_seq_marked, False).unsqueeze(1) # to fit the shape [B, 1, T, T]
+    mask = mask.masked_fill(mask_indices >= idxs_seq_marked, False).unsqueeze(
+        1
+    )  # to fit the shape [B, 1, T, T]
     return mask
 
 
@@ -241,10 +249,9 @@ class Stage3DM(LightningDataModule):
         self.max_length = args.max_length
 
         self.mol_representation = args.mol_representation
-        self.task_categories = list(self.args.target_benchmarks.keys())
         self.concat_datasets = {"train": None, "val": None, "test": None}
 
-        for split in ["test", "val", "train"]:
+        for split in ["train", "test", "val"]:
             if split == "val":
                 resize = args.valset_resize if args.valset_resize > 0 else None
             elif split == "test":
@@ -829,14 +836,15 @@ class Mol_LLM_Dataset(InMemoryDataset):
         self.tokenizer = tokenizer
         self.start, self.end = added_tokens.SELFIES
         self.resize = resize
-        self.total_target_behchmarks = self.get_target_benchmarks()
+        self.target_benchmarks = self.args.target_benchmarks
         self.fit_llm_input_convention = fit_llm_input_convention
         self.fit_llm_output_convention = fit_llm_output_convention
         super(Mol_LLM_Dataset, self).__init__(root, transform, pre_transform)
+        # self.load(self.processed_paths[0])
 
         # load datasets
         self.data_dict = {}
-        for task in self.total_target_behchmarks:
+        for task in self.target_benchmarks:
             if (
                 hasattr(self.args, "duplication_check_train")
                 and task in self.args.duplication_check_train
@@ -849,18 +857,34 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
         # pack two data instances of short datasets
         self.data, self.slices = self.collate_datasets()
+        # without sequence packing, explicit shuffle can be substituted by DataLoader shuffle.
+        # However, with sequence packing, explicit shuffle is necessary, because each packing set is not shuffled by DataLoader shuffle.
+        # For that, reload dataloader for every epoch with explicit shuffle.
+        self.data_length_list = self.get_data_length_list()
+        self.shuffle_dataset()
 
-        # if self.resize:
-        #    self.reduce_dataset_size(self.resize)
+        if self.resize:
+            self.reduce_dataset_size(self.resize)
+
+        if self.args.apply_sequence_packing and self.mode == "train":
+            packed_data_list = self.pack_data_instances()
+            self.data, self.slices = self.collate(packed_data_list)
+
+    def get_data_length_list(self):
+        data_length_list = [len(item) for item in self.data.input_ids]
+        return data_length_list
 
     def shuffle_dataset(self):
         # Shuffle the dataset
         data_list = [self.get(i) for i in range(len(self))]
 
-        random.shuffle(data_list)
+        # shuffle data_list with shuffled idx list, so to get synchronized with data_length_list
+        shuffled_idx = torch.randperm(len(data_list))
+        data_list = [data_list[i] for i in shuffled_idx]
         data, slices = self.collate(data_list)
         self.data = data
         self.slices = slices
+        self.data_length_list = [self.data_length_list[i] for i in shuffled_idx]
 
     def reduce_dataset_size(self, new_size):
         # Check if new size is smaller than the current size
@@ -872,6 +896,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
         # Adjust data
         for key in self.slices.keys():
             self.slices[key] = self.slices[key][: new_size + 1]
+
+        self.data_length_list = self.data_length_list[:new_size]
 
         # Slice the data according to new slices
         reduced_data = {}
@@ -889,16 +915,14 @@ class Mol_LLM_Dataset(InMemoryDataset):
     # if not all the raw files are exists, download the dataset
     @property
     def raw_file_names(self):
-        raw_files = [
-            f"{task}_{self.split}.pth" for task in self.total_target_behchmarks
-        ]
+        raw_files = [f"{task}_{self.split}.pth" for task in self.target_benchmarks]
         return raw_files
 
     @property
     def processed_file_names(self):
-        # return processed file names in total_target_benchmarks but if split is test, not in duplication_check_train
+        # return processed file names in target_benchmarks but if split is test, not in duplication_check_train
         processed_file_names = [
-            f"{task}_{self.split}.pt" for task in self.total_target_behchmarks
+            f"{task}_{self.split}.pt" for task in self.target_benchmarks
         ]
 
         if hasattr(self.args, "duplication_check_train") and self.split in [
@@ -910,14 +934,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 if task in processed_file_names:
                     processed_file_names.remove(task)
         return processed_file_names
-
-    def get_target_benchmarks(self):
-        # get aggregated list of dictionary of list
-        target_benchmarks = []
-        for task in self.args.target_benchmarks.keys():
-            target_benchmarks += self.args.target_benchmarks[task]
-
-        return target_benchmarks
+        # return f"{self.split}.pt"
 
     def get_dataset(self, task_name):
         base_path = f"dataset/{task_name}"
@@ -1051,7 +1068,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
         # leave task only if it is in target_benchmarks
         task_subtask_pairs = [
-            (task, subtask) if task in self.total_target_behchmarks else None
+            (task, subtask) if task in self.target_benchmarks else None
             for task, subtasks in task_subtask_lists.items()
             for subtask in subtasks
         ]
@@ -1191,7 +1208,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
     def collate_datasets(self):
         data_list = []
-        for task in self.total_target_behchmarks:
+        for task in self.target_benchmarks:
             if (
                 hasattr(self.args, "duplication_check_train")
                 and task in self.args.duplication_check_train
@@ -1201,85 +1218,69 @@ class Mol_LLM_Dataset(InMemoryDataset):
             else:
                 data_list.append(self.data_dict[task])
         # merge list of list into list
-        data_list = [item for sublist in data_list for item in sublist]
-        random.shuffle(data_list)
-        if self.resize:
-            data_list = data_list[: self.resize]
+        data_list2 = []
+        for sublist in data_list:
+            for item in sublist:
+                data_list2.append(item)
 
-        data_list = self.prepare_tokens(data_list)
-
-        if self.args.apply_sequence_packing and self.mode == "train":
-            data_list = self.pack_data_instances(data_list)
-
-        return self.collate(data_list)
+        prepared_data_list = self.prepare_tokens(data_list2)
+        return self.collate(prepared_data_list)
 
     def prepare_tokens(self, data_list):
         prepared_data_list = []
         iter_bar = tqdm(range(len(data_list)), total=len(data_list), desc="Tokenizing")
         for i in iter_bar:
-            instance = data_list[i]
-
-            llm_prompt = prepare_llm_input(
-                mol_string=instance.input_mol_string,
-                instruction=instance.instruction,
-                mol_ph=self.tokenizer.mol_ph_token,
-                mol_representation=self.args.mol_representation,
-                fit_llm_input_convention=self.fit_llm_input_convention,
-            )
-            label = instance.y
-            label = self.fit_llm_output_convention(label)
-
-            task_subtask_pair = instance.task_subtask_pair
-
-            # NOTE: getting tensor is faster that getting list, but become problematic when using collate, due to different tensor size
-            integrated_seq = self.tokenizer(
-                text=llm_prompt + label,
-                return_attention_mask=True,
-                return_length=True,
-                return_token_type_ids=False,
-            )
-            integrated_seq["prompt_tokens"] = self.tokenizer(
-                llm_prompt, return_length=True
-            )
-            integrated_seq["label_tokens"] = self.tokenizer(label, return_length=True)
-
-            integrated_seq["task_subtask_pairs"] = task_subtask_pair
-
-            integrated_seq["input_text"] = llm_prompt + label
-            integrated_seq["target_text"] = (
-                integrated_seq["prompt_tokens"].length[0] * self.tokenizer.pad_token
-                + label
-            )
-            integrated_seq["prompt_text"] = llm_prompt
-
-            if isinstance(instance, Data):
-                prepared_instance = Data(
-                    x=instance.x,
-                    edge_index=instance.edge_index,
-                    edge_attr=instance.edge_attr,
-                    integrated_seq=integrated_seq,
-                )
-            elif isinstance(instance, PairData):
-                prepared_instance = PairData(
-                    x=instance.x,
-                    edge_index=instance.edge_index,
-                    edge_attr=instance.edge_attr,
-                    additional_x=instance.additional_x,
-                    additional_edge_index=instance.additional_edge_index,
-                    additional_edge_attr=instance.additional_edge_attr,
-                    integrated_seq=integrated_seq,
-                )
+            prepared_instance = self.prepare_tokenized_instance(data_list[i])
             prepared_data_list.append(prepared_instance)
         return prepared_data_list
 
-    def pack_data_instances(self, data_list):
+    def prepare_tokenized_instance(self, instance):
+        llm_prompt = prepare_llm_input(
+            mol_string=instance.input_mol_string,
+            instruction=instance.instruction,
+            mol_ph=self.tokenizer.mol_ph_token,
+            mol_representation=self.args.mol_representation,
+            fit_llm_input_convention=self.fit_llm_input_convention,
+        )
+        label = instance.y
+        label = self.fit_llm_output_convention(label)
+
+        task_subtask_pair = instance.task_subtask_pair
+
+        # NOTE: getting tensor is faster that getting list, but become problematic when using collate, due to different tensor size
+        input_tokens = self.tokenizer(
+            text=llm_prompt + label,
+            return_attention_mask=False,
+            return_length=True,
+            return_token_type_ids=False,
+        )
+        prompt_tokens = self.tokenizer(llm_prompt, return_length=True)
+
+        target_text = prompt_tokens.length[0] * self.tokenizer.pad_token + label
+
+        # TODO: later, when start training graph modality with sequence packing, change the PairData to PackedData
+        prepared_instance = PairData(
+            x=instance.x,
+            edge_index=instance.edge_index,
+            edge_attr=instance.edge_attr,
+            additional_x=instance.additional_x,
+            additional_edge_index=instance.additional_edge_index,
+            additional_edge_attr=instance.additional_edge_attr,
+            input_text=llm_prompt + label,
+            target_text=target_text,
+            task_subtask_pair=task_subtask_pair,
+            input_ids=input_tokens.input_ids,
+        )
+        return prepared_instance
+
+    def pack_data_instances(self):
         # chunk data into pairs
+        data_list = [self.get(i) for i in range(len(self))]
         data_len = len(data_list)
         packed_data_list = []
-        data_length_list = [len(d.integrated_seq["input_ids"]) for d in data_list]
 
         grouped_idx_list = group_data_idx_by_length(
-            lengths=data_length_list,
+            lengths=self.data_length_list,
             max_length=self.args.max_length,
             max_size=self.args.max_packing_size,
         )
@@ -1289,33 +1290,36 @@ class Mol_LLM_Dataset(InMemoryDataset):
             packed_x = data_list[grouped_idx[0]].x
             packed_edge_index = data_list[grouped_idx[0]].edge_index
             packed_edge_attr = data_list[grouped_idx[0]].edge_attr
+            packed_additional_x = data_list[grouped_idx[0]].additional_x
+            packed_additional_edge_index = data_list[
+                grouped_idx[0]
+            ].additional_edge_index
+            packed_additional_edge_attr = data_list[grouped_idx[0]].additional_edge_attr
 
             packed_input_texts = [
-                instance.integrated_seq["input_text"]
-                for instance in [data_list[i] for i in grouped_idx]
+                instance.input_text for instance in [data_list[i] for i in grouped_idx]
             ]
             packed_input_texts = "".join(packed_input_texts)
 
             packed_target_texts = [
-                instance.integrated_seq["target_text"]
-                for instance in [data_list[i] for i in grouped_idx]
+                instance.target_text for instance in [data_list[i] for i in grouped_idx]
             ]
             packed_target_texts = "".join(packed_target_texts)
-            packed_task_subtask_pairs = [
-                instance.integrated_seq["task_subtask_pairs"]
+            packed_task_subtask_pair = [
+                instance.task_subtask_pair
                 for instance in [data_list[i] for i in grouped_idx]
             ]
-            packed_integrated_seq = dict(
-                input_text=packed_input_texts,
-                target_text=packed_target_texts,
-                task_subtask_pairs=packed_task_subtask_pairs,
-            )
 
-            packed_instance = Data(
+            packed_instance = PairData(
                 x=packed_x,
                 edge_index=packed_edge_index,
                 edge_attr=packed_edge_attr,
-                integrated_seq=packed_integrated_seq,
+                additional_x=packed_additional_x,
+                additional_edge_index=packed_additional_edge_index,
+                additional_edge_attr=packed_additional_edge_attr,
+                input_text=packed_input_texts,
+                target_text=packed_target_texts,
+                task_subtask_pair=packed_task_subtask_pair,
             )
             packed_data_list.append(packed_instance)
 
@@ -1329,102 +1333,90 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
     def process(self):
         # Process data_list and store in `self.data` and `self.slices`
-        for key in self.args.target_benchmarks.keys():
+        for i, task in enumerate(self.target_benchmarks):
+            if os.path.exists(f"{self.processed_dir}/{task}_{self.split}.pt"):
+                print(f"{task}_{self.split}.pt already exists")
+                continue
 
-            for i, task in enumerate(self.args.target_benchmarks[key]):
-                if os.path.exists(f"{self.raw_dir}/{task}_{self.split}.pt"):
-                    print(f"{task}_{self.split}.pt already exists")
-                    continue
+            # data leakage check: not use val, test set of the tasks subject to duplication check
+            if (
+                hasattr(self.args, "duplication_check_train")
+                and task in self.args.duplication_check_train
+                and self.split in ["val", "test"]
+            ):
+                continue
+            elif (
+                hasattr(self.args, "duplication_check_train")
+                and task in self.args.duplication_check_train
+                and self.split == "train"
+            ):
+                # find train task idx in duplication_check_train
+                train_task_idx = self.args.duplication_check_train.index(task)
+                test_task = self.args.duplication_check_test[train_task_idx]
 
-                # data leakage check: not use val, test set of the tasks subject to duplication check
-                if (
-                    hasattr(self.args, "duplication_check_train")
-                    and task in self.args.duplication_check_train
-                    and self.split in ["val", "test"]
-                ):
-                    continue
-                elif (
-                    hasattr(self.args, "duplication_check_train")
-                    and task in self.args.duplication_check_train
-                    and self.split == "train"
-                ):
-                    test_task = self.args.duplication_check_test[i]
-                    test_data = torch.load(f"{self.raw_dir}/{test_task}_test.pth")
-                    train_data = list(torch.load(f"{self.raw_dir}/{task}_train.pth"))
-                    print(
-                        f"Checking duplication between train:{task} and test:{test_task}"
-                    )
-                    raw_data_list = filter_duplication(train_data, test_data)
-                    print(f"Number of data after filtering: {len(raw_data_list)}")
-                else:
-                    raw_data_list = list(
-                        torch.load(f"{self.raw_dir}/{task}_{self.split}.pth")
-                    )
-
-                # process raw_data_list
-                processed_data_list = []
-                count_failed_conversion = 0
-
-                iter_bar = tqdm(range(len(raw_data_list)))
-                for i in iter_bar:
-                    iter_bar.set_description(
-                        f"{task}-{self.split}|Num fail: {count_failed_conversion}|Ratio fail: {count_failed_conversion/(i+1)}"
-                    )
-                    # graph, label, input_mol_string, task_subtask_pair, instruction
-                    instance = raw_data_list[i]
-                    try:
-                        if task in self.args.target_benchmarks["long"]:
-                            # batch processing requires uniform data structure.
-                            # for reagent prediction, the input is a pair of graphs
-                            # input string: reactant>>product / output string: reagent
-                            # maps reactant: first graph, product: second graph
-                            if isinstance(instance[0], list):
-                                pass
-                            # for other tasks, the input is a single graph, but convert the single graph to a pair of graphs
-                            # wit dummy graph corresponding to 'CCCC' for batch processing
-                            else:
-                                dummy_graph = smiles2data("CC")
-                                instance = [
-                                    [instance[0], dummy_graph],
-                                    instance[1],
-                                    instance[2],
-                                    instance[3],
-                                    instance[4],
-                                ]
-
-                            data = PairData(
-                                x=instance[0][0].x,
-                                edge_index=instance[0][0].edge_index,
-                                edge_attr=instance[0][0].edge_attr,
-                                additional_x=instance[0][1].x,
-                                additional_edge_index=instance[0][1].edge_index,
-                                additional_edge_attr=instance[0][1].edge_attr,
-                                y=instance[1],
-                                input_mol_string=instance[2],
-                                task_subtask_pair=instance[3],
-                                instruction=instance[4],
-                            )
-                        else:
-                            data = Data(
-                                x=instance[0].x,
-                                edge_index=instance[0].edge_index,
-                                edge_attr=instance[0].edge_attr,
-                                y=instance[1],
-                                input_mol_string=instance[2],
-                                task_subtask_pair=instance[3],
-                                instruction=instance[4],
-                            )
-
-                        processed_data_list.append(data)
-                    except:
-                        count_failed_conversion += 1
-                        continue
-
-                torch.save(
-                    processed_data_list,
-                    os.path.join(self.processed_dir, f"{task}_{self.split}.pt"),
+                test_data = torch.load(f"{self.raw_dir}/{test_task}_test.pth")
+                train_data = list(torch.load(f"{self.raw_dir}/{task}_train.pth"))
+                print(f"Checking duplication between train:{task} and test:{test_task}")
+                raw_data_list = filter_duplication(train_data, test_data)
+                print(f"Number of data after filtering: {len(raw_data_list)}")
+            else:
+                raw_data_list = list(
+                    torch.load(f"{self.raw_dir}/{task}_{self.split}.pth")
                 )
-        print("Processing done")
+
+            # process raw_data_list
+            processed_data_list = []
+            count_failed_conversion = 0
+
+            iter_bar = tqdm(range(len(raw_data_list)))
+            for i in iter_bar:
+                iter_bar.set_description(
+                    f"{task}-{self.split}|Num fail: {count_failed_conversion}|Ratio fail: {count_failed_conversion/(i+1)}"
+                )
+                # graph, label, input_mol_string, task_subtask_pair, instruction
+                instance = raw_data_list[i]
+                try:
+                    # batch processing requires uniform data structure.
+                    # for reagent prediction, the input is a pair of graphs
+                    # input string: reactant>>product / output string: reagent
+                    # maps reactant: first graph, product: second graph
+                    if isinstance(instance[0], list):
+                        pass
+                    # for other tasks, the input is a single graph, but convert the single graph to a pair of graphs
+                    # wit dummy graph corresponding to 'CCCC' for batch processing
+                    else:
+                        dummy_graph = smiles2data("CC")
+                        instance = [
+                            [instance[0], dummy_graph],
+                            instance[1],
+                            instance[2],
+                            instance[3],
+                            instance[4],
+                        ]
+
+                    data = PairData(
+                        x=instance[0][0].x,
+                        edge_index=instance[0][0].edge_index,
+                        edge_attr=instance[0][0].edge_attr,
+                        additional_x=instance[0][1].x,
+                        additional_edge_index=instance[0][1].edge_index,
+                        additional_edge_attr=instance[0][1].edge_attr,
+                        y=instance[1],
+                        input_mol_string=instance[2],
+                        task_subtask_pair=instance[3],
+                        instruction=instance[4],
+                    )
+
+                    processed_data_list.append(data)
+                except:
+                    count_failed_conversion += 1
+                    continue
+
+            # should be torch.save instead of self.save, to collate list[PairData] in self.collate_datasets method
+            torch.save(
+                processed_data_list,
+                os.path.join(self.processed_dir, f"{task}_{self.split}.pt"),
+            )
 
     def __getitem__(self, index):
         data = self.get(index)

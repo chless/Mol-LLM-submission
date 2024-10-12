@@ -241,9 +241,9 @@ class Blip2Stage3(pl.LightningModule):
             sync_dist=False,
         )
         # TODO: implement for sequence packing
-        '''
+        """
         # log dataset specific losses
-        task_subtask_pairs = batch[0].integrated_seq['task_subtask_pairs']
+        task_subtask_pairs = batch[0].task_subtask_pair
         # unwrap the list of list
         if isinstance(task_subtask_pairs[0], list):
             task_subtask_pairs = [i for ii in task_subtask_pairs for i in ii]
@@ -272,7 +272,7 @@ class Blip2Stage3(pl.LightningModule):
                 batch_size=len(self.dataset_losses[dataset]),
                 sync_dist=False,
             )
-        '''
+        """
 
         loss = outputs["loss"]
         self.log(
@@ -424,7 +424,7 @@ class Blip2Stage3(pl.LightningModule):
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
         graphs, prompt_tokens, target_tokens = batch
-        tasks = graphs.integrated_seq['task_subtask_pairs']
+        tasks = graphs.task_subtask_pair
 
         samples = {"graphs": graphs, "input_tokens": prompt_tokens}
         outputs = self.blip2model.generate(
