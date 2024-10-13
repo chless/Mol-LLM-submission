@@ -994,6 +994,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             True if self.args.apply_sequence_packing and self.mode == "train" else False
         )
         self.llm_model_name = self.args.llm_model.replace("/", "_")
+        self.data_tag = self.args.data_tag
 
         super(Mol_LLM_Dataset, self).__init__(root, transform, pre_transform)
         self.load(self.processed_paths[0])
@@ -1059,7 +1060,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return f"{self.llm_model_name}_{self.split}.pt"
+        return f"{self.llm_model_name}_{self.data_tag}_{self.split}.pt"
 
     def get_dataset(self, task_name):
         base_path = f"dataset/{task_name}"
@@ -1416,7 +1417,10 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
         self.save(
             processed_data_list,
-            os.path.join(self.processed_dir, f"{self.llm_model_name}_{self.split}.pt"),
+            os.path.join(
+                self.processed_dir,
+                f"{self.llm_model_name}_{self.data_tag}_{self.split}.pt",
+            ),
         )
 
     def __len__(self):

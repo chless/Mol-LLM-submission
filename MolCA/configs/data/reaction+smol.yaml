@@ -1,8 +1,0 @@
-raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/reaction+smol_1001"
-target_benchmarks:
-  long:
-    - forward_reaction_prediction
-    - retrosynthesis
-    - reagent_prediction
-    - smol-forward_synthesis
-    - smol-retrosynthesis

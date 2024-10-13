@@ -1,4 +1,0 @@
-raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/qm9_homo_lumo_gap_0927"
-target_benchmarks:
-  short: 
-    - "qm9_homo_lumo_gap"
