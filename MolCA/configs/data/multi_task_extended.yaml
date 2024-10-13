@@ -1,13 +1,9 @@
 raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
 data_tag: "extended"
 target_benchmarks:
-  - qm9_homo
-  - qm9_lumo
-  - qm9_homo_lumo_gap
   - forward_reaction_prediction
-  - retrosynthesis
-  - reagent_prediction
   - smol-forward_synthesis
+  - retrosynthesis
   - smol-retrosynthesis
   - smol-name_conversion-s2f
   - smol-name_conversion-s2i
@@ -15,6 +11,10 @@ target_benchmarks:
   - smol-name_conversion-i2f
   - smol-molecule_captioning
   - smol-molecule_generation
+  - qm9_homo
+  - qm9_lumo
+  - qm9_homo_lumo_gap
+  - reagent_prediction
   - bace
   - bbbp
   - clintox: [0, 1]
