@@ -95,7 +95,7 @@ def main(cfg):
     else:
         strategy = "auto"
         cfg.devices = [eval(cfg.devices)]
-    # logger setting
+
     logger = CSVLogger(save_dir=os.path.join(cfg.logging_dir, cfg.filename))
 
     wandb_logger = WandbLogger(
@@ -104,7 +104,6 @@ def main(cfg):
         entity=cfg.wandb_entity,
         id=cfg.wandb_id,
     )
-    # wandb_logger.watch(model, log="all", log_freq=cfg.wandb_log_freq)
 
     tb_logger = TensorBoardLogger(
         os.path.join(cfg.logging_dir, "tensorboard"),
@@ -126,15 +125,14 @@ def main(cfg):
 
     if cfg.skip_sanity_check:
         trainer_args["num_sanity_val_steps"] = 0
+    if hasattr(cfg, "profiler"):
+        trainer_args["profiler"] = cfg.profiler
 
     trainer = Trainer(**trainer_args)
     if cfg.mode in {"pretrain", "ft", "multi_task"}:
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         outputs = trainer.test(model, datamodule=dm)
 
-    # TODO: Deprecate eval mode.
-    # Previously, molca authors evaluate validation dataset and testset at the same in validation epoch.
-    # Now, we separate validation and testset evaluation, as usual.
     elif cfg.mode == "eval":
         trainer.fit_loop.epoch_progress.current.completed = cfg.caption_eval_epoch - 1
         trainer.validate(model, datamodule=dm)
