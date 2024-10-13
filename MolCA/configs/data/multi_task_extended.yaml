@@ -11,6 +11,7 @@ target_benchmarks:
   - qm9_homo
   - qm9_lumo
   - qm9_homo_lumo_gap
+  - qm9_additional_label
   - esol
   - lipo
   - forward_reaction_prediction
@@ -20,11 +21,17 @@ target_benchmarks:
   - chebi-20-mol2text
   - smol-forward_synthesis
   - smol-retrosynthesis
+  - smol-name_conversion-s2f
+  - smol-name_conversion-s2i
+  - smol-name_conversion-i2s
+  - smol-name_conversion-i2f
 
 duplication_check_train:
  - smol-forward_synthesis
  - smol-retrosynthesis
+ - qm9_additional_label
 
 duplication_check_test:
  - forward_reaction
  - retrosynthesis
+ - qm9_homo
