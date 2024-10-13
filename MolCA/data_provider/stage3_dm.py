@@ -1317,9 +1317,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 train_task_idx = self.args.duplication_check_train.index(task)
                 test_task = self.args.duplication_check_test[train_task_idx]
 
-                test_data = torch.load(
-                    f"{self.raw_dir}/{test_task}_subtask-{subtask_idx}_test.pth"
-                )
+                # not permit same molecule across train and test set
+                test_data = torch.load(f"{self.raw_dir}/{test_task}_subtask-0_test.pth")
                 train_data = list(
                     torch.load(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_train.pth")
                 )
