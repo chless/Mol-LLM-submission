@@ -3,7 +3,7 @@ data_tag: "base"
 target_benchmarks:
     - bace
     - bbbp
-    - clintox
+    - clintox: [0, 1]
     - toxcast
     - sider
     - tox21
