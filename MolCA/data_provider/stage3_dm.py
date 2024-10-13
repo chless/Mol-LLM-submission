@@ -64,7 +64,14 @@ def prepare_tokenized_instance(
     )
     prompt_tokens = tokenizer(llm_prompt, return_length=True)
 
-    target_text = prompt_tokens.length[0] * tokenizer.pad_token + label
+    if isinstance(prompt_tokens.length, list):
+        prompt_tokens_length = prompt_tokens.length[0]
+    elif isinstance(prompt_tokens.length, int):
+        prompt_tokens_length = prompt_tokens.length
+    else:
+        raise NotImplementedError
+
+    target_text = prompt_tokens_length * tokenizer.pad_token + label
 
     # TODO: later, when start training graph modality with sequence packing, change the PairData to PackedData
     prepared_instance = PairData(
