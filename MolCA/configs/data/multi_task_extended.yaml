@@ -1,6 +1,12 @@
 raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
 data_tag: "extended"
 target_benchmarks:
+  - qm9_homo
+  - qm9_lumo
+  - qm9_homo_lumo_gap
+  - forward_reaction_prediction
+  - retrosynthesis
+  - reagent_prediction
   - smol-forward_synthesis
   - smol-retrosynthesis
   - smol-name_conversion-s2f
@@ -16,15 +22,9 @@ target_benchmarks:
   - sider
   - tox21
   - hiv
-  - qm9_homo
-  - qm9_lumo
-  - qm9_homo_lumo_gap
   - qm9_additional_label: [0, 1, 5, 6, 7, 9, 10, 11]
   - esol
   - lipo
-  - forward_reaction_prediction
-  - retrosynthesis
-  - reagent_prediction
   - chebi-20-text2mol
   - chebi-20-mol2text
 
