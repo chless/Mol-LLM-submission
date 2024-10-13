@@ -3,6 +3,7 @@ from typing import Any, Dict
 import torch
 from model.blip2_opt import Blip2OPT
 from model.blip2_llama import Blip2Llama
+from model.blip2_mistral import Blip2Mistral
 from model.blip2_t5 import Blip2T5
 import pytorch_lightning as pl
 from torch import optim
@@ -77,8 +78,10 @@ class Blip2Stage3(pl.LightningModule):
         self.strict_loading = False
         if "galactica" in args.llm_model:
             blip2model = Blip2OPT
-        elif "llama" in args.llm_model or "mistral" in args.llm_model:
+        elif "llama" in args.llm_model:
             blip2model = Blip2Llama
+        elif "mistral" in args.llm_model:
+            blip2model = Blip2Mistral
         elif "t5" in args.llm_model:
             blip2model = Blip2T5
         else:
