@@ -21,7 +21,6 @@ from data_provider import instructions
 import model.added_tokens as added_tokens
 from pytorch_lightning import LightningDataModule
 from transformers.tokenization_utils_base import BatchEncoding
-from memory_profiler import profile
 from torch.utils.data import ConcatDataset
 
 
