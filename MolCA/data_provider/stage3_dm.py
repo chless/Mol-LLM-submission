@@ -1337,8 +1337,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 train_data = list(
                     torch.load(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_train.pth")
                 )
+                before_len = len(train_data)
                 raw_data = filter_duplication(train_data, test_data)
-                print(f"Number of data after filtering: {len(raw_data_list)}")
+                print(
+                    f"Number of removed data for duplication: {before_len - len(raw_data)}"
+                )
             else:
                 iter_bar.set_description(
                     f"Loading {task}_subtask-{subtask_idx}_{self.split}"
