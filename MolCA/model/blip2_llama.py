@@ -75,7 +75,7 @@ class Blip2Llama(Blip2OPT):
             prompt=prompt,
             args=args,
         )
-
+        self.system_prompt = "You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation."
     def set_llm_model(self, llm_model):
         """
         self.llm_model = AutoModelForCausalLM.from_pretrained(
@@ -88,19 +88,37 @@ class Blip2Llama(Blip2OPT):
         return
 
     def fit_llm_input_convention(self, llm_prompt):
-        # chemistry assistant
-        system_prompt = "You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation."
-
-        formatted_prompt = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_prompt}<|eot_id|>".format(
-            system_prompt=system_prompt
-        )
-        formatted_prompt += (
-            "<|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|>".format(
-                user_prompt=llm_prompt
+        if self.args.llm_model == "meta-llama/Llama-3.1-8B-Instruct":
+            formatted_text = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_prompt}<|eot_id|>".format(
+                system_prompt=self.system_prompt
             )
-        )
-        formatted_prompt += "<|start_header_id|>assistant<|end_header_id|>"
-        return formatted_prompt
+            formatted_text += (
+                "<|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|>".format(
+                    user_prompt=llm_prompt
+                )
+            )
+            formatted_text += "<|start_header_id|>assistant<|end_header_id|>"
+            return formatted_text
+        elif self.args.llm_model == 'mistralai/Mistral-7B-Instruct-v0.3':
+            message = [
+                {
+                    "role": "system",
+                    "content": self.system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": llm_prompt,
+                },
+            ]
+            formatted_ids = self.llm_tokenizer.apply_chat_template(
+                conversation=message
+            )
+            formatted_text = self.llm_tokenizer.decode(
+                formatted_ids,
+            )
+            return formatted_text
+        else:
+            raise ValueError("llm_model template formatting is not implemented")
 
     def add_special_token(self):
         # pad toekn for llama-3.1-8B is "<|finetune_right_pad_id|>"
