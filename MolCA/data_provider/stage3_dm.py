@@ -22,6 +22,7 @@ import model.added_tokens as added_tokens
 from pytorch_lightning import LightningDataModule
 from transformers.tokenization_utils_base import BatchEncoding
 from memory_profiler import profile
+from torch.utils.data import ConcatDataset
 
 
 # we split individual characters inside special tokens like [START_DNA]
@@ -340,6 +341,7 @@ REGRESSION_BENCHMARKS = [
     "qm9_homo",
     "qm9_lumo",
     "qm9_homo_lumo_gap",
+    "qm9_additional_label",
     "esol",  # 1 task # llasmol
     "lipo",  # 1 task # llasmol
 ]
@@ -469,7 +471,7 @@ class Stage3DM(LightningDataModule):
             persistent_workers=True,
             collate_fn=DataCollater(
                 tokenizer=self.tokenizer,
-                max_length=self.max_length,
+                max_length=self.inference_max_length,
                 truncation=self.args.truncation,
                 padding=self.args.padding,
                 mode="eval",
@@ -488,7 +490,7 @@ class Stage3DM(LightningDataModule):
             persistent_workers=True,
             collate_fn=DataCollater(
                 tokenizer=self.tokenizer,
-                max_length=self.max_length,
+                max_length=self.inference_max_length,
                 truncation=self.args.truncation,
                 padding=self.args.padding,
                 mode="eval",
@@ -558,7 +560,24 @@ class MoleculeNetDatasetDeepChem(Dataset):
                 self.instruction_templates = getattr(instructions, self.task)
             self.label_tokens = added_tokens.BOOL
         elif self.task in REGRESSION_BENCHMARKS:
-            self.instruction_templates = getattr(instructions, self.task)
+            if self.task in ["qm9_additional_label"]:
+                subtask_full_name_dict = {
+                    "mu": "dipole_moment",
+                    "alpha": "isotropic_polarizability",
+                    "r2": "electronic_spatial_extent",
+                    "zpve": "zero_point_vibrational_energy",
+                    "cv": "heat_capacity_298K",
+                    "u298": "internal_energy_at_298K",
+                    "h298": "enthalpy_at_298K",
+                    "g298": "free_energy_at_298K",
+                }
+                task = self.task.replace("_additional_label", "")
+                subtask_full_name = subtask_full_name_dict[self.subtask]
+                self.instruction_templates = getattr(
+                    instructions, f"{task}_{subtask_full_name}"
+                )
+            else:
+                self.instruction_templates = getattr(instructions, self.task)
             self.label_tokens = added_tokens.FLOAT
         else:
             raise NotImplementedError
@@ -1077,12 +1096,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
             "tox21",
             "hiv",
             "lipo",
-            "qm9_others",
         ]:
             loading_fn = getattr(dc.molnet, f"load_{task_name}")
         elif task_name == "esol":
             loading_fn = dc.molnet.load_delaney
-        elif task_name == "qm9_others":
+        elif task_name == "qm9_additional_label":
             loading_fn = dc.molnet.load_qm9
         elif "chebi-20" in task_name:
             dataset = load_dataset("liupf/ChEBI-20-MM", trust_remote_code=True)
@@ -1145,7 +1163,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         # dataset from deepchem
         if (
             task_name in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS
-            and "qm9" not in task_name
+            and task_name not in ["qm9_homo", "qm9_lumo", "qm9_homo_lumo_gap"]
         ):
             tasks, datasets, transformers = loading_fn(
                 featurizer="Raw",
@@ -1163,11 +1181,12 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
     def download(self):
         # subtask index is necessary when loading clintox from deepchem
-        # TODO: deprecate this lengthy hardcoded list
+        # TODO: deprecate this lengthy hardcoded list, and address via data config
         task_subtask_lists = {
             "qm9_homo": [0],
             "qm9_lumo": [0],
             "qm9_homo_lumo_gap": [0],
+            "qm9_additional_label": [0, 1, 5, 6, 7, 9, 10, 11],
             "reagent_prediction": [0],
             "forward_reaction_prediction": [0],
             "retrosynthesis": [0],
@@ -1220,7 +1239,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             multi_task_datasets[task_name] = new_dataset
 
         for task_subtask_pair in tqdm(
-            self.task_subtask_pairs, desc="Processing task_subtask_pairs"
+            self.task_subtask_pairs, desc="Downloading task_subtask_pairs"
         ):
             task_name = task_subtask_pair[0]
             subtasks = multi_task_datasets[task_name][0]
@@ -1241,6 +1260,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 "hiv",
                 "lipo",
                 "esol",
+                "qm9_additional_label",
             ]:
                 valid_dataset = MoleculeNetDatasetDeepChem(
                     data=data_split[1],
@@ -1325,10 +1345,29 @@ class Mol_LLM_Dataset(InMemoryDataset):
                         task_subtask_pair=task_subtask_pair,
                     )
             if valid_dataset is not None:
+                path = f"{self.raw_dir}/{task_name}_val.pth"
+                if os.path.exists(path):
+                    previous_valid_dataset = torch.load(path)
+                    valid_dataset = ConcatDataset(
+                        [previous_valid_dataset, valid_dataset]
+                    )
+                    print(f"Valid dataset: {task_subtask_pair} is concatenated")
                 torch.save(valid_dataset, f"{self.raw_dir}/{task_name}_val.pth")
             if test_dataset is not None:
+                path = f"{self.raw_dir}/{task_name}_test.pth"
+                if os.path.exists(path):
+                    previous_test_dataset = torch.load(path)
+                    test_dataset = ConcatDataset([previous_test_dataset, test_dataset])
+                    print(f"Test dataset: {task_subtask_pair} is concatenated")
                 torch.save(test_dataset, f"{self.raw_dir}/{task_name}_test.pth")
             if train_dataset is not None:
+                path = f"{self.raw_dir}/{task_name}_train.pth"
+                if os.path.exists(path):
+                    previous_train_dataset = torch.load(path)
+                    train_dataset = ConcatDataset(
+                        [previous_train_dataset, train_dataset]
+                    )
+                    print(f"Train dataset: {task_subtask_pair} is concatenated")
                 torch.save(train_dataset, f"{self.raw_dir}/{task_name}_train.pth")
         return
 
