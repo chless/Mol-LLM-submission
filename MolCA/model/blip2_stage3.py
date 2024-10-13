@@ -75,11 +75,11 @@ class Blip2Stage3(pl.LightningModule):
         self.on_second_stage = False
         # set strict_loading to False to load model in a lightweight way
         self.strict_loading = False
-        if args.llm_model.find("galactica") >= 0:
+        if "galactica" in args.llm_model:
             blip2model = Blip2OPT
-        elif args.llm_model.find("llama") >= 0 or args.llm_model.find("vicuna") >= 0:
+        elif "llama" in args.llm_model or "mistral" in args.llm_model:
             blip2model = Blip2Llama
-        elif args.llm_model.find("t5") >= 0:
+        elif "t5" in args.llm_model:
             blip2model = Blip2T5
         else:
             raise NotImplementedError()
