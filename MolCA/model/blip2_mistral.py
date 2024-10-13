@@ -115,8 +115,7 @@ from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.utils import logging
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.utils import is_torchdynamo_compiling
-from transformers.models.mistral.modeling_mistral import MistralForCausalLM
-from transformers.models.mistral.configuration_mistral import MISTRAL_INPUTS_DOCSTRING
+from transformers.models.mistral.modeling_mistral import MistralForCausalLM, MISTRAL_INPUTS_DOCSTRING
 logger = logging.get_logger(__name__)
 
 class MistralForCausalLM_custom(MistralForCausalLM):
