@@ -31,9 +31,13 @@ target_benchmarks:
 duplication_check_train:
  - smol-forward_synthesis
  - smol-retrosynthesis
+ - smol-molecule_captioning
+ - smol-molecule_generation
  - qm9_additional_label
 
 duplication_check_test:
  - forward_reaction
  - retrosynthesis
+ - chebi-20-mol2text
+ - chebi-20-text2mol
  - qm9_homo
