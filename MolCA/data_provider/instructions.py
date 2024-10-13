@@ -195,6 +195,37 @@ chebi_20_text2mol = [
     "Can you synthesize a molecule based on this structural information?",
 ]
 
+smol_molecule_captioning = [
+    "Can you describe the molecular structure of this compound?",
+    "Please provide a detailed description of the molecular structure.",
+    "I would like to know the structural features of this molecule, could you describe them?",
+    "What is the molecular structure of this compound?",
+    "Could you give me a description focusing on the molecular structure?",
+    "What are the key structural characteristics of this molecule?",
+    "Please provide a comprehensive overview of the molecular structure.",
+    "Could you tell me about the arrangement of atoms in this molecule?",
+    "I am interested in the molecular structure, can you describe it?",
+    "Please provide me with a detailed structural description of this molecule.",
+    "What is the structural layout and geometry of this molecule?",
+    "Can you give me an overview of the molecular structure?",
+]
+
+smol_molecule_generation = [
+    "Can you create a molecule based on this structural description?",
+    "Please generate a molecule that matches the given molecular structure.",
+    "I need a molecule constructed from this description of its structure.",
+    "What molecule can be formed from the following structural details?",
+    "Could you build a molecule based on these structural characteristics?",
+    "Create a molecular model that fits this structural description.",
+    "Please construct a molecule using the provided structure details.",
+    "Can you form a molecule according to this description of its structure?",
+    "I am interested in a molecule generated from these structural features.",
+    "Please design a molecule that corresponds to this structural overview.",
+    "What is the molecule that can be derived from these structural description?",
+    "Can you synthesize a molecule based on this structural information?",
+]
+
+
 smol_name_conversion_s2f = [
     "<INPUT> is the SMILES representation of a molecule. What is its molecular formula?",
     "Convert the SMILES representation of a molecule <INPUT> into molecular formula.",
