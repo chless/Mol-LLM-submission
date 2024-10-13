@@ -16,12 +16,13 @@ skip_sanity_check: false
 
 accumulate_grad_batches: 8
 batch_size: 1
-inference_batch_size: 18
+inference_batch_size: 14
 
 truncation: 1
 padding: max_length
 
 max_length: 4096
+inference_max_length: 512
 gen_max_len: 256
 min_len: 8
 
