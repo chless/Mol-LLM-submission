@@ -616,7 +616,9 @@ class MoleculeNetDatasetDeepChem(Dataset):
         self.count_invalid_smiles = 0
 
         iter_bar = tqdm(
-            range(len(self.raw_inputs)), total=len(self.raw_inputs), desc=self.task
+            range(len(self.raw_inputs)),
+            total=len(self.raw_inputs),
+            desc=f"{self.task}-{self.subtask_idx}",
         )
         for i in iter_bar:
             try:
@@ -854,15 +856,7 @@ class SMolInstructDataset(Dataset):
             total=len(self.data),
             desc=self.task,
         )
-        """
-        import multiprocessing as mp
-        num_procs = 200
-        with mp.Pool(num_procs) as pool:
-            outputs = pool.starmap(
-                self.get_necessary_data, 
-                [(i, raw_inputs[i], raw_outputs[i]) for i in range(len(raw_inputs))])
 
-        """
         outputs = []
         for i in iter_bar:
             outputs.append(self.get_necessary_data(i, raw_inputs[i], raw_outputs[i]))
@@ -1006,8 +1000,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         self.tokenizer = tokenizer
         self.start, self.end = added_tokens.SELFIES
         self.resize = resize
-        self.task_subtask_dict = self.get_task_subtask_dict()
-        self.target_benchmarks = list(self.task_subtask_dict.keys())
+        self.task_subtask_dict, self.task_subtask_pairs = self.get_task_subtask_info()
         self.fit_llm_input_convention = fit_llm_input_convention
         self.fit_llm_output_convention = fit_llm_output_convention
         self.packing_sequence = (
@@ -1032,14 +1025,20 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 max_size=self.args.max_packing_size,
             )
 
-    def get_task_subtask_dict(self):
+    def get_task_subtask_info(self):
         task_subtask_dict = {}
         for task in self.args.target_benchmarks:
             if isinstance(task, str):
                 task_subtask_dict[task] = [0]
             else:
                 task_subtask_dict.update(task)
-        return task_subtask_dict
+
+        task_subtask_pairs = [
+            (task, subtask)
+            for task, subtasks in task_subtask_dict.items()
+            for subtask in subtasks
+        ]
+        return task_subtask_dict, task_subtask_pairs
 
     def get_data_length_list(self):
         data_length_list = [len(item) for item in self.data.input_ids]
@@ -1084,7 +1083,10 @@ class Mol_LLM_Dataset(InMemoryDataset):
     # if not all the raw files are exists, download the dataset
     @property
     def raw_file_names(self):
-        raw_files = [f"{task}_{self.split}.pth" for task in self.target_benchmarks]
+        raw_files = [
+            f"{task}_subtask-{subtask_idx}_{self.split}.pth"
+            for task, subtask_idx in self.task_subtask_pairs
+        ]
         return raw_files
 
     @property
@@ -1189,17 +1191,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
         return tasks, train_dataset, valid_dataset, test_dataset
 
     def download(self):
-        # subtask index is necessary when loading clintox from deepchem
-
-        # leave task only if it is in target_benchmarks
-        total_task_subtask_pairs = [
-            (task, subtask)
-            for task, subtasks in self.task_subtask_dict.items()
-            for subtask in subtasks
-        ]
-
         downloading_task_subtask_pairs = []
-        for task_subtask_pair in total_task_subtask_pairs:
+        for task_subtask_pair in self.task_subtask_pairs:
             task, subtask_idx = task_subtask_pair
             if (
                 os.path.exists(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_val.pth")
@@ -1301,12 +1294,12 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 train_dataset,
                 f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_train.pth",
             )
-        return
 
     def process(self):
         # load raw datasets in target_benchmarks
         raw_data_list = []
-        for i, task in enumerate(self.target_benchmarks):
+        for i, task_subtask_pair in enumerate(self.task_subtask_pairs):
+            task, subtask_idx = task_subtask_pair
             # data leakage check: not use val, test set of the tasks subject to duplication check
             if (
                 hasattr(self.args, "duplication_check_train")
@@ -1324,13 +1317,21 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 train_task_idx = self.args.duplication_check_train.index(task)
                 test_task = self.args.duplication_check_test[train_task_idx]
 
-                test_data = torch.load(f"{self.raw_dir}/{test_task}_test.pth")
-                train_data = list(torch.load(f"{self.raw_dir}/{task}_train.pth"))
+                test_data = torch.load(
+                    f"{self.raw_dir}/{test_task}_subtask-{subtask_idx}_test.pth"
+                )
+                train_data = list(
+                    torch.load(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_train.pth")
+                )
                 print(f"Checking duplication between train:{task} and test:{test_task}")
                 raw_data = filter_duplication(train_data, test_data)
                 print(f"Number of data after filtering: {len(raw_data_list)}")
             else:
-                raw_data = list(torch.load(f"{self.raw_dir}/{task}_{self.split}.pth"))
+                raw_data = list(
+                    torch.load(
+                        f"{self.raw_dir}/{task}_subtask-{subtask_idx}_{self.split}.pth"
+                    )
+                )
             raw_data_list.extend(raw_data)
 
         # process raw_data_list
