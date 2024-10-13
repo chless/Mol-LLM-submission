@@ -1298,8 +1298,13 @@ class Mol_LLM_Dataset(InMemoryDataset):
     def process(self):
         # load raw datasets in target_benchmarks
         raw_data_list = []
-        for i, task_subtask_pair in enumerate(self.task_subtask_pairs):
-            task, subtask_idx = task_subtask_pair
+        iter_bar = tqdm(
+            range(len(self.task_subtask_pairs)),
+            desc="Loading raw data",
+            total=len(self.task_subtask_pairs),
+        )
+        for i in iter_bar:
+            task, subtask_idx = self.task_subtask_pairs[i]
             # data leakage check: not use val, test set of the tasks subject to duplication check
             if (
                 hasattr(self.args, "duplication_check_train")
@@ -1316,16 +1321,21 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 # find train task idx in duplication_check_train
                 train_task_idx = self.args.duplication_check_train.index(task)
                 test_task = self.args.duplication_check_test[train_task_idx]
+                print(
+                    f"Checking duplication between train: {task} and test: {test_task}"
+                )
 
                 # not permit same molecule across train and test set
                 test_data = torch.load(f"{self.raw_dir}/{test_task}_subtask-0_test.pth")
                 train_data = list(
                     torch.load(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_train.pth")
                 )
-                print(f"Checking duplication between train:{task} and test:{test_task}")
                 raw_data = filter_duplication(train_data, test_data)
                 print(f"Number of data after filtering: {len(raw_data_list)}")
             else:
+                iter_bar.set_description(
+                    f"Loading {task}_subtask-{subtask_idx}_{self.split}"
+                )
                 raw_data = list(
                     torch.load(
                         f"{self.raw_dir}/{task}_subtask-{subtask_idx}_{self.split}.pth"
