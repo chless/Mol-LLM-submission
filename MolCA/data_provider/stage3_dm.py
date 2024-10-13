@@ -567,9 +567,9 @@ class MoleculeNetDatasetDeepChem(Dataset):
                     "r2": "electronic_spatial_extent",
                     "zpve": "zero_point_vibrational_energy",
                     "cv": "heat_capacity_298K",
-                    "u298": "internal_energy_at_298K",
-                    "h298": "enthalpy_at_298K",
-                    "g298": "free_energy_at_298K",
+                    "u298": "internal_energy_298K",
+                    "h298": "enthalpy_298K",
+                    "g298": "free_energy_298K",
                 }
                 task = self.task.replace("_additional_label", "")
                 subtask_full_name = subtask_full_name_dict[self.subtask]
@@ -646,7 +646,7 @@ class MoleculeNetDatasetDeepChem(Dataset):
 
 
 class MolInstructionDatset(Dataset):
-    def __init__(self, data, task_subtask_pair, prompt=None):
+    def __init__(self, data, task_subtask_pair, **kwargs):
         self.data = data
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
@@ -749,7 +749,7 @@ class MolInstructionDatset(Dataset):
 
 
 class ChEBIDatset(Dataset):
-    def __init__(self, data, task_subtask_pair, prompt=None):
+    def __init__(self, data, task_subtask_pair, **kwargs):
         self.data = data
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
@@ -832,7 +832,7 @@ class ChEBIDatset(Dataset):
 
 
 class SMolInstructDataset(Dataset):
-    def __init__(self, data, task_subtask_pair, prompt=None):
+    def __init__(self, data, task_subtask_pair, **kwargs):
         self.data = data
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
@@ -1006,7 +1006,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
         self.tokenizer = tokenizer
         self.start, self.end = added_tokens.SELFIES
         self.resize = resize
-        self.target_benchmarks = self.args.target_benchmarks
+        self.task_subtask_dict = self.get_task_subtask_dict()
+        self.target_benchmarks = list(self.task_subtask_dict.keys())
         self.fit_llm_input_convention = fit_llm_input_convention
         self.fit_llm_output_convention = fit_llm_output_convention
         self.packing_sequence = (
@@ -1030,6 +1031,15 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 max_length=self.args.max_length,
                 max_size=self.args.max_packing_size,
             )
+
+    def get_task_subtask_dict(self):
+        task_subtask_dict = {}
+        for task in self.args.target_benchmarks:
+            if isinstance(task, str):
+                task_subtask_dict[task] = [0]
+            else:
+                task_subtask_dict.update(task)
+        return task_subtask_dict
 
     def get_data_length_list(self):
         data_length_list = [len(item) for item in self.data.input_ids]
@@ -1176,70 +1186,45 @@ class Mol_LLM_Dataset(InMemoryDataset):
         else:
             # dataset from mol-instruction is already loaded
             pass
-
         return tasks, train_dataset, valid_dataset, test_dataset
 
     def download(self):
         # subtask index is necessary when loading clintox from deepchem
-        # TODO: deprecate this lengthy hardcoded list, and address via data config
-        task_subtask_lists = {
-            "qm9_homo": [0],
-            "qm9_lumo": [0],
-            "qm9_homo_lumo_gap": [0],
-            "qm9_additional_label": [0, 1, 5, 6, 7, 9, 10, 11],
-            "reagent_prediction": [0],
-            "forward_reaction_prediction": [0],
-            "retrosynthesis": [0],
-            "bace": [0],
-            "bbbp": [0],
-            "clintox": [0, 1],
-            "toxcast": [0],
-            "sider": [0],
-            "tox21": [0],
-            "hiv": [0],
-            "esol": [0],
-            "lipo": [0],
-            "chebi-20-mol2text": [0],
-            "chebi-20-text2mol": [0],
-            "smol-molecule_captioning": [0],
-            "smol-molecule_generation": [0],
-            "smol-name_conversion-s2f": [0],
-            "smol-name_conversion-s2i": [0],
-            "smol-name_conversion-i2s": [0],
-            "smol-name_conversion-i2f": [0],
-            "smol-forward_synthesis": [0],
-            "smol-retrosynthesis": [0],
-        }
 
         # leave task only if it is in target_benchmarks
-        task_subtask_pairs = [
-            (task, subtask) if task in self.target_benchmarks else None
-            for task, subtasks in task_subtask_lists.items()
+        total_task_subtask_pairs = [
+            (task, subtask)
+            for task, subtasks in self.task_subtask_dict.items()
             for subtask in subtasks
         ]
-        # remove None
-        task_subtask_pairs = [t for t in task_subtask_pairs if t]
 
-        self.task_subtask_pairs = []
-        for t in task_subtask_pairs:
-            task_name = t[0]
+        downloading_task_subtask_pairs = []
+        for task_subtask_pair in total_task_subtask_pairs:
+            task, subtask_idx = task_subtask_pair
             if (
-                os.path.exists(f"{self.raw_dir}/{task_name}_val.pth")
-                and os.path.exists(f"{self.raw_dir}/{task_name}_test.pth")
-                and os.path.exists(f"{self.raw_dir}/{task_name}_train.pth")
+                os.path.exists(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_val.pth")
+                and os.path.exists(
+                    f"{self.raw_dir}/{task}_subtask-{subtask_idx}_test.pth"
+                )
+                and os.path.exists(
+                    f"{self.raw_dir}/{task}_subtask-{subtask_idx}_train.pth"
+                )
             ):
-                print(f"{task_name} already exists")
+                print(f"{task}_{subtask_idx} already exists")
             else:
-                self.task_subtask_pairs.append(t)
+                downloading_task_subtask_pairs.append(task_subtask_pair)
 
         multi_task_datasets = {}
-        for task_subtask_pair in self.task_subtask_pairs:
+        for task_subtask_pair in downloading_task_subtask_pairs:
             task_name = task_subtask_pair[0]
-            new_dataset = self.get_dataset(task_name=task_name)
-            multi_task_datasets[task_name] = new_dataset
+            if task_name not in multi_task_datasets:
+                new_dataset = self.get_dataset(task_name=task_name)
+                multi_task_datasets[task_name] = new_dataset
+            else:
+                pass
 
         for task_subtask_pair in tqdm(
-            self.task_subtask_pairs, desc="Downloading task_subtask_pairs"
+            downloading_task_subtask_pairs, desc="Downloading task_subtask_pairs"
         ):
             task_name = task_subtask_pair[0]
             subtasks = multi_task_datasets[task_name][0]
@@ -1262,34 +1247,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 "esol",
                 "qm9_additional_label",
             ]:
-                valid_dataset = MoleculeNetDatasetDeepChem(
-                    data=data_split[1],
-                    task_subtask_pair=task_subtask_pair,
-                    subtask_idx=subtask_idx,
-                )
-                test_dataset = MoleculeNetDatasetDeepChem(
-                    data=data_split[2],
-                    task_subtask_pair=task_subtask_pair,
-                    subtask_idx=subtask_idx,
-                )
-                train_dataset = MoleculeNetDatasetDeepChem(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                    subtask_idx=subtask_idx,
-                )
+                dataset = MoleculeNetDatasetDeepChem
             elif task_name in ["chebi-20-mol2text", "chebi-20-text2mol"]:
-                valid_dataset = ChEBIDatset(
-                    data=data_split[1],
-                    task_subtask_pair=task_subtask_pair,
-                )
-                test_dataset = ChEBIDatset(
-                    data=data_split[2],
-                    task_subtask_pair=task_subtask_pair,
-                )
-                train_dataset = ChEBIDatset(
-                    data=data_split[0],
-                    task_subtask_pair=task_subtask_pair,
-                )
+                dataset = ChEBIDatset
             # qm9 in regression benchmark is processed via MolInstructionDataset
             elif task_name in [
                 "chebi-20-text2mol",
@@ -1301,21 +1261,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 "qm9_lumo",
                 "qm9_homo_lumo_gap",
             ]:
-                if not os.path.exists(f"{self.raw_dir}/{task_name}_val.pth"):
-                    valid_dataset = MolInstructionDatset(
-                        data=data_split[1],
-                        task_subtask_pair=task_subtask_pair,
-                    )
-                if not os.path.exists(f"{self.raw_dir}/{task_name}_test.pth"):
-                    test_dataset = MolInstructionDatset(
-                        data=data_split[2],
-                        task_subtask_pair=task_subtask_pair,
-                    )
-                if not os.path.exists(f"{self.raw_dir}/{task_name}_train.pth"):
-                    train_dataset = MolInstructionDatset(
-                        data=data_split[0],
-                        task_subtask_pair=task_subtask_pair,
-                    )
+                dataset = MolInstructionDatset
             elif task_name in [
                 "smol-molecule_captioning",
                 "smol-molecule_generation",
@@ -1326,49 +1272,35 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 "smol-forward_synthesis",
                 "smol-retrosynthesis",
             ]:
-                # data leakage inspection between smol-instruct dataset and mol-instruction dataset
-                # maintain mol-instruction testset without leakage by excluding smol-instruct trainset
+                dataset = SMolInstructDataset
 
-                if not os.path.exists(f"{self.raw_dir}/{task_name}_val.pth"):
-                    valid_dataset = SMolInstructDataset(
-                        data=data_split[1],
-                        task_subtask_pair=task_subtask_pair,
-                    )
-                if not os.path.exists(f"{self.raw_dir}/{task_name}_test.pth"):
-                    test_dataset = SMolInstructDataset(
-                        data=data_split[2],
-                        task_subtask_pair=task_subtask_pair,
-                    )
-                if not os.path.exists(f"{self.raw_dir}/{task_name}_train.pth"):
-                    train_dataset = SMolInstructDataset(
-                        data=data_split[0],
-                        task_subtask_pair=task_subtask_pair,
-                    )
-            if valid_dataset is not None:
-                path = f"{self.raw_dir}/{task_name}_val.pth"
-                if os.path.exists(path):
-                    previous_valid_dataset = torch.load(path)
-                    valid_dataset = ConcatDataset(
-                        [previous_valid_dataset, valid_dataset]
-                    )
-                    print(f"Valid dataset: {task_subtask_pair} is concatenated")
-                torch.save(valid_dataset, f"{self.raw_dir}/{task_name}_val.pth")
-            if test_dataset is not None:
-                path = f"{self.raw_dir}/{task_name}_test.pth"
-                if os.path.exists(path):
-                    previous_test_dataset = torch.load(path)
-                    test_dataset = ConcatDataset([previous_test_dataset, test_dataset])
-                    print(f"Test dataset: {task_subtask_pair} is concatenated")
-                torch.save(test_dataset, f"{self.raw_dir}/{task_name}_test.pth")
-            if train_dataset is not None:
-                path = f"{self.raw_dir}/{task_name}_train.pth"
-                if os.path.exists(path):
-                    previous_train_dataset = torch.load(path)
-                    train_dataset = ConcatDataset(
-                        [previous_train_dataset, train_dataset]
-                    )
-                    print(f"Train dataset: {task_subtask_pair} is concatenated")
-                torch.save(train_dataset, f"{self.raw_dir}/{task_name}_train.pth")
+            valid_dataset = dataset(
+                data=data_split[1],
+                task_subtask_pair=task_subtask_pair,
+                subtask_idx=subtask_idx,
+            )
+            test_dataset = dataset(
+                data=data_split[2],
+                task_subtask_pair=task_subtask_pair,
+                subtask_idx=subtask_idx,
+            )
+            train_dataset = dataset(
+                data=data_split[0],
+                task_subtask_pair=task_subtask_pair,
+                subtask_idx=subtask_idx,
+            )
+            torch.save(
+                valid_dataset,
+                f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_val.pth",
+            )
+            torch.save(
+                test_dataset,
+                f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_test.pth",
+            )
+            torch.save(
+                train_dataset,
+                f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_train.pth",
+            )
         return
 
     def process(self):

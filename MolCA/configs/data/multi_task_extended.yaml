@@ -3,7 +3,7 @@ data_tag: "extended"
 target_benchmarks:
   - bace
   - bbbp
-  - clintox
+  - clintox: [0, 1]
   - toxcast
   - sider
   - tox21
@@ -11,7 +11,7 @@ target_benchmarks:
   - qm9_homo
   - qm9_lumo
   - qm9_homo_lumo_gap
-  - qm9_additional_label
+  - qm9_additional_label: [0, 1, 5, 6, 7, 9, 10, 11]
   - esol
   - lipo
   - forward_reaction_prediction
@@ -25,6 +25,8 @@ target_benchmarks:
   - smol-name_conversion-s2i
   - smol-name_conversion-i2s
   - smol-name_conversion-i2f
+  - smol-molecule_captioning
+  - smol-molecule_generation
 
 duplication_check_train:
  - smol-forward_synthesis
