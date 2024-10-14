@@ -1024,9 +1024,10 @@ class Mol_LLM_Dataset(InMemoryDataset):
         print(f"loading dataset {self.processed_file_names}")
         self.load(self.processed_paths[0])
 
-        print(f"shuffle dataset {self.processed_file_names}")
-        self.shuffle_dataset()
-
+        # TODO: faster shuffling
+        #print(f"shuffle dataset {self.processed_file_names}")
+        #self.shuffle_dataset()
+        
         if self.resize:
             self.reduce_dataset_size(self.resize)
 
@@ -1280,22 +1281,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
             ]:
                 dataset = SMolInstructDataset
 
-            if (
-                hasattr(self.args, "duplication_check_train")
-                and task_name in self.args.duplication_check_train
-            ):
-                train_task_idx = self.args.duplication_check_train.index(task_name)
-                test_task = self.args.duplication_check_test[train_task_idx]
-
-                print(
-                    f"Checking duplication between train: {task_name} and test: {test_task}"
-                )
-                test_data = torch.load(f"{self.raw_dir}/{test_task}_subtask-0_test.pth")
-                # get data_list from train_data
-                train_dataset = filter_duplication(
-                    train_dataset, test_data, num_procs=30
-                )
-
             valid_dataset = dataset(
                 data=data_split[1],
                 task_subtask_pair=task_subtask_pair,
@@ -1311,6 +1296,22 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 task_subtask_pair=task_subtask_pair,
                 subtask_idx=subtask_idx,
             )
+
+            if (
+                hasattr(self.args, "duplication_check_train")
+                and task_name in self.args.duplication_check_train
+            ):
+                train_task_idx = self.args.duplication_check_train.index(task_name)
+                test_task = self.args.duplication_check_test[train_task_idx]
+
+                print(
+                    f"Checking duplication between train: {task_name} and test: {test_task}"
+                )
+                test_data = torch.load(f"{self.raw_dir}/{test_task}_subtask-0_test.pth")
+                # get data_list from train_data
+                train_dataset = filter_duplication(
+                    train_dataset, test_data, num_procs=30
+                )
             torch.save(
                 valid_dataset,
                 f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_val.pth",
