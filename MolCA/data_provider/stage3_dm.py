@@ -193,10 +193,11 @@ def group_data_idx_by_length(
     return result
 
 
-def filter_duplication(train_dataset, test_dataset):
-    import multiprocessing as mp
+import multiprocessing as mp
 
-    num_procs = 200
+
+def filter_duplication(train_dataset, test_dataset, num_procs=20):
+
     dup_idx = mp.Manager().list()
     procs = []
     # mol_strings
@@ -1277,6 +1278,22 @@ class Mol_LLM_Dataset(InMemoryDataset):
             ]:
                 dataset = SMolInstructDataset
 
+            if (
+                hasattr(self.args, "duplication_check_train")
+                and task_name in self.args.duplication_check_train
+            ):
+                train_task_idx = self.args.duplication_check_train.index(task_name)
+                test_task = self.args.duplication_check_test[train_task_idx]
+
+                print(
+                    f"Checking duplication between train: {task_name} and test: {test_task}"
+                )
+                test_data = torch.load(f"{self.raw_dir}/{test_task}_subtask-0_test.pth")
+                # get data_list from train_data
+                train_dataset = filter_duplication(
+                    train_dataset, test_data, num_procs=30
+                )
+
             valid_dataset = dataset(
                 data=data_split[1],
                 task_subtask_pair=task_subtask_pair,
@@ -1342,7 +1359,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                     torch.load(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_train.pth")
                 )
                 before_len = len(train_data)
-                raw_data = filter_duplication(train_data, test_data)
+                raw_data = filter_duplication(train_data, test_data, num_procs=50)
                 print(
                     f"Number of removed data for duplication: {before_len - len(raw_data)}"
                 )
