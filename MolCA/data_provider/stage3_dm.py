@@ -1323,6 +1323,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             ):
                 continue
             # data leakage check: not use duplicated train idx of the tasks subject to duplication check
+            # TODO: move this phase to download method
             elif (
                 hasattr(self.args, "duplication_check_train")
                 and task in self.args.duplication_check_train
