@@ -409,7 +409,7 @@ class Stage3DM(LightningDataModule):
         self.inference_max_length = args.inference_max_length
 
         self.mol_representation = args.mol_representation
-        self.concat_datasets = {"train": None, "val": None, "test": None}
+        self.dataset_split = {"train": None, "val": None, "test": None}
 
         for split in ["train", "test", "val"]:
             if split == "val":
@@ -430,7 +430,7 @@ class Stage3DM(LightningDataModule):
             else:
                 data_split = f"{split}"
 
-            self.concat_datasets[split] = Mol_LLM_Dataset(
+            self.dataset_split[split] = Mol_LLM_Dataset(
                 root=self.args.raw_data_root,
                 split=data_split,
                 mode=split,
@@ -449,7 +449,7 @@ class Stage3DM(LightningDataModule):
 
     def train_dataloader(self):
         loader = DataLoader(
-            self.concat_datasets["train"],
+            self.dataset_split["train"],
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
@@ -469,7 +469,7 @@ class Stage3DM(LightningDataModule):
 
     def val_dataloader(self):
         loader = DataLoader(
-            self.concat_datasets["val"],
+            self.dataset_split["val"],
             batch_size=self.inference_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
@@ -488,7 +488,7 @@ class Stage3DM(LightningDataModule):
 
     def test_dataloader(self):
         loader = DataLoader(
-            self.concat_datasets["test"],
+            self.dataset_split["test"],
             batch_size=self.inference_batch_sizes,
             shuffle=False,
             num_workers=self.num_workers,
