@@ -116,7 +116,9 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
         prediction = predictions[i]
 
         if re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", target):
-            target_selfies = re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", target).group()
+            target_selfies = re.search(
+                r"(?<=<SELFIES>).*?(?=</SELFIES>)", target
+            ).group()
         else:
             target_selfies = re.search(r"(?<=<SELFIES>).*", target).group()
         target_smiles = selfies.decoder(target_selfies)
@@ -293,9 +295,16 @@ def get_task_specific_list(predictions, targets, tasks, probs, prompts):
 
 
 def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, tokenizer):
-
     # get unique items from all_tasks
     unique_tasks = list(set(tasks))
+    # remove tasks_to_be_removed
+    tasks_to_be_removed = [
+        "smol-name_conversion-i2f/smol-name_conversion-i2f",
+        "smol-name_conversion-s2f/smol-name_conversion-s2f",
+    ]
+
+    unique_tasks = [t for t in unique_tasks if t not in tasks_to_be_removed]
+
     evaluation_results = {task: dict() for task in unique_tasks}
 
     (
@@ -312,6 +321,9 @@ def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, toke
     }
 
     for t in task_specific_predictions.keys():
+        if t in tasks_to_be_removed:
+            continue
+
         task_predictions = task_specific_predictions[t]
         task_targets = task_specific_targets[t]
         task_probs = task_specific_probs[t]
