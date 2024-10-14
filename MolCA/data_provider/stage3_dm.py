@@ -78,6 +78,7 @@ def prepare_tokenized_instance(
         **data,
         input_text=llm_prompt + label,
         target_text=target_text,
+        prompt_text=llm_prompt,
         task_subtask_pair=task_subtask_pair,
         input_ids=input_tokens.input_ids,
     )
@@ -482,6 +483,7 @@ class Stage3DM(LightningDataModule):
                 truncation=self.args.truncation,
                 padding=self.args.padding,
                 mode="eval",
+                apply_sequence_packing=False,
             ),
         )
         return loader
@@ -501,6 +503,7 @@ class Stage3DM(LightningDataModule):
                 truncation=self.args.truncation,
                 padding=self.args.padding,
                 mode="eval",
+                apply_sequence_packing=False,
             ),
         )
         return loader
@@ -1010,7 +1013,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         self.task_subtask_dict, self.task_subtask_pairs = self.get_task_subtask_info()
         self.fit_llm_input_convention = fit_llm_input_convention
         self.fit_llm_output_convention = fit_llm_output_convention
-        self.packing_sequence = (
+        self.apply_sequence_packing = (
             True if self.args.apply_sequence_packing and self.mode == "train" else False
         )
         self.llm_model_name = self.args.llm_model.replace("/", "_")
@@ -1024,7 +1027,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         if self.resize:
             self.reduce_dataset_size(self.resize)
 
-        if self.packing_sequence:
+        if self.apply_sequence_packing:
             self.data_length_list = self.get_data_length_list()
             self.groups = group_data_idx_by_length(
                 lengths=self.data_length_list,
@@ -1415,13 +1418,13 @@ class Mol_LLM_Dataset(InMemoryDataset):
         )
 
     def __len__(self):
-        if self.packing_sequence:
+        if self.apply_sequence_packing:
             return len(self.groups)
         else:
             return len(self.data.input_ids)
 
     def __getitem__(self, index):
-        if self.packing_sequence:
+        if self.apply_sequence_packing:
             group = self.groups[index]
             data_list = [self.get(i) for i in group]
             data = pack_data_points(data_list)
