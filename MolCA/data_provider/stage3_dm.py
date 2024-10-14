@@ -1024,6 +1024,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         print(f"loading dataset {self.processed_file_names}")
         self.load(self.processed_paths[0])
 
+        print(f"shuffle dataset {self.processed_file_names}")
         self.shuffle_dataset()
 
         if self.resize:
