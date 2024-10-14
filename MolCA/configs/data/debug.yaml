@@ -1,0 +1,11 @@
+raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
+data_tag: "debug"
+target_benchmarks:
+  - smol-forward_synthesis
+  - chebi-20-mol2text
+
+duplication_check_train:
+ - smol-forward_synthesis
+
+duplication_check_test:
+ - forward_reaction_prediction
