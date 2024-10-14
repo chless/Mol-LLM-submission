@@ -1021,6 +1021,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         self.data_tag = self.args.data_tag
 
         super(Mol_LLM_Dataset, self).__init__(root, transform, pre_transform)
+        print(f"loading dataset {self.processed_file_names}")
         self.load(self.processed_paths[0])
 
         self.shuffle_dataset()
