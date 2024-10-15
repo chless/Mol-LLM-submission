@@ -342,7 +342,11 @@ class MistralModel_sequence_packing(MistralModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
-        if position_ids is None:
+        # TODO: this position_ids disregard batch idx, but sequence packing version pe could be differ (batch size 1 make this problem doesn't matter, though)
+        if len(attention_mask.shape) == 4:
+            position_ids = attention_mask.sum(dim=-1) - 1
+            position_ids = position_ids.unsqueeze(1)
+        elif position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
