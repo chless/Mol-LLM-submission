@@ -1039,6 +1039,10 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 max_length=self.args.max_length,
                 max_size=self.args.max_packing_size,
             )
+            # drop groups modulus of num_devices
+            self.groups = self.groups[
+                : len(self.groups) - len(self.groups) % self.args.num_devices
+            ]
 
     def get_task_subtask_info(self):
         task_subtask_dict = {}
