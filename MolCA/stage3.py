@@ -20,9 +20,10 @@ import json
 import hydra
 from omegaconf import OmegaConf, DictConfig
 
-# instruction-tuning for benchmark datasets
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 # for pyg bug
 warnings.filterwarnings(
     "ignore", category=UserWarning, message="TypedStorage is deprecated"
