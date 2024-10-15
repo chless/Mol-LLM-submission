@@ -1040,7 +1040,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 max_size=self.args.max_packing_size,
             )
             # drop groups modulus of num_devices
-            num_devices = ast.literal_eval(self.args.devices)
+            num_devices = len(ast.literal_eval(self.args.devices))
             self.groups = self.groups[
                 : len(self.groups) - len(self.groups) % num_devices
             ]
