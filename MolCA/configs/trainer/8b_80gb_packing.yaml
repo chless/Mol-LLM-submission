@@ -4,9 +4,9 @@ strategy_name: null
 accelerator: gpu
 devices: "0,1,2,3,4,5,6,7"
 precision: bf16-mixed
-max_steps: 50000
+max_steps: 1000000
 second_stage_start_step: 1000
-every_n_train_steps: 200
+every_n_train_steps: 2000
 task: null
 save_top_k: 10
 logging_dir: "/home/chanhui-lee/text-mol/MolCA/all_checkpoints/"
@@ -16,7 +16,7 @@ skip_sanity_check: false
 
 accumulate_grad_batches: 8
 batch_size: 1
-inference_batch_size: 14
+inference_batch_size: 28
 
 truncation: 1
 padding: max_length
@@ -40,7 +40,7 @@ optimizer: adamw
 
 mol_string_randomization_ratio: -1
 
-val_check_interval: 4000
+val_check_interval: 10000
 check_val_every_n_epoch: null
 trainset_resize: -1
 valset_resize: -1
