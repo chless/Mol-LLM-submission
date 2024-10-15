@@ -21,7 +21,7 @@ from data_provider import instructions
 import model.added_tokens as added_tokens
 from pytorch_lightning import LightningDataModule
 from transformers.tokenization_utils_base import BatchEncoding
-from torch.utils.data import ConcatDataset
+import ast
 
 
 # we split individual characters inside special tokens like [START_DNA]
@@ -1040,8 +1040,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 max_size=self.args.max_packing_size,
             )
             # drop groups modulus of num_devices
+            num_devices = ast.literal_eval(self.args.devices)
             self.groups = self.groups[
-                : len(self.groups) - len(self.groups) % self.args.num_devices
+                : len(self.groups) - len(self.groups) % num_devices
             ]
 
     def get_task_subtask_info(self):
