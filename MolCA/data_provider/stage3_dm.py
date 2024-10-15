@@ -124,6 +124,7 @@ def prepare_llm_input(
 
 
 def pack_data_points(data_list):
+    # TODO: implement proper graph handling when graph training
     packed_x = data_list[0].x
     packed_edge_index = data_list[0].edge_index
     packed_edge_attr = data_list[0].edge_attr
@@ -1025,9 +1026,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
         self.load(self.processed_paths[0])
 
         # TODO: faster shuffling
-        #print(f"shuffle dataset {self.processed_file_names}")
-        #self.shuffle_dataset()
-        
+        # print(f"shuffle dataset {self.processed_file_names}")
+        # self.shuffle_dataset()
+
         if self.resize:
             self.reduce_dataset_size(self.resize)
 
