@@ -154,7 +154,7 @@ def pack_data_points(data_list):
 
 
 def group_data_idx_by_length(
-    lengths: List[int], max_length: int, max_size: int = -1
+    lengths: List[int], max_length: int, max_size: int = -1, max_instance_length=512
 ) -> List[List[int]]:
     """given lengths of data points, we merge consecutive data points into a new data point, as long as the concatenated length is less than max_length
     Args:
@@ -173,8 +173,13 @@ def group_data_idx_by_length(
     result = []
     current_concatenated_length = 0
     current_list = []
+    count_length_cutoff = 0
     for i in range(len(lengths)):
         cur_length = lengths[i]
+        if cur_length > max_instance_length:
+            count_length_cutoff += 1
+            continue
+
         if cur_length + current_concatenated_length <= max_length and (
             max_size == -1 or len(current_list) < max_size
         ):
@@ -190,7 +195,9 @@ def group_data_idx_by_length(
         result.append(current_list)
 
     # assert to make sure no indices were missing
-    assert sum([len(indices) for indices in result]) == len(lengths)
+    assert sum([len(indices) for indices in result]) == (
+        len(lengths) - count_length_cutoff
+    )
     return result
 
 
@@ -329,8 +336,8 @@ def get_attention_mask_for_packed_sequence(x, eos_token_id, include_eos: bool = 
         .expand(-1, T, -1)
     )
     mask_indices = torch.arange(T).view(1, -1, 1).expand(B, -1, T)
-    mask = torch.ones(T, T, dtype=torch.bool).tril().expand(B, -1, -1)
-    mask = mask.masked_fill(mask_indices >= idxs_seq_marked, False).unsqueeze(
+    mask = torch.ones(T, T, dtype=torch.long).tril().expand(B, -1, -1)
+    mask = mask.masked_fill(mask_indices >= idxs_seq_marked, 0).unsqueeze(
         1
     )  # to fit the shape [B, 1, T, T]
     return mask
@@ -1063,6 +1070,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
     def get_data_length_list(self):
         data_length_list = [len(item) for item in self.data.input_ids]
         return data_length_list
+
+    # count data length more than threshold
+    def count_data_length(self, threshold):
+        count = sum([1 for length in self.data_length_list if length > threshold])
+        return count
 
     def shuffle_dataset(self):
         # Shuffle the dataset
