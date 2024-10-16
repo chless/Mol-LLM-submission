@@ -36,8 +36,10 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.utils import replace_return_docstrings
 
 from typing import Optional, List, Tuple, Union
+
 # get logging from transformers library
 from transformers import logging
+
 logger = logging.get_logger(__name__)
 
 
@@ -247,7 +249,9 @@ class Blip2OPT(Blip2Base):
         self.llm_tokenizer.add_tokens(additional_tokens)
 
         self.llm_tokenizer.mol_token = added_tokens.MOL_EMBEDDING[0]
-        self.llm_tokenizer.mol_ph_token = self.llm_tokenizer.mol_token * self.args.num_query_token
+        self.llm_tokenizer.mol_ph_token = (
+            self.llm_tokenizer.mol_token * self.args.num_query_token
+        )
         self.llm_tokenizer.mol_token_id = self.llm_tokenizer(
             self.llm_tokenizer.mol_token, add_special_tokens=False
         ).input_ids[0]
@@ -309,7 +313,7 @@ class Blip2OPT(Blip2Base):
 
     def forward(self, batch):
         graphs, input_tokens, target_tokens = batch
-        
+
         # preprare targets to ignore pad tokens in the loss calculation
         targets = target_tokens.input_ids.masked_fill(
             target_tokens.input_ids == self.llm_tokenizer.pad_token_id, -100
@@ -405,7 +409,9 @@ class Blip2OPT(Blip2Base):
             num_mol_tokens_in_prompt = mol_token_indices.sum().item()
             if num_mol_tokens_in_prompt:
                 # TODO: fix the bug that shapes are not matched.
-                input_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :num_mol_tokens_in_prompt]
+                input_embeds[data_idx, mol_token_indices, :] = mol_tokens[
+                    data_idx, :num_mol_tokens_in_prompt
+                ]
             else:
                 pass
         return input_embeds
@@ -709,14 +715,18 @@ class CausalLMOutputWithPast_Custom(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     instance_loss: Optional[torch.FloatTensor] = None
 
+
 from transformers.models.opt.modeling_opt import OPTDecoder
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 
+
 class OPTDecoder_sequence_packing(OPTDecoder):
     def __init__(self, config):
         super().__init__(config)
-        self.embed_positions = OPTLearnedPositionalEmbedding_sequence_packing(config.max_position_embeddings, config.hidden_size)
+        self.embed_positions = OPTLearnedPositionalEmbedding_sequence_packing(
+            config.max_position_embeddings, config.hidden_size
+        )
 
     def forward(
         self,
@@ -777,37 +787,55 @@ class OPTDecoder_sequence_packing(OPTDecoder):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            raise ValueError(
+                "You have to specify either decoder_input_ids or decoder_inputs_embeds"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = (
+            past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        )
         # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values_length + seq_length
 
         # embed positions
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
-            causal_attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            causal_attention_mask = (
+                attention_mask
+                if (attention_mask is not None and 0 in attention_mask)
+                else None
+            )
             attention_mask = (
                 torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
                 if attention_mask is None
@@ -816,10 +844,14 @@ class OPTDecoder_sequence_packing(OPTDecoder):
         else:
             # 4d mask is passed through the layers
             if attention_mask is None:
-                attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+                attention_mask = torch.ones(
+                    batch_size, mask_seq_length, device=inputs_embeds.device
+                )
             # NOTE: implemented for passing 4d causal mask for sequence packing
             elif len(attention_mask.shape) == 4 and attention_mask.shape[1] == 1:
-                attention_mask = attention_mask.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+                attention_mask = attention_mask.to(
+                    dtype=inputs_embeds.dtype, device=inputs_embeds.device
+                )
             elif attention_mask.shape[1] != mask_seq_length:
                 raise ValueError(
                     f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
@@ -867,7 +899,9 @@ class OPTDecoder_sequence_packing(OPTDecoder):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
+            past_key_value = (
+                past_key_values[idx] if past_key_values is not None else None
+            )
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -909,13 +943,18 @@ class OPTDecoder_sequence_packing(OPTDecoder):
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
-        )    
+        )
+
 
 # NOTE: implemented for positional embedding not affected by packed sequence
 class OPTLearnedPositionalEmbedding_sequence_packing(nn.Embedding):
@@ -929,7 +968,9 @@ class OPTLearnedPositionalEmbedding_sequence_packing(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, attention_mask: torch.LongTensor, past_key_values_length: int = 0):
+    def forward(
+        self, attention_mask: torch.LongTensor, past_key_values_length: int = 0
+    ):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         attention_mask = attention_mask.long()
         # NOTE: implemented for positional embedding not affected by packed sequence
@@ -937,9 +978,15 @@ class OPTLearnedPositionalEmbedding_sequence_packing(nn.Embedding):
             attention_mask = attention_mask.squeeze(1)
             # TODO: mark the padding token as -1, though it does not affect the loss calculation
             positions = attention_mask.sum(dim=-1) - 1
+            assert (
+                positions.max() < self.num_embeddings
+            ), f"Positional index is out of range: position {positions.max()} >= num_embeddings {self.num_embeddings}"
         else:
             # create positions depending on attention_mask
-            positions = (torch.cumsum(attention_mask, dim=1).type_as(attention_mask) * attention_mask).long() - 1
+            positions = (
+                torch.cumsum(attention_mask, dim=1).type_as(attention_mask)
+                * attention_mask
+            ).long() - 1
 
             # cut positions if `past_key_values_length` is > 0
             positions = positions[:, past_key_values_length:]
