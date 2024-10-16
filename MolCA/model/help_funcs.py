@@ -301,6 +301,8 @@ def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, toke
     tasks_to_be_removed = [
         "smol-name_conversion-i2f/smol-name_conversion-i2f",
         "smol-name_conversion-s2f/smol-name_conversion-s2f",
+        "smol-name_conversion-i2s/smol-name_conversion-i2s",
+        "smol-name_conversion-s2i/smol-name_conversion-s2i",
     ]
 
     unique_tasks = [t for t in unique_tasks if t not in tasks_to_be_removed]
