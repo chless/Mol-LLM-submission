@@ -16,7 +16,7 @@ skip_sanity_check: false
 
 accumulate_grad_batches: 9
 batch_size: 28
-inference_batch_size: 28
+inference_batch_size: 20
 
 truncation: 1
 padding: max_length
@@ -40,7 +40,7 @@ optimizer: adamw
 
 mol_string_randomization_ratio: -1
 
-val_check_interval: 10000
+val_check_interval: 18000
 check_val_every_n_epoch: null
 trainset_resize: -1
 valset_resize: -1
