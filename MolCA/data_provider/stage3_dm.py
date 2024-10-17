@@ -1031,12 +1031,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
         super(Mol_LLM_Dataset, self).__init__(root, transform, pre_transform)
         print(f"loading dataset {self.processed_file_names}")
         self.load(self.processed_paths[0])
+        self.set_data_indices()
+        self.shuffle_data_indices()
 
-        # TODO: faster shuffling
-        # print(f"shuffle dataset {self.processed_file_names}")
-        # self.shuffle_dataset()
-
-        if self.resize:
+        # __len__ is not prepared for sequence packing case, so use self._data.input_ids
+        if self.resize and len(self._data.input_ids) > self.resize:
             self.reduce_dataset_size(self.resize)
 
         if self.apply_sequence_packing:
@@ -1046,11 +1045,48 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 max_length=self.args.max_length,
                 max_size=self.args.max_packing_size,
             )
-            # drop groups modulus of num_devices
-            num_devices = len(ast.literal_eval(self.args.devices))
-            self.groups = self.groups[
-                : len(self.groups) - len(self.groups) % num_devices
-            ]
+
+    def __len__(self):
+        if self.apply_sequence_packing:
+            return len(self.groups)
+        else:
+            return len(self.indices)
+        
+    # access data instance only via self.indices, to achieve fast data shuffling effect by only shuffle access idx
+    def get(self, idx):
+        accessed_idx = self.indices[idx]
+        return super(Mol_LLM_Dataset, self).get(accessed_idx)
+
+    def __getitem__(self, index):
+        if self.apply_sequence_packing:
+            group = self.groups[index]
+            data_list = [self.get(i) for i in group]
+            data = pack_data_points(data_list)
+        else:
+            data = self.get(index)
+        return data
+
+    # access data instance only via self.indices, which ensure fast shuffling for every training epoch
+    def set_data_indices(self):
+        self.data_len = len(self._data.input_ids)
+        self.indices = list(range(self.data_len))
+
+    # shuffle only the indices for fast shuffling
+    def shuffle_data_indices(self):
+        self.indices = torch.randperm(self.data_len).tolist()
+
+    def reduce_dataset_size(self, new_size):
+        data_list = [self.get(i) for i in range(new_size)]
+        self.data, self.slices = self.collate(data_list)
+        self.set_data_indices()
+
+    def get_data_length_list(self):
+        data_length_list = []
+        for i in range(self.data_len):
+            data_length = len(self.get(i).input_ids)
+            data_length_list.append(data_length)
+        return data_length_list
+
 
     def get_task_subtask_info(self):
         task_subtask_dict = {}
@@ -1066,52 +1102,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             for subtask in subtasks
         ]
         return task_subtask_dict, task_subtask_pairs
-
-    def get_data_length_list(self):
-        data_length_list = [len(item) for item in self.data.input_ids]
-        return data_length_list
-
-    # count data length more than threshold
-    def count_data_length(self, threshold):
-        count = sum([1 for length in self.data_length_list if length > threshold])
-        return count
-
-    def shuffle_dataset(self):
-        # Shuffle the dataset
-        data_list = [self.get(i) for i in range(len(self.data.input_ids))]
-
-        shuffled_idx = torch.randperm(len(data_list))
-        data_list = [data_list[i] for i in shuffled_idx]
-        data, slices = self.collate(data_list)
-        self.data = data
-        self.slices = slices
-
-        del data_list, data, slices, shuffled_idx
-
-    def reduce_dataset_size(self, new_size):
-        # Check if new size is smaller than the current size
-        current_size = list(self.slices.values())[0].size(0) - 1
-        if new_size >= current_size:
-            print("New size must be smaller than the current dataset size.")
-            return
-
-        # Adjust data
-        for key in self.slices.keys():
-            self.slices[key] = self.slices[key][: new_size + 1]
-
-        # Slice the data according to new slices
-        reduced_data = {}
-        for key, item in self.data:
-            start = self.slices[key][0].item()
-            end = self.slices[key][-1].item()
-            reduced_data[key] = item[start:end]
-
-        # though most datasets use Data class, some datasets use PairData class
-        # the miss instantiation of PairData class results in error when collate, due to malfunctioning of __inc__
-        data_class = type(self._data)
-        self.data = data_class(**reduced_data)
-        print(f"Dataset size reduced to {new_size}")
-
+    
     # if not all the raw files are exists, download the dataset
     @property
     def raw_file_names(self):
@@ -1455,21 +1446,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 f"{self.llm_model_name}_{self.data_tag}_{self.split}.pt",
             ),
         )
-
-    def __len__(self):
-        if self.apply_sequence_packing:
-            return len(self.groups)
-        else:
-            return len(self.data.input_ids)
-
-    def __getitem__(self, index):
-        if self.apply_sequence_packing:
-            group = self.groups[index]
-            data_list = [self.get(i) for i in group]
-            data = pack_data_points(data_list)
-        else:
-            data = self.get(index)
-        return data
 
 
 if __name__ == "__main__":
