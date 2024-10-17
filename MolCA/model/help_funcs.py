@@ -21,25 +21,43 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
     references = []
     hypotheses = []
     failure_idxs = []
+
+    patterns = {
+        "DESCRIPTION": {
+            "dual_side": re.compile(r"(?<=<DESCRIPTION>).*?(?=</DESCRIPTION>)"),
+            "left_side": re.compile(r"(?<=<DESCRIPTION>).*"),
+        },
+        "IUPAC": {
+            "dual_side": re.compile(r"(?<=<IUPAC>).*?(?=</IUPAC>)"),
+            "left_side": re.compile(r"(?<=<IUPAC>).*"),
+        },
+        "MOLFORMULA": {
+            "dual_side": re.compile(r"(?<=<MOLFORMULA>).*?(?=</MOLFORMULA>)"),
+            "left_side": re.compile(r"(?<=<MOLFORMULA>).*"),
+        },
+    }
+
     for i in range(len(targets)):
-        if re.search(r"(?<=<DESCRIPTION>).*?(?=</DESCRIPTION>)", targets[i]):
-            ref = re.search(
-                r"(?<=<DESCRIPTION>).*?(?=</DESCRIPTION>)", targets[i]
-            ).group()
+        pattern = None
+        for matching_pattern in patterns:
+            if matching_pattern["left_side"].search(targets[i]):
+                pattern = matching_pattern
+                break
+        assert pattern is not None
+
+        if pattern["dual_side"].search(targets[i]):
+            ref = pattern["dual_side"].search(targets[i]).group()
         else:
-            ref = re.search(r"(?<=<DESCRIPTION>).*", targets[i]).group()
+            ref = pattern["left_side"].search(targets[i]).group()
         ref_tokens = tokenizer.tokenize(ref, truncation=False, padding="longest")
 
         try:
-            if re.search(r"(?<=<DESCRIPTION>).*?(?=</DESCRIPTION>)", predictions[i]):
-                pred = re.search(
-                    r"(?<=<DESCRIPTION>).*?(?=</DESCRIPTION>)", predictions[i]
-                ).group()
+            if pattern["dual_side"].search(predictions[i]):
+                pred = pattern["dual_side"].search(predictions[i]).group()
             else:
-                pred = re.search(r"(?<=<DESCRIPTION>).*", predictions[i]).group()
-                assert "<DESCRIPTION>" not in pred
-
+                pred = pattern["left_side"].search(predictions[i]).group()
             pred_tokens = tokenizer.tokenize(pred, truncation=False, padding="longest")
+
             references.append([ref_tokens])
             hypotheses.append(pred_tokens)
             mscore = meteor_score([ref_tokens], pred_tokens)
@@ -396,10 +414,12 @@ def convert_logit2binary_prob(logits, tokenizer):
         total_probs[i] = torch.cat(
             [false_prob.unsqueeze(0), true_prob.unsqueeze(0)], dim=0
         ).softmax(-1)
+    total_probs = [p.tolist() for p in total_probs]
     return total_probs
 
 
 def classification_evaluate(predictions, targets, probs):
+    probs = [torch.tensor(p) for p in probs]
 
     total_labels = torch.zeros(len(predictions), dtype=torch.long)
 
