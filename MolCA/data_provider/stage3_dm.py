@@ -414,8 +414,8 @@ class Stage3DM(LightningDataModule):
         self.fit_llm_output_convention = fit_llm_output_convention
 
         self.batch_size = args.batch_size
-        self.inference_batch_size = args.inference_batch_size
         self.max_length = args.max_length
+        self.inference_batch_size = args.inference_batch_size
         self.inference_max_length = args.inference_max_length
 
         self.mol_representation = args.mol_representation
@@ -500,7 +500,7 @@ class Stage3DM(LightningDataModule):
     def test_dataloader(self):
         loader = DataLoader(
             self.dataset_split["test"],
-            batch_size=self.inference_batch_sizes,
+            batch_size=self.inference_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=True,
@@ -1031,11 +1031,14 @@ class Mol_LLM_Dataset(InMemoryDataset):
         super(Mol_LLM_Dataset, self).__init__(root, transform, pre_transform)
         print(f"loading dataset {self.processed_file_names}")
         self.load(self.processed_paths[0])
+        print(
+            f"loaded dataset {self.processed_file_names}| data length: {len(self._data.input_ids)}"
+        )
         self.set_data_indices()
         self.shuffle_data_indices()
 
-        # __len__ is not prepared for sequence packing case, so use self._data.input_ids
-        if self.resize and len(self._data.input_ids) > self.resize:
+        # __len__ is not prepared for sequence packing case, so use len(self.indices) instead
+        if self.resize and len(self.indices) > self.resize:
             self.reduce_dataset_size(self.resize)
 
         if self.apply_sequence_packing:
@@ -1051,7 +1054,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             return len(self.groups)
         else:
             return len(self.indices)
-        
+
     # access data instance only via self.indices, to achieve fast data shuffling effect by only shuffle access idx
     def get(self, idx):
         accessed_idx = self.indices[idx]
@@ -1087,7 +1090,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
             data_length_list.append(data_length)
         return data_length_list
 
-
     def get_task_subtask_info(self):
         task_subtask_dict = {}
         for task in self.args.target_benchmarks:
@@ -1102,7 +1104,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             for subtask in subtasks
         ]
         return task_subtask_dict, task_subtask_pairs
-    
+
     # if not all the raw files are exists, download the dataset
     @property
     def raw_file_names(self):
