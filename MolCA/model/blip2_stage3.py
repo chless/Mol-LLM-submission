@@ -335,99 +335,21 @@ class Blip2Stage3(pl.LightningModule):
         self.train_list_tasks.append(tasks)
         self.train_list_probs.append(probs)
 
-    # not use, because evaluatino and logging in training step make x4 times per epoch training time
-    def on_train_evaluation_end(self, mode="train"):
-        print("on_evaluation_epoch_end start")
-        list_predictions = self.train_list_predictions
-        list_targets = self.train_list_targets
-        list_tasks = self.train_list_tasks
-        list_probs = self.train_list_probs
-        list_prompts = self.train_list_prompts
-
-        predictions = [i for ii in list_predictions for i in ii]
-        targets = [i for ii in list_targets for i in ii]
-        tasks = [i for ii in list_tasks for i in ii]
-        probs = [i for ii in list_probs for i in ii]
-        prompts = [i for ii in list_prompts for i in ii]
-
-        all_predictions = [None for _ in range(self.trainer.world_size)]
-        all_targets = [None for _ in range(self.trainer.world_size)]
-        all_tasks = [None for _ in range(self.trainer.world_size)]
-        all_probs = [None for _ in range(self.trainer.world_size)]
-        all_prompts = [None for _ in range(self.trainer.world_size)]
-
-        if self.num_devices > 1:
-            dist.all_gather_object(all_predictions, predictions)
-            dist.all_gather_object(all_targets, targets)
-            dist.all_gather_object(all_tasks, tasks)
-            dist.all_gather_object(all_probs, probs)
-            dist.all_gather_object(all_prompts, prompts)
-        else:
-            all_predictions[0] = predictions
-            all_targets[0] = targets
-            all_tasks[0] = tasks
-            all_probs[0] = probs
-            all_prompts[0] = prompts
-
-        if self.global_rank == 0:
-            all_predictions = [i for ii in all_predictions for i in ii]
-            all_targets = [i for ii in all_targets for i in ii]
-            all_tasks = [i for ii in all_tasks for i in ii]
-            all_probs = [i for ii in all_probs for i in ii]
-            all_prompts = [i for ii in all_prompts for i in ii]
-            self.save_predictions(
-                predictions=all_predictions,
-                targets=all_targets,
-                tasks=all_tasks,
-                prompts=all_prompts,
-                filename=f"{self.args.mode}-step{self.global_step}_predictions.json",
-            )
-
-            evaluation_results, failed_cases = task_specifically_evaluate(
-                predictions=all_predictions,
-                targets=all_targets,
-                tasks=all_tasks,
-                probs=all_probs,
-                prompts=all_prompts,
-                tokenizer=self.blip2model.llm_tokenizer,
-            )
-
-            self.save_predictions(
-                predictions=failed_cases["predictions"],
-                targets=failed_cases["targets"],
-                tasks=failed_cases["tasks"],
-                prompts=failed_cases["prompts"],
-                filename=f"{self.args.mode}-step{self.global_step}_failed_cases.json",
-            )
-
-            for task_subtask_pair in evaluation_results:
-                for metric in evaluation_results[task_subtask_pair]:
-                    self.log(
-                        f"{mode}/{task_subtask_pair}/{metric}",
-                        evaluation_results[task_subtask_pair][metric],
-                        sync_dist=False,
-                    )
-
-        # reset the lists
-        self.train_list_predictions = []
-        self.train_list_targets = []
-        self.train_list_prompts = []
-        self.train_list_tasks = []
-        self.train_list_probs = []
-
     def on_evaluation_epoch_start(self):
-        self.list_predictions = []
-        self.list_targets = []
-        self.list_prompts = []
-        self.list_tasks = []
-        self.list_probs = []
+        self.list_logs = {
+            "predictions": [],
+            "targets": [],
+            "tasks": [],
+            "probs": [],
+            "prompts": [],
+        }
+
         self.total_avg_loss = 0.0
         self.total_seen_data_size = 0
         self.eval_dataset_losses = {}
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
         graphs, prompt_tokens, target_tokens = batch
-        tasks = graphs.task_subtask_pair
 
         samples = {"graphs": graphs, "input_tokens": prompt_tokens}
         outputs = self.blip2model.generate(
@@ -441,22 +363,24 @@ class Blip2Stage3(pl.LightningModule):
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             prompt_tokens.input_ids, skip_special_tokens=False
         )
+
         predictions = [
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions
         ]
         targets = [
             t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
         ]
+        tasks = graphs.task_subtask_pair
+        probs = convert_logit2binary_prob(outputs.logits, self.blip2model.llm_tokenizer)
         prompts = [
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
         ]
-        probs = convert_logit2binary_prob(outputs.logits, self.blip2model.llm_tokenizer)
 
-        self.list_predictions.append(predictions)
-        self.list_targets.append(targets)
-        self.list_prompts.append(prompts)
-        self.list_tasks.append(tasks)
-        self.list_probs.append(probs)
+        self.list_logs["predictions"].extend(predictions)
+        self.list_logs["targets"].extend(targets)
+        self.list_logs["tasks"].extend(tasks)
+        self.list_logs["probs"].extend(probs)
+        self.list_logs["prompts"].extend(prompts)
 
         batch_size = prompt_tokens.input_ids.shape[0]
         outputs = self.blip2model(batch)  # omit tasks when inputting to the model
@@ -496,50 +420,53 @@ class Blip2Stage3(pl.LightningModule):
 
     def on_evaluation_epoch_end(self, mode="val") -> None:
         print("on_evaluation_epoch_end start")
-        list_predictions = self.list_predictions
-        list_targets = self.list_targets
-        list_tasks = self.list_tasks
-        list_probs = self.list_probs
-        list_prompts = self.list_prompts
 
-        predictions = [i for ii in list_predictions for i in ii]
-        targets = [i for ii in list_targets for i in ii]
-        tasks = [i for ii in list_tasks for i in ii]
-        probs = [i for ii in list_probs for i in ii]
-        prompts = [i for ii in list_prompts for i in ii]
-
-        all_predictions = [None for _ in range(self.trainer.world_size)]
-        all_targets = [None for _ in range(self.trainer.world_size)]
-        all_tasks = [None for _ in range(self.trainer.world_size)]
-        all_probs = [None for _ in range(self.trainer.world_size)]
-        all_prompts = [None for _ in range(self.trainer.world_size)]
-
-        if self.num_devices > 1:
-            dist.all_gather_object(all_predictions, predictions)
-            dist.all_gather_object(all_targets, targets)
-            dist.all_gather_object(all_tasks, tasks)
-            dist.all_gather_object(all_probs, probs)
-            dist.all_gather_object(all_prompts, prompts)
-        else:
-            all_predictions[0] = predictions
-            all_targets[0] = targets
-            all_tasks[0] = tasks
-            all_probs[0] = probs
-            all_prompts[0] = prompts
+        # save per device predictions
+        os.makedirs(self.logger.log_dir, exist_ok=True)
+        with open(
+            os.path.join(
+                self.logger.log_dir,
+                f"{mode}-step{self.global_step}-rank{self.global_rank}.json",
+            ),
+            "w",
+        ) as f:
+            json.dump(self.list_logs, f, ensure_ascii=False, indent=4)
+            # assure all predictions are saved before the evaluation
+            dist.barrier()
 
         if self.global_rank == 0:
+            all_list_logs = {
+                "predictions": [],
+                "targets": [],
+                "tasks": [],
+                "probs": [],
+                "prompts": [],
+            }
+
+            # load saved json format predictions
+            if self.num_devices > 1:
+                for rank in range(self.trainer.world_size):
+                    with open(
+                        os.path.join(
+                            self.logger.log_dir,
+                            f"{mode}-step{self.global_step}-rank{rank}.json",
+                        ),
+                        "r",
+                    ) as f:
+                        per_device_log = json.load(f)
+                        for key in all_list_logs.keys():
+                            all_list_logs[key].extend(per_device_log[key])
+
+            else:
+                all_list_logs = self.list_logs
+
             self.log(f"{mode}/total_loss", self.total_avg_loss, sync_dist=False)
 
-            all_predictions = [i for ii in all_predictions for i in ii]
-            all_targets = [i for ii in all_targets for i in ii]
-            all_tasks = [i for ii in all_tasks for i in ii]
-            all_probs = [i for ii in all_probs for i in ii]
-            all_prompts = [i for ii in all_prompts for i in ii]
             self.save_predictions(
-                predictions=all_predictions,
-                targets=all_targets,
-                tasks=all_tasks,
-                prompts=all_prompts,
+                predictions=all_list_logs["predictions"],
+                targets=all_list_logs["targets"],
+                tasks=all_list_logs["tasks"],
+                prompts=all_list_logs["prompts"],
                 filename=(
                     f"{self.args.mode}-step{self.global_step}_predictions.json"
                     if self.args.mode == "val"
@@ -548,11 +475,11 @@ class Blip2Stage3(pl.LightningModule):
             )
 
             evaluation_results, failed_cases = task_specifically_evaluate(
-                predictions=all_predictions,
-                targets=all_targets,
-                tasks=all_tasks,
-                probs=all_probs,
-                prompts=all_prompts,
+                predictions=all_list_logs["predictions"],
+                targets=all_list_logs["targets"],
+                tasks=all_list_logs["tasks"],
+                prompts=all_list_logs["prompts"],
+                probs=all_list_logs["probs"],
                 tokenizer=self.blip2model.llm_tokenizer,
             )
 
