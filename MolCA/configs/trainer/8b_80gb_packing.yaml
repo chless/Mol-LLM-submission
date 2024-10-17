@@ -16,7 +16,7 @@ skip_sanity_check: false
 
 accumulate_grad_batches: 8
 batch_size: 1
-inference_batch_size: 20
+inference_batch_size: 28
 
 truncation: 1
 padding: max_length
