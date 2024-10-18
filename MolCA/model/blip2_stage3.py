@@ -376,6 +376,9 @@ class Blip2Stage3(pl.LightningModule):
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
         ]
 
+        # TODO: calculate evaluation metric incide a process, and average using count from task_subtask_pair
+        # TODO: save predictions incide a process asynchrously
+
         self.list_logs["predictions"].extend(predictions)
         self.list_logs["targets"].extend(targets)
         self.list_logs["tasks"].extend(tasks)
