@@ -39,7 +39,7 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
 
     for i in range(len(targets)):
         pattern = None
-        for matching_pattern in patterns:
+        for key, matching_pattern in patterns.items():
             if matching_pattern["left_side"].search(targets[i]):
                 pattern = matching_pattern
                 break
