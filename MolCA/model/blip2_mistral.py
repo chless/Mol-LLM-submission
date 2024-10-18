@@ -342,10 +342,18 @@ class MistralModel_sequence_packing(MistralModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
-        # TODO: this position_ids disregard batch idx, but sequence packing version pe could be differ (batch size 1 make this problem doesn't matter, though)
         if len(attention_mask.shape) == 4:
-            position_ids = attention_mask.sum(dim=-1) - 1
-            position_ids = position_ids.unsqueeze(1)
+            # TODO: this position_ids disregard batch idx, but sequence packing version pe could be differ (batch size 1 make this problem doesn't matter, though)
+            # TODO: Fix this 
+            #position_ids = attention_mask.sum(dim=-1) - 1
+            #position_ids = position_ids.squeeze(0).squeeze(0)
+
+            # convert attention_mask dtype to bfloat16
+            # convert attention_mask value so that True be 0.0 and False be torch.finfo(dtype).min
+            inverted_mask = 1.0 - attention_mask
+            attention_mask = inverted_mask.masked_fill(
+                inverted_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min
+            )
         elif position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
