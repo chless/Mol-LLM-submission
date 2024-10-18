@@ -405,7 +405,6 @@ smol_molecule_captioning = [
     "Can you give me an overview of the molecular structure?",
     
  ]
-]
 
 qm9_dipole_moment = [
     "I would like to know the dipole moment of this molecule, could you please provide it?",
