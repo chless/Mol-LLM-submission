@@ -113,6 +113,8 @@ def prepare_llm_input(
     if (
         "<INPUT>" in instruction and not "<None>" in mol_string
     ):  # for LlaSMol whose input contains <INPUT>
+        # name conversion tasks are included
+        # if you use LlaSMol instruction for M2T, replace <INPUT> with mol_string
         llm_prompt = instruction.replace("<INPUT>", mol_string_converted)
     elif not "<None>" in mol_string:
         llm_prompt = instruction + mol_string_converted
@@ -996,7 +998,6 @@ class PackedData(Data):
             prefix = key.split("edge_index")[0]
             return getattr(self, f"{prefix}x.size")(0)
         return super().__inc__(key, value, *args, **kwargs)
-
 
 # Initialize with the data_list from ConcatDataset
 class Mol_LLM_Dataset(InMemoryDataset):
