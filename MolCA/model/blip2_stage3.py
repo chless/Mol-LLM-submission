@@ -431,8 +431,9 @@ class Blip2Stage3(pl.LightningModule):
             "w",
         ) as f:
             json.dump(self.list_logs, f, ensure_ascii=False, indent=4)
-            # assure all predictions are saved before the evaluation
-            dist.barrier()
+        
+        # assure all predictions are saved before the evaluation
+        dist.barrier()
 
         if self.global_rank == 0:
             all_list_logs = {
@@ -510,3 +511,6 @@ class Blip2Stage3(pl.LightningModule):
                     batch_size=self.eval_dataset_losses[dataset]["total_samples"],
                     sync_dist=False,
                 )
+
+        dist.barrier()
+        dist.destroy_process_group()
