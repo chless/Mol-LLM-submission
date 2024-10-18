@@ -243,39 +243,39 @@ class Blip2Stage3(pl.LightningModule):
             batch_size=batch_size,
             sync_dist=False,
         )
-        # TODO: implement for sequence packing
-        """
         # log dataset specific losses
         task_subtask_pairs = batch[0].task_subtask_pair
-        # unwrap the list of list
+
+        # TODO: implement for sequence packing
         if isinstance(task_subtask_pairs[0], list):
+            # unwrap the list of list
             task_subtask_pairs = [i for ii in task_subtask_pairs for i in ii]
-        instance_losses = outputs["instance_loss"]
+        else:
+            instance_losses = outputs["instance_loss"]
 
-        for task_subtask_pair in task_subtask_pairs:
-            if task_subtask_pair not in self.dataset_losses.keys():
-                self.dataset_losses[task_subtask_pair] = []
+            for task_subtask_pair in task_subtask_pairs:
+                if task_subtask_pair not in self.dataset_losses.keys():
+                    self.dataset_losses[task_subtask_pair] = []
 
-        for i in range(instance_losses.shape[0]):
-            task_subtask_pair = task_subtask_pairs[i]
-            # calculate average loss
-            self.dataset_losses[task_subtask_pair].append(instance_losses[i])
+            for i in range(instance_losses.shape[0]):
+                task_subtask_pair = task_subtask_pairs[i]
+                # calculate average loss
+                self.dataset_losses[task_subtask_pair].append(instance_losses[i])
 
-            while (
-                len(self.dataset_losses[task_subtask_pair])
-                > self.num_moving_samples
-            ):
-                self.dataset_losses[task_subtask_pair].pop(0)
+                while (
+                    len(self.dataset_losses[task_subtask_pair])
+                    > self.num_moving_samples
+                ):
+                    self.dataset_losses[task_subtask_pair].pop(0)
 
-        for dataset in self.dataset_losses.keys():
-            self.log(
-                f"train/{dataset}/loss",
-                sum(self.dataset_losses[dataset])
-                / len(self.dataset_losses[dataset]),
-                batch_size=len(self.dataset_losses[dataset]),
-                sync_dist=False,
-            )
-        """
+            for dataset in self.dataset_losses.keys():
+                self.log(
+                    f"train/{dataset}/loss",
+                    sum(self.dataset_losses[dataset])
+                    / len(self.dataset_losses[dataset]),
+                    batch_size=len(self.dataset_losses[dataset]),
+                    sync_dist=False,
+                )
 
         loss = outputs["loss"]
         self.log(
