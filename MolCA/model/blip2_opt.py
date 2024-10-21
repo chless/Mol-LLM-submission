@@ -189,7 +189,7 @@ class Blip2OPT(Blip2Base):
             )
 
     def get_lora_target_modules(self):
-        return
+        return ["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]
 
     def fit_llm_input_convention(self, llm_prompt):
         llm_prompt = (
