@@ -4,7 +4,7 @@ cross_attention_freq: 2
 num_query_token: 32
 bert_num_hidden_layers: 5
 
-llm_model: "facebook/galactica-1.3b"
+llm_model: "mistralai/Mistral-7B-Instruct-v0.3"
 tune_llm: lora
 peft_config: null
 peft_dir: ""
@@ -37,18 +37,18 @@ num_workers: 1
 skip_sanity_check: false
 
 accumulate_grad_batches: 8
-batch_size: 1
-inference_batch_size: 28
+batch_size: 22
+inference_batch_size: 8
 
 truncation: 1
 padding: max_length
-
-max_length: 3200
+max_length: 512
 inference_max_length: 512
+
 gen_max_len: 256
 min_len: 8
 
-apply_sequence_packing: true
+apply_sequence_packing: false
 max_packing_size: -1
 
 weight_decay: 0.05

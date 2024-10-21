@@ -1,3 +1,25 @@
+bert_hidden_dim: 768
+bert_name: scibert
+cross_attention_freq: 2
+num_query_token: 32
+bert_num_hidden_layers: 5
+
+llm_model: "facebook/galactica-1.3b"
+tune_llm: lora
+peft_config: null
+peft_dir: ""
+load_in_8bit: false
+lora_r: 64
+lora_alpha: 32
+lora_dropout: 0.1
+selfies_token_path: "/home/chanhui-lee/text-mol/MolCA/model/selfies_dict.txt"
+add_selfies_tokens: true
+prompt: "[START_I_SMILES]{}[END_I_SMILES]"
+
+num_beams: 1
+
+
+
 mol_representation: string_only
 
 strategy_name: null

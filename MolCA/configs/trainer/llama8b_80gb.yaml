@@ -1,3 +1,25 @@
+bert_hidden_dim: 768
+bert_name: scibert
+cross_attention_freq: 2
+num_query_token: 32
+bert_num_hidden_layers: 5
+
+llm_model: "meta-llama/Llama-3.1-8B-Instruct"
+tune_llm: lora
+peft_config: null
+peft_dir: ""
+load_in_8bit: false
+lora_r: 64
+lora_alpha: 32
+lora_dropout: 0.1
+selfies_token_path: "/home/chanhui-lee/text-mol/MolCA/model/selfies_dict.txt"
+add_selfies_tokens: true
+prompt: "[START_I_SMILES]{}[END_I_SMILES]"
+
+num_beams: 1
+
+
+
 mol_representation: string_only
 
 strategy_name: null
@@ -15,12 +37,12 @@ num_workers: 1
 skip_sanity_check: false
 
 accumulate_grad_batches: 8
-batch_size: 11
+batch_size: 22
 inference_batch_size: 8
 
 truncation: 1
 padding: max_length
-max_length: 5120
+max_length: 512
 inference_max_length: 512
 
 gen_max_len: 256
