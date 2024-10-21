@@ -36,9 +36,9 @@ llava_style: 1
 num_workers: 1
 skip_sanity_check: false
 
-accumulate_grad_batches: 9
-batch_size: 28
-inference_batch_size: 20
+accumulate_grad_batches: 5
+batch_size: 26
+inference_batch_size: 26
 
 truncation: 1
 padding: max_length
