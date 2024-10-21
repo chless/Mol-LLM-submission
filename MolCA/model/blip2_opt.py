@@ -127,6 +127,7 @@ class Blip2OPT(Blip2Base):
                     )
                 else:
                     peft_config = LoraConfig(
+                        target_modules=self.get_lora_target_modules(),
                         task_type=TaskType.CAUSAL_LM,
                         inference_mode=False,
                         r=args.lora_r,
@@ -186,6 +187,9 @@ class Blip2OPT(Blip2Base):
             self.opt_proj = nn.Linear(
                 self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
             )
+
+    def get_lora_target_modules(self):
+        return
 
     def fit_llm_input_convention(self, llm_prompt):
         llm_prompt = (
