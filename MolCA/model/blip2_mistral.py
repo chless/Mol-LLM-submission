@@ -236,13 +236,14 @@ class MistralForCausalLM_custom(MistralForCausalLM):
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
-
+        
         return CausalLMOutputWithPast_Custom(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            instance_loss=instance_loss,
         )
     
 @dataclass
