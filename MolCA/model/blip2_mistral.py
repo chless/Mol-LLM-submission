@@ -106,7 +106,15 @@ class Blip2Mistral(Blip2OPT):
             raise ValueError("llm_model template formatting is not implemented")
 
     def get_lora_target_modules(self):
-        return ".*(q|k|v|o)_proj.*"
+        return [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ]
 
 
 from transformers.utils.doc import add_start_docstrings_to_model_forward
