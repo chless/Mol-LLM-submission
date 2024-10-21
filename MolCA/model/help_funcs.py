@@ -43,6 +43,9 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
             if matching_pattern["left_side"].search(targets[i]):
                 pattern = matching_pattern
                 break
+        if pattern is None:
+            print(targets[i])
+            continue
         assert pattern is not None
 
         if pattern["dual_side"].search(targets[i]):
