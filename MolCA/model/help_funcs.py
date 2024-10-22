@@ -136,8 +136,8 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
     pred_smiles_list = []
 
     for i in tqdm(range(len(targets))):
-        target = targets[i].replace(' ', '')
-        prediction = predictions[i].replace(' ', '')
+        target = targets[i].replace(" ", "")
+        prediction = predictions[i].replace(" ", "")
 
         if re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", target):
             target_selfies = re.search(
@@ -385,6 +385,8 @@ def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, toke
             )
         else:
             raise NotImplementedError("Task not implemented")
+        # update number of instances
+        results["num_instances"] = len(task_predictions)
         evaluation_results[t] = results
         if task_name not in CLASSIFICATION_BENCHMARKS:
             for k in _failed_cases.keys():
@@ -474,16 +476,22 @@ def regression_evaluate(predictions, targets, prompts):
     failure_idxs = []
 
     for i in range(len(predictions)):
-        label = re.search(r"(?<=<FLOAT>).*?(?=</FLOAT>)", targets[i]).group().replace(' ', '')
+        label = (
+            re.search(r"(?<=<FLOAT>).*?(?=</FLOAT>)", targets[i])
+            .group()
+            .replace(" ", "")
+        )
         label = label.replace("<|", "").replace("|>", "")
         label = float(label)
 
         # only calculate metrics if the prediction is a float
         # else, increment the failure count
         try:
-            prediction = re.search(
-                r"(?<=<FLOAT>).*?(?=</FLOAT>)", predictions[i]
-            ).group().replace(' ', '')
+            prediction = (
+                re.search(r"(?<=<FLOAT>).*?(?=</FLOAT>)", predictions[i])
+                .group()
+                .replace(" ", "")
+            )
             prediction = prediction.replace("<|", "").replace("|>", "")
             prediction = float(prediction)
 

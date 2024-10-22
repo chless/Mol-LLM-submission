@@ -385,9 +385,7 @@ class Blip2Stage3(pl.LightningModule):
         ##============== Overall Loss ===================##
 
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
-        self.total_avg_loss += (
-            outputs["loss"].item() - self.total_avg_loss
-        ) * new_data_weight
+        self.total_avg_loss += (outputs["loss"] - self.total_avg_loss) * new_data_weight
         self.total_seen_data_size += batch_size
 
         task_subtask_pairs = tasks
@@ -439,86 +437,84 @@ class Blip2Stage3(pl.LightningModule):
             tokenizer=self.blip2model.llm_tokenizer,
         )
 
-        # assure all predictions are saved before the evaluation
-        if self.trainer.world_size > 1:
-            dist.barrier()
+        self.save_predictions(
+            predictions=self.list_logs["predictions"],
+            targets=self.list_logs["targets"],
+            tasks=self.list_logs["tasks"],
+            prompts=self.list_logs["prompts"],
+            filename=(
+                f"{self.args.mode}-step{self.global_step}-{self.global_rank}-outputs.json"
+                if self.args.mode == "val"
+                else f"{self.args.mode}-{self.global_rank}-outputs.json"
+            ),
+        )
 
-        if self.global_rank == 0:
-            all_list_logs = {
-                "predictions": [],
-                "targets": [],
-                "tasks": [],
-                "probs": [],
-                "prompts": [],
-            }
+        self.save_predictions(
+            predictions=failed_cases["predictions"],
+            targets=failed_cases["targets"],
+            tasks=failed_cases["tasks"],
+            prompts=failed_cases["prompts"],
+            filename=(
+                f"{self.args.mode}-step{self.global_step}-{self.global_rank}-failed_cases.json"
+                if self.args.mode == "val"
+                else f"{self.args.mode}-{self.global_rank}-failed_cases.json"
+            ),
+        )
 
-            # load saved json format predictions
-            if self.trainer.world_size > 1:
-                for rank in range(self.trainer.world_size):
-                    with open(
-                        os.path.join(
-                            self.logger.log_dir,
-                            f"{mode}-step{self.global_step}-rank{rank}.json",
-                        ),
-                        "r",
-                    ) as f:
-                        per_device_log = json.load(f)
-                        for key in all_list_logs.keys():
-                            all_list_logs[key].extend(per_device_log[key])
+        self.log(
+            f"{mode}/total_loss",
+            self.total_avg_loss,
+            sync_dist=True,
+            batch_size=self.total_seen_data_size,
+        )
 
-            else:
-                all_list_logs = self.list_logs
-
-            self.log(f"{mode}/total_loss", self.total_avg_loss, sync_dist=False)
-
-            self.save_predictions(
-                predictions=all_list_logs["predictions"],
-                targets=all_list_logs["targets"],
-                tasks=all_list_logs["tasks"],
-                prompts=all_list_logs["prompts"],
-                filename=(
-                    f"{self.args.mode}-step{self.global_step}_predictions.json"
-                    if self.args.mode == "val"
-                    else f"{self.args.mode}_predictions.json"
-                ),
-            )
-
-            evaluation_results, failed_cases = task_specifically_evaluate(
-                predictions=all_list_logs["predictions"],
-                targets=all_list_logs["targets"],
-                tasks=all_list_logs["tasks"],
-                prompts=all_list_logs["prompts"],
-                probs=all_list_logs["probs"],
-                tokenizer=self.blip2model.llm_tokenizer,
-            )
-
-            self.save_predictions(
-                predictions=failed_cases["predictions"],
-                targets=failed_cases["targets"],
-                tasks=failed_cases["tasks"],
-                prompts=failed_cases["prompts"],
-                filename=(
-                    f"{self.args.mode}-step{self.global_step}_failed_cases.json"
-                    if self.args.mode == "val"
-                    else f"{self.args.mode}_failed_cases.json"
-                ),
-            )
-
-            for task_subtask_pair in evaluation_results:
-                for metric in evaluation_results[task_subtask_pair]:
-                    self.log(
-                        f"{mode}/{task_subtask_pair}/{metric}",
-                        evaluation_results[task_subtask_pair][metric],
-                        sync_dist=False,
-                    )
-
-            for dataset in self.eval_dataset_losses.keys():
+        for task_subtask_pair in evaluation_results:
+            for metric in evaluation_results[task_subtask_pair]:
                 self.log(
-                    f"{mode}/{dataset}/avg_loss",
-                    self.eval_dataset_losses[dataset]["avg_loss"],
-                    batch_size=self.eval_dataset_losses[dataset]["total_samples"],
-                    sync_dist=False,
+                    f"{mode}/{task_subtask_pair}/{metric}",
+                    evaluation_results[task_subtask_pair][metric],
+                    sync_dist=True,
+                    batch_size=evaluation_results[task_subtask_pair]["num_instances"],
                 )
-        if self.trainer.world_size > 1:
-            dist.barrier()
-            dist.destroy_process_group()
+
+        for dataset in self.eval_dataset_losses.keys():
+            self.log(
+                f"{mode}/{dataset}/avg_loss",
+                self.eval_dataset_losses[dataset]["avg_loss"],
+                sync_dist=True,
+                batch_size=self.eval_dataset_losses[dataset]["total_samples"],
+            )
+
+
+def convert_nested_dict2tensor(nested_dict, device):
+    if isinstance(nested_dict, dict):
+        return {
+            key: convert_nested_dict2tensor(value, device)
+            for key, value in nested_dict.items()
+        }
+    else:
+        return torch.tensor(nested_dict, device=device)
+
+
+# create a dict of list of output tensor for dist.all_gather
+# the dict can be nested dict
+def create_dict_of_tensor_list(dict_of_tensor, num_devices):
+    if isinstance(dict_of_tensor, dict):
+        for key in dict_of_tensor.keys():
+            dict_of_tensor[key] = create_dict_of_tensor_list(
+                dict_of_tensor=dict_of_tensor[key], num_devices=num_devices
+            )
+        return dict_of_tensor
+    else:
+        return [torch.zeros_like(dict_of_tensor) for _ in range(num_devices)]
+
+
+# apply dist.all_gather on the dict of list of output tensor
+def gather_dict_of_tensor_into_dict_of_tensor_list(tensor_list, dict_of_tensor):
+    if isinstance(dict_of_tensor, dict):
+        for key in dict_of_tensor.keys():
+            gather_dict_of_tensor_into_dict_of_tensor_list(
+                tensor_list=tensor_list[key], dict_of_tensor=dict_of_tensor[key]
+            )
+    else:
+        dist.all_gather(tensor_list, dict_of_tensor)
