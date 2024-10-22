@@ -102,7 +102,7 @@ class Blip2Stage3(pl.LightningModule):
             args,
         )
         self.tokenizer = self.blip2model.init_tokenizer()
-        self.num_devices = (
+        self.trainer.world_size = (
             1
             if isinstance(ast.literal_eval(args.devices), int)
             else len(ast.literal_eval(args.devices))
@@ -434,9 +434,18 @@ class Blip2Stage3(pl.LightningModule):
             "w",
         ) as f:
             json.dump(self.list_logs, f, ensure_ascii=False, indent=4)
-        
+
+        evaluation_results, failed_cases = task_specifically_evaluate(
+            predictions=self.list_logs["predictions"],
+            targets=self.list_logs["targets"],
+            tasks=self.list_logs["tasks"],
+            prompts=self.list_logs["prompts"],
+            probs=self.list_logs["probs"],
+            tokenizer=self.blip2model.llm_tokenizer,
+        )
+
         # assure all predictions are saved before the evaluation
-        if self.num_devices > 1:
+        if self.trainer.world_size > 1:
             dist.barrier()
 
         if self.global_rank == 0:
@@ -449,7 +458,7 @@ class Blip2Stage3(pl.LightningModule):
             }
 
             # load saved json format predictions
-            if self.num_devices > 1:
+            if self.trainer.world_size > 1:
                 for rank in range(self.trainer.world_size):
                     with open(
                         os.path.join(
@@ -515,6 +524,6 @@ class Blip2Stage3(pl.LightningModule):
                     batch_size=self.eval_dataset_losses[dataset]["total_samples"],
                     sync_dist=False,
                 )
-        if self.num_devices > 1:
+        if self.trainer.world_size > 1:
             dist.barrier()
             dist.destroy_process_group()
