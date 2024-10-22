@@ -467,7 +467,7 @@ class Stage3DM(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            persistent_workers=True,
+            persistent_workers=True if self.args.num_workers > 0 else False,
             collate_fn=DataCollater(
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
@@ -487,7 +487,7 @@ class Stage3DM(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=False,
-            persistent_workers=True,
+            persistent_workers=True if self.args.num_workers > 0 else False,
             collate_fn=DataCollater(
                 tokenizer=self.tokenizer,
                 max_length=self.inference_max_length,
@@ -507,7 +507,7 @@ class Stage3DM(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=False,
-            persistent_workers=True,
+            persistent_workers=True if self.args.num_workers > 0 else False,
             collate_fn=DataCollater(
                 tokenizer=self.tokenizer,
                 max_length=self.inference_max_length,
