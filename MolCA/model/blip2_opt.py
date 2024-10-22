@@ -323,20 +323,27 @@ class Blip2OPT(Blip2Base):
             target_tokens.input_ids == self.llm_tokenizer.pad_token_id, -100
         )
 
-        input_embeds = self.llm_model.get_input_embeddings()(input_tokens.input_ids)
         if "graph" in self.args.mol_representation:
+            input_embeds = self.llm_model.get_input_embeddings()(input_tokens.input_ids)
             input_embeds = self.inject_graph_embeds2input_embeds(
                 input_embeds=input_embeds,
                 input_tokens=input_tokens,
                 graphs=graphs,
             )
 
-        outputs = self.llm_model(
-            inputs_embeds=input_embeds,
-            attention_mask=input_tokens.attention_mask,
-            return_dict=True,
-            labels=targets,
-        )
+            outputs = self.llm_model(
+                inputs_embeds=input_embeds,
+                attention_mask=input_tokens.attention_mask,
+                return_dict=True,
+                labels=targets,
+            )
+        else:
+            outputs = self.llm_model(
+                input_ids=input_tokens.input_ids,
+                attention_mask=input_tokens.attention_mask,
+                return_dict=True,
+                labels=targets,
+            )
         """
         if self.args.apply_reg_order_scale and task == "regression":
             logits = outputs.logits
