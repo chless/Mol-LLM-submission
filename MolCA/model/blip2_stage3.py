@@ -102,11 +102,6 @@ class Blip2Stage3(pl.LightningModule):
             args,
         )
         self.tokenizer = self.blip2model.init_tokenizer()
-        self.trainer.world_size = (
-            1
-            if isinstance(ast.literal_eval(args.devices), int)
-            else len(ast.literal_eval(args.devices))
-        )
         self.num_moving_samples = 32
         self.save_hyperparameters(args)
 
