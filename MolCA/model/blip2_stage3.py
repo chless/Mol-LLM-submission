@@ -33,6 +33,7 @@ from data_provider.stage3_dm import (
 from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
+logging.set_verbosity_info()
 
 def load_ignore_unexpected(model, state_dict):
     keys = set(model.state_dict().keys())
@@ -390,18 +391,7 @@ class Blip2Stage3(pl.LightningModule):
         return outputs["loss"]
 
     def on_evaluation_epoch_end(self, mode="val") -> None:
-        logger.info("on_evaluation_epoch_end start")
-
-        # save per device predictions
-        os.makedirs(self.logger.log_dir, exist_ok=True)
-        with open(
-            os.path.join(
-                self.logger.log_dir,
-                f"{mode}-step{self.global_step}-rank{self.global_rank}.json",
-            ),
-            "w",
-        ) as f:
-            json.dump(self.list_logs, f, ensure_ascii=False, indent=4)
+        print(f"\nDevice {self.device} on_evaluation_epoch_end start")
 
         evaluation_results, failed_cases = task_specifically_evaluate(
             predictions=self.list_logs["predictions"],
@@ -505,27 +495,36 @@ class Blip2Stage3(pl.LightningModule):
             '''
         
         assert flattened_metric_tensors.shape[0] == len(flattened_metric_keys), f"flattened_metric_tensors.shape[0]: {flattened_metric_tensors.shape[0]}, len(flattened_metric_keys): {len(flattened_metric_keys)}"        
-        if self.trainer.global_rank == 0:
-            if self.trainer.world_size > 1:
-                logger.info("gather the metrics across devices")
-                gathered_flattened_metric_tensors = self.all_gather(flattened_metric_tensors) # [world_size, num_metrics, metric_value * per_device_instance_count, per_device_instance_count]
-                logger.info("metrics are gathered, {}".format(gathered_flattened_metric_tensors.shape))
-                summed_flattened_metric_tensors = gathered_flattened_metric_tensors[:, :, 0].sum(dim=0)
-                total_instance_count = gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)
-            else:
-                summed_flattened_metric_tensors = flattened_metric_tensors[:, 0]
-                total_instance_count = flattened_metric_tensors[:, 1]
+        if self.trainer.world_size > 1:
+            print("gather the metrics across devices")
+            gathered_flattened_metric_tensors = self.all_gather(flattened_metric_tensors) # [world_size, num_metrics, metric_value * per_device_instance_count, per_device_instance_count]
+            print("metrics are gathered, {}".format(gathered_flattened_metric_tensors.shape))
+            summed_flattened_metric_tensors = gathered_flattened_metric_tensors[:, :, 0].sum(dim=0)
+            total_instance_count = gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)
+        else:
+            summed_flattened_metric_tensors = flattened_metric_tensors[:, 0]
+            total_instance_count = flattened_metric_tensors[:, 1]
 
-            averaged_flattened_metric_tensors = summed_flattened_metric_tensors / total_instance_count
+        
+        # if total_instance_count is 0, set the metric to null value
+        averaged_flattened_metric_tensors = torch.where(
+            total_instance_count > 0,
+            summed_flattened_metric_tensors / total_instance_count,
+            torch.tensor(float("nan"), device=self.device),
+        )
 
-            logger.info("=== Evaluation Results ===")
+        print(averaged_flattened_metric_tensors)
+        if self.trainer.is_global_zero:
+            print("============================== Evaluation Results ==============================")
             for i, key in enumerate(flattened_metric_keys):
-                logger.info(f"{key}: {averaged_flattened_metric_tensors[i]}")
+                print(f"{key}: {averaged_flattened_metric_tensors[i]}")
                 self.log(
                     key,
                     averaged_flattened_metric_tensors[i],
                     sync_dist=False,
+                    batch_size=int(total_instance_count[i]),
                 )
-            logger.info("===========================")
+            print("=================================================================================")
+            
 
-        logger.info("on_evaluation_epoch_end end")
+        print(f"\nDevice {self.device} on_evaluation_epoch_end end")
