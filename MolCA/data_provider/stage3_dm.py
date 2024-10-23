@@ -465,7 +465,7 @@ class Stage3DM(LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            pin_memory=True,
+            pin_memory=False,
             drop_last=True,
             persistent_workers=True if self.args.num_workers > 0 else False,
             collate_fn=DataCollater(
@@ -485,7 +485,7 @@ class Stage3DM(LightningDataModule):
             batch_size=self.inference_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            pin_memory=True,
+            pin_memory=False,
             drop_last=False,
             persistent_workers=True if self.args.num_workers > 0 else False,
             collate_fn=DataCollater(
@@ -505,7 +505,7 @@ class Stage3DM(LightningDataModule):
             batch_size=self.inference_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            pin_memory=True,
+            pin_memory=False,
             drop_last=False,
             persistent_workers=True if self.args.num_workers > 0 else False,
             collate_fn=DataCollater(
