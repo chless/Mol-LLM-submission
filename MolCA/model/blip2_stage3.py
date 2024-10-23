@@ -457,14 +457,6 @@ class Blip2Stage3(pl.LightningModule):
                     ],
                     dim=0
                 )
-                '''
-                self.log(
-                    f"{mode}/{task_subtask_pair}/{metric}",
-                    evaluation_results[task_subtask_pair][metric],
-                    sync_dist=True,
-                    batch_size=evaluation_results[task_subtask_pair]["num_instances"],
-                )
-                '''
 
         # tied to order of self.task_subtask_name_pairs
         for dataset in self.eval_dataset_losses.keys():
@@ -485,14 +477,6 @@ class Blip2Stage3(pl.LightningModule):
                 ],
                 dim=0
             )
-            '''
-            self.log(
-                f"{mode}/{dataset}/avg_loss",
-                self.eval_dataset_losses[dataset]["avg_loss"],
-                sync_dist=True,
-                batch_size=self.eval_dataset_losses[dataset]["num_instances"],
-            )
-            '''
         
         assert flattened_metric_tensors.shape[0] == len(flattened_metric_keys), f"flattened_metric_tensors.shape[0]: {flattened_metric_tensors.shape[0]}, len(flattened_metric_keys): {len(flattened_metric_keys)}"        
         if self.trainer.world_size > 1:
