@@ -1,3 +1,25 @@
+bert_hidden_dim: 768
+bert_name: scibert
+cross_attention_freq: 2
+num_query_token: 32
+bert_num_hidden_layers: 5
+
+llm_model: "facebook/galactica-1.3b"
+tune_llm: lora
+peft_config: null
+peft_dir: ""
+load_in_8bit: false
+lora_r: 64
+lora_alpha: 32
+lora_dropout: 0.1
+selfies_token_path: "/home/chanhui-lee/text-mol/MolCA/model/selfies_dict.txt"
+add_selfies_tokens: true
+prompt: "[START_I_SMILES]{}[END_I_SMILES]"
+
+num_beams: 1
+
+
+
 mol_representation: string_only
 
 strategy_name: null
@@ -11,22 +33,22 @@ task: null
 save_top_k: 10
 logging_dir: "/home/chanhui-lee/text-mol/MolCA/all_checkpoints/"
 llava_style: 1
-num_workers: 1
+num_workers: 0
 skip_sanity_check: false
 
 accumulate_grad_batches: 8
-batch_size: 22
-inference_batch_size: 8
+batch_size: 1
+inference_batch_size: 28
 
 truncation: 1
 padding: max_length
-max_length: 512
-inference_max_length: 512
 
+max_length: 3200
+inference_max_length: 512
 gen_max_len: 256
 min_len: 8
 
-apply_sequence_packing: false
+apply_sequence_packing: true
 max_packing_size: -1
 
 weight_decay: 0.05
@@ -40,8 +62,8 @@ optimizer: adamw
 
 mol_string_randomization_ratio: -1
 
-val_check_interval: 18000
-check_val_every_n_epoch: null
+val_check_interval: 1.0
+check_val_every_n_epoch: 1
 trainset_resize: -1
 valset_resize: -1
 testset_resize: -1

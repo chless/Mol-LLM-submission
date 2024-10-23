@@ -1,0 +1,70 @@
+bert_hidden_dim: 768
+bert_name: scibert
+cross_attention_freq: 2
+num_query_token: 32
+bert_num_hidden_layers: 5
+
+llm_model: "facebook/galactica-1.3b"
+tune_llm: lora
+peft_config: null
+peft_dir: ""
+load_in_8bit: false
+lora_r: 64
+lora_alpha: 32
+lora_dropout: 0.1
+selfies_token_path: "/home/chanhui-lee/text-mol/MolCA/model/selfies_dict.txt"
+add_selfies_tokens: true
+prompt: "[START_I_SMILES]{}[END_I_SMILES]"
+
+num_beams: 1
+
+
+
+mol_representation: string_only
+
+strategy_name: null
+accelerator: gpu
+devices: "0,1,2,3,4,5,6,7"
+precision: bf16-mixed
+max_steps: 50000
+second_stage_start_step: 1000
+every_n_train_steps: 200
+task: null
+save_top_k: 10
+logging_dir: "/home/chanhui-lee/text-mol/MolCA/all_checkpoints/"
+llava_style: 1
+num_workers: 0
+skip_sanity_check: false
+
+accumulate_grad_batches: 6
+batch_size: 22
+inference_batch_size: 22
+
+truncation: 1
+padding: max_length
+max_length: 512
+inference_max_length: 512
+
+gen_max_len: 256
+min_len: 8
+
+apply_sequence_packing: false
+max_packing_size: -1
+
+weight_decay: 0.05
+init_lr: 0.0001
+min_lr: 0.00001
+warmup_lr: 0.000001
+warmup_steps: 1000
+lr_decay_rate: 0.9
+scheduler: None
+optimizer: adamw
+
+mol_string_randomization_ratio: -1
+
+val_check_interval: 0.2
+check_val_every_n_epoch: 1
+trainset_resize: -1
+valset_resize: -1
+testset_resize: -1
+test_on_trainset: false

@@ -38,24 +38,30 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
     }
 
     for i in range(len(targets)):
+        target = targets[i]
+        prediction = predictions[i]
+
         pattern = None
         for key, matching_pattern in patterns.items():
             if matching_pattern["left_side"].search(targets[i]):
                 pattern = matching_pattern
                 break
+        if pattern is None:
+            print(targets[i])
+            continue
         assert pattern is not None
 
-        if pattern["dual_side"].search(targets[i]):
-            ref = pattern["dual_side"].search(targets[i]).group()
+        if pattern["dual_side"].search(target):
+            ref = pattern["dual_side"].search(target).group()
         else:
-            ref = pattern["left_side"].search(targets[i]).group()
+            ref = pattern["left_side"].search(target).group()
         ref_tokens = tokenizer.tokenize(ref, truncation=False, padding="longest")
 
         try:
-            if pattern["dual_side"].search(predictions[i]):
-                pred = pattern["dual_side"].search(predictions[i]).group()
+            if pattern["dual_side"].search(prediction):
+                pred = pattern["dual_side"].search(prediction).group()
             else:
-                pred = pattern["left_side"].search(predictions[i]).group()
+                pred = pattern["left_side"].search(prediction).group()
             pred_tokens = tokenizer.tokenize(pred, truncation=False, padding="longest")
 
             references.append([ref_tokens])
@@ -130,8 +136,8 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
     pred_smiles_list = []
 
     for i in tqdm(range(len(targets))):
-        target = targets[i]
-        prediction = predictions[i]
+        target = targets[i].replace(" ", "")
+        prediction = predictions[i].replace(" ", "")
 
         if re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", target):
             target_selfies = re.search(
@@ -348,20 +354,21 @@ def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, toke
         task_targets = task_specific_targets[t]
         task_probs = task_specific_probs[t]
         task_prompts = task_specific_prompts[t]
-        if t.split("/")[0] in CLASSIFICATION_BENCHMARKS:
+        task_name = t.split("/")[0]
+        if task_name in CLASSIFICATION_BENCHMARKS:
             results = classification_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
                 probs=task_probs,
             )
-        elif t.split("/")[0] in REGRESSION_BENCHMARKS:
+        elif task_name in REGRESSION_BENCHMARKS:
             results, _failed_cases = regression_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
                 prompts=task_prompts,
             )
         elif (
-            t.split("/")[0] in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS
+            task_name in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS
         ):  # output is a molecule
             results, _failed_cases = molecule_evaluate(
                 predictions=task_predictions,
@@ -369,7 +376,7 @@ def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, toke
                 tokenizer=tokenizer,
                 prompts=task_prompts,
             )
-        elif t.split("/")[0] in MOL2TEXT_BENCHMARKS:
+        elif task_name in MOL2TEXT_BENCHMARKS:
             results, _failed_cases = caption_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
@@ -378,8 +385,10 @@ def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, toke
             )
         else:
             raise NotImplementedError("Task not implemented")
+        # update number of instances
+        results["num_instances"] = len(task_predictions)
         evaluation_results[t] = results
-        if t.split("/")[0] not in CLASSIFICATION_BENCHMARKS:
+        if task_name not in CLASSIFICATION_BENCHMARKS:
             for k in _failed_cases.keys():
                 failed_cases[k].extend(_failed_cases[k])
             failed_cases["tasks"].extend(
@@ -467,16 +476,22 @@ def regression_evaluate(predictions, targets, prompts):
     failure_idxs = []
 
     for i in range(len(predictions)):
-        label = re.search(r"(?<=<FLOAT>).*?(?=</FLOAT>)", targets[i]).group()
+        label = (
+            re.search(r"(?<=<FLOAT>).*?(?=</FLOAT>)", targets[i])
+            .group()
+            .replace(" ", "")
+        )
         label = label.replace("<|", "").replace("|>", "")
         label = float(label)
 
         # only calculate metrics if the prediction is a float
         # else, increment the failure count
         try:
-            prediction = re.search(
-                r"(?<=<FLOAT>).*?(?=</FLOAT>)", predictions[i]
-            ).group()
+            prediction = (
+                re.search(r"(?<=<FLOAT>).*?(?=</FLOAT>)", predictions[i])
+                .group()
+                .replace(" ", "")
+            )
             prediction = prediction.replace("<|", "").replace("|>", "")
             prediction = float(prediction)
 

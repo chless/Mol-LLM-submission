@@ -127,6 +127,7 @@ class Blip2OPT(Blip2Base):
                     )
                 else:
                     peft_config = LoraConfig(
+                        target_modules=self.get_lora_target_modules(),
                         task_type=TaskType.CAUSAL_LM,
                         inference_mode=False,
                         r=args.lora_r,
@@ -186,6 +187,9 @@ class Blip2OPT(Blip2Base):
             self.opt_proj = nn.Linear(
                 self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
             )
+
+    def get_lora_target_modules(self):
+        return ["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]
 
     def fit_llm_input_convention(self, llm_prompt):
         llm_prompt = (
@@ -319,20 +323,27 @@ class Blip2OPT(Blip2Base):
             target_tokens.input_ids == self.llm_tokenizer.pad_token_id, -100
         )
 
-        input_embeds = self.llm_model.get_input_embeddings()(input_tokens.input_ids)
         if "graph" in self.args.mol_representation:
+            input_embeds = self.llm_model.get_input_embeddings()(input_tokens.input_ids)
             input_embeds = self.inject_graph_embeds2input_embeds(
                 input_embeds=input_embeds,
                 input_tokens=input_tokens,
                 graphs=graphs,
             )
 
-        outputs = self.llm_model(
-            inputs_embeds=input_embeds,
-            attention_mask=input_tokens.attention_mask,
-            return_dict=True,
-            labels=targets,
-        )
+            outputs = self.llm_model(
+                inputs_embeds=input_embeds,
+                attention_mask=input_tokens.attention_mask,
+                return_dict=True,
+                labels=targets,
+            )
+        else:
+            outputs = self.llm_model(
+                input_ids=input_tokens.input_ids,
+                attention_mask=input_tokens.attention_mask,
+                return_dict=True,
+                labels=targets,
+            )
         """
         if self.args.apply_reg_order_scale and task == "regression":
             logits = outputs.logits

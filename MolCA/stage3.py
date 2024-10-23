@@ -92,7 +92,7 @@ def main(cfg):
         elif cfg.strategy_name == "deepspeed":
             strategy = strategies.DeepSpeedStrategy(stage=3)
         else:
-            strategy = MyDDPStrategy(find_unused_parameters=True, start_method="spawn")
+            strategy = MyDDPStrategy(find_unused_parameters=False, start_method="spawn")
     else:
         strategy = "auto"
         cfg.devices = [eval(cfg.devices)]
