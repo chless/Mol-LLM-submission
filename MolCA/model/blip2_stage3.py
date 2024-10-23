@@ -306,30 +306,6 @@ class Blip2Stage3(pl.LightningModule):
         self.train_total_avg_loss = 0.0
         self.train_total_seen_data_size = 0
 
-    def evaluation_in_train_step(self, batch, predictions, logits):
-        graphs, prompt_tokens, texts, tasks = batch
-
-        targets = self.blip2model.llm_tokenizer.batch_decode(texts.input_ids)
-        prompts = self.blip2model.llm_tokenizer.batch_decode(
-            prompt_tokens.input_ids, skip_special_tokens=False
-        )
-        predictions = [
-            p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions
-        ]
-        targets = [
-            t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
-        ]
-        prompts = [
-            p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
-        ]
-        probs = convert_logit2binary_prob(logits, self.blip2model.llm_tokenizer)
-
-        self.train_list_predictions.append(predictions)
-        self.train_list_targets.append(targets)
-        self.train_list_prompts.append(prompts)
-        self.train_list_tasks.append(tasks)
-        self.train_list_probs.append(probs)
-
     def on_evaluation_epoch_start(self):
         self.list_logs = {
             "predictions": [],
