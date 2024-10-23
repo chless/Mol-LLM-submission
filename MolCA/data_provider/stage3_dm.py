@@ -1035,6 +1035,10 @@ class Mol_LLM_Dataset(InMemoryDataset):
         print(
             f"loaded dataset {self.processed_file_names}| data length: {len(self._data.input_ids)}"
         )
+
+        if mode == 'test':
+            self.task_subtask_name_pairs = list(set(self.data.task_subtask_pair))
+
         self.set_data_indices()
         self.shuffle_data_indices()
 

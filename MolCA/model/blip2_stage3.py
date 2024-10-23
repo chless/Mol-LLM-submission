@@ -319,7 +319,11 @@ class Blip2Stage3(pl.LightningModule):
 
         self.total_avg_loss = 0.0
         self.total_seen_data_size = 0
-        self.eval_dataset_losses = {}
+        self.task_subtask_name_pairs = self.trainer.datamodule.dataset_split['test'].task_subtask_name_pairs
+        self.eval_dataset_losses = {
+            task_subtask_pair: {"avg_loss": 0.0, "num_instances": 0}
+            for task_subtask_pair in self.task_subtask_name_pairs
+        }
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
         graphs, prompt_tokens, target_tokens = batch
@@ -369,26 +373,19 @@ class Blip2Stage3(pl.LightningModule):
         task_subtask_pairs = tasks
         instance_losses = outputs["instance_loss"]
 
-        for task_subtask_pair in task_subtask_pairs:
-            if task_subtask_pair not in self.eval_dataset_losses.keys():
-                self.eval_dataset_losses[task_subtask_pair] = {
-                    "avg_loss": 0.0,
-                    "total_samples": 0,
-                }
-
         for i in range(instance_losses.shape[0]):
             task_subtask_pair = task_subtask_pairs[i]
             # calculate average loss
             self.eval_dataset_losses[task_subtask_pair][
                 "avg_loss"
-            ] *= self.eval_dataset_losses[task_subtask_pair]["total_samples"] / (
-                self.eval_dataset_losses[task_subtask_pair]["total_samples"] + 1
+            ] *= self.eval_dataset_losses[task_subtask_pair]["num_instances"] / (
+                self.eval_dataset_losses[task_subtask_pair]["num_instances"] + 1
             )
             self.eval_dataset_losses[task_subtask_pair]["avg_loss"] += instance_losses[
                 i
-            ] / (self.eval_dataset_losses[task_subtask_pair]["total_samples"] + 1)
+            ] / (self.eval_dataset_losses[task_subtask_pair]["num_instances"] + 1)
 
-            self.eval_dataset_losses[task_subtask_pair]["total_samples"] += 1
+            self.eval_dataset_losses[task_subtask_pair]["num_instances"] += 1
 
         return outputs["loss"]
 
@@ -413,6 +410,7 @@ class Blip2Stage3(pl.LightningModule):
             prompts=self.list_logs["prompts"],
             probs=self.list_logs["probs"],
             tokenizer=self.blip2model.llm_tokenizer,
+            total_task_subtask_pairs=self.task_subtask_name_pairs,
         )
 
         self.save_predictions(
@@ -445,56 +443,89 @@ class Blip2Stage3(pl.LightningModule):
             sync_dist=True,
             batch_size=self.total_seen_data_size,
         )
+        flattened_metric_keys = []
+        flattened_metric_tensors = torch.empty(size=(0,2), device=self.device)
 
+        # tied to order of self.task_subtask_name_pairs
         for task_subtask_pair in evaluation_results:
             for metric in evaluation_results[task_subtask_pair]:
+                flattened_metric_keys.append(f"{mode}/{task_subtask_pair}/{metric}")
+                metric_value = evaluation_results[task_subtask_pair][metric]
+                num_instance = evaluation_results[task_subtask_pair]["num_instances"]
+                metric_count_pair = [
+                    metric_value * num_instance, 
+                    num_instance
+                    ]
+                
+                flattened_metric_tensors = torch.cat(
+                    [
+                        flattened_metric_tensors,
+                        torch.tensor(
+                            metric_count_pair,
+                            device=self.device,
+                        ).unsqueeze(0)
+                    ],
+                    dim=0
+                )
+                '''
                 self.log(
                     f"{mode}/{task_subtask_pair}/{metric}",
                     evaluation_results[task_subtask_pair][metric],
                     sync_dist=True,
                     batch_size=evaluation_results[task_subtask_pair]["num_instances"],
                 )
+                '''
 
+        # tied to order of self.task_subtask_name_pairs
         for dataset in self.eval_dataset_losses.keys():
+            flattened_metric_keys.append(f"{mode}/{dataset}/avg_loss")
+            metric_value = self.eval_dataset_losses[dataset]["avg_loss"]
+            num_instance = self.eval_dataset_losses[dataset]["num_instances"]
+            metric_count_pair = [
+                metric_value * num_instance, 
+                num_instance
+                ]
+            flattened_metric_tensors = torch.cat(
+                [
+                    flattened_metric_tensors,
+                    torch.tensor(
+                        metric_count_pair,
+                        device=self.device,
+                    ).unsqueeze(0)
+                ],
+                dim=0
+            )
+            '''
             self.log(
                 f"{mode}/{dataset}/avg_loss",
                 self.eval_dataset_losses[dataset]["avg_loss"],
                 sync_dist=True,
-                batch_size=self.eval_dataset_losses[dataset]["total_samples"],
+                batch_size=self.eval_dataset_losses[dataset]["num_instances"],
             )
+            '''
+        
+        assert flattened_metric_tensors.shape[0] == len(flattened_metric_keys), f"flattened_metric_tensors.shape[0]: {flattened_metric_tensors.shape[0]}, len(flattened_metric_keys): {len(flattened_metric_keys)}"        
+        if self.trainer.global_rank == 0:
+            if self.trainer.world_size > 1:
+                logger.info("gather the metrics across devices")
+                gathered_flattened_metric_tensors = self.all_gather(flattened_metric_tensors) # [world_size, num_metrics, metric_value * per_device_instance_count, per_device_instance_count]
+                logger.info("metrics are gathered, {}".format(gathered_flattened_metric_tensors.shape))
+                summed_flattened_metric_tensors = gathered_flattened_metric_tensors[:, :, 0].sum(dim=0)
+                total_instance_count = gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)
+            else:
+                summed_flattened_metric_tensors = flattened_metric_tensors[:, 0]
+                total_instance_count = flattened_metric_tensors[:, 1]
+
+            averaged_flattened_metric_tensors = summed_flattened_metric_tensors / total_instance_count
+
+            logger.info("=== Evaluation Results ===")
+            for i, key in enumerate(flattened_metric_keys):
+                logger.info(f"{key}: {averaged_flattened_metric_tensors[i]}")
+                self.log(
+                    key,
+                    averaged_flattened_metric_tensors[i],
+                    sync_dist=False,
+                )
+            logger.info("===========================")
 
         logger.info("on_evaluation_epoch_end end")
-
-
-def convert_nested_dict2tensor(nested_dict, device):
-    if isinstance(nested_dict, dict):
-        return {
-            key: convert_nested_dict2tensor(value, device)
-            for key, value in nested_dict.items()
-        }
-    else:
-        return torch.tensor(nested_dict, device=device)
-
-
-# create a dict of list of output tensor for dist.all_gather
-# the dict can be nested dict
-def create_dict_of_tensor_list(dict_of_tensor, num_devices):
-    if isinstance(dict_of_tensor, dict):
-        for key in dict_of_tensor.keys():
-            dict_of_tensor[key] = create_dict_of_tensor_list(
-                dict_of_tensor=dict_of_tensor[key], num_devices=num_devices
-            )
-        return dict_of_tensor
-    else:
-        return [torch.zeros_like(dict_of_tensor) for _ in range(num_devices)]
-
-
-# apply dist.all_gather on the dict of list of output tensor
-def gather_dict_of_tensor_into_dict_of_tensor_list(tensor_list, dict_of_tensor):
-    if isinstance(dict_of_tensor, dict):
-        for key in dict_of_tensor.keys():
-            gather_dict_of_tensor_into_dict_of_tensor_list(
-                tensor_list=tensor_list[key], dict_of_tensor=dict_of_tensor[key]
-            )
-    else:
-        dist.all_gather(tensor_list, dict_of_tensor)
