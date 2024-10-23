@@ -30,7 +30,9 @@ from data_provider.stage3_dm import (
     MOL2TEXT_BENCHMARKS,
     TEXT2MOL_BENCHMARKS,
 )
+from transformers.utils import logging
 
+logger = logging.get_logger(__name__)
 
 def load_ignore_unexpected(model, state_dict):
     keys = set(model.state_dict().keys())
@@ -391,7 +393,7 @@ class Blip2Stage3(pl.LightningModule):
         return outputs["loss"]
 
     def on_evaluation_epoch_end(self, mode="val") -> None:
-        print("on_evaluation_epoch_end start")
+        logger.info("on_evaluation_epoch_end start")
 
         # save per device predictions
         os.makedirs(self.logger.log_dir, exist_ok=True)
@@ -460,6 +462,8 @@ class Blip2Stage3(pl.LightningModule):
                 sync_dist=True,
                 batch_size=self.eval_dataset_losses[dataset]["total_samples"],
             )
+
+        logger.info("on_evaluation_epoch_end end")
 
 
 def convert_nested_dict2tensor(nested_dict, device):
