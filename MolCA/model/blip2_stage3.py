@@ -464,7 +464,7 @@ class Blip2Stage3(pl.LightningModule):
         self.log(
             f"{mode}/total_loss",
             self.total_avg_loss,
-            sync_dist=False,
+            sync_dist=True,
             batch_size=self.total_seen_data_size,
         )
 
@@ -473,7 +473,7 @@ class Blip2Stage3(pl.LightningModule):
                 self.log(
                     f"{mode}/{task_subtask_pair}/{metric}",
                     evaluation_results[task_subtask_pair][metric],
-                    sync_dist=False,
+                    sync_dist=True,
                     batch_size=evaluation_results[task_subtask_pair]["num_instances"],
                 )
 
@@ -481,7 +481,7 @@ class Blip2Stage3(pl.LightningModule):
             self.log(
                 f"{mode}/{dataset}/avg_loss",
                 self.eval_dataset_losses[dataset]["avg_loss"],
-                sync_dist=False,
+                sync_dist=True,
                 batch_size=self.eval_dataset_losses[dataset]["total_samples"],
             )
 
