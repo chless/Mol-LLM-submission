@@ -318,7 +318,7 @@ def get_task_specific_list(predictions, targets, tasks, probs, prompts):
     )
 
 
-def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, tokenizer):
+def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, tokenizer, total_task_subtask_pairs):
     # get unique items from all_tasks
     unique_tasks = list(set(tasks))
     # remove tasks_to_be_removed
@@ -345,6 +345,57 @@ def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, toke
         "prompts": [],
         "tasks": [],
     }
+
+    # initialize evaluation results for all tasks with null values
+    # necessary to make uniform shape of evaluation results
+    for t in total_task_subtask_pairs:
+        if t in tasks_to_be_removed:
+            continue
+
+        task_name = t.split("/")[0]
+        null_value = 0
+        if task_name in CLASSIFICATION_BENCHMARKS:
+            results = {
+                "accuracy": null_value,
+                "f1": null_value,
+                "precision": null_value,
+                "recall": null_value,
+                "roc_auc": null_value,
+            }
+        elif task_name in REGRESSION_BENCHMARKS:
+            results = {
+                "mae": null_value,
+                "mse": null_value,
+                "rmse": null_value,
+                "failure_rate": null_value,
+            }
+        elif (
+            task_name in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS
+        ):  # output is a molecule
+            results = {
+                "validity_ratio": null_value,
+                "MACCS_FTS": null_value,
+                "RDK_FTS": null_value,
+                "morgan_FTS": null_value,
+                "exact_match_ratio": null_value,
+                "levenshtein_score": null_value,
+                "bleu_smiles": null_value,
+                "bleu_selfies": null_value,
+            }
+        elif task_name in MOL2TEXT_BENCHMARKS:
+            results = {
+                "bleu2": null_value,
+                "bleu4": null_value,
+                "rouge1": null_value,
+                "rouge2": null_value,
+                "rougeL": null_value,
+                "meteor": null_value,
+            }
+        else:
+            raise NotImplementedError("Task not implemented")
+        # update number of instances
+        results["num_instances"] = 0
+        evaluation_results[t] = results
 
     for t in task_specific_predictions.keys():
         if t in tasks_to_be_removed:
@@ -388,6 +439,7 @@ def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, toke
         # update number of instances
         results["num_instances"] = len(task_predictions)
         evaluation_results[t] = results
+
         if task_name not in CLASSIFICATION_BENCHMARKS:
             for k in _failed_cases.keys():
                 failed_cases[k].extend(_failed_cases[k])
