@@ -139,18 +139,18 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
         target = targets[i].replace(" ", "")
         prediction = predictions[i].replace(" ", "")
 
-        if re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", target):
-            target_selfies = re.search(
-                r"(?<=<SELFIES>).*?(?=</SELFIES>)", target
-            ).group()
-        else:
-            target_selfies = re.search(r"(?<=<SELFIES>).*", target).group()
-        target_smiles = selfies.decoder(target_selfies)
-        target_mol = Chem.MolFromSmiles(target_smiles)
-        target_canonical_smiles = Chem.CanonSmiles(target_smiles)
-        target_canonical_selfies = selfies.encoder(target_canonical_smiles)
-
         try:
+            if re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", target):
+                target_selfies = re.search(
+                    r"(?<=<SELFIES>).*?(?=</SELFIES>)", target
+                ).group()
+            else:
+                target_selfies = re.search(r"(?<=<SELFIES>).*", target).group()
+            target_smiles = selfies.decoder(target_selfies)
+            target_mol = Chem.MolFromSmiles(target_smiles)
+            target_canonical_smiles = Chem.CanonSmiles(target_smiles)
+            target_canonical_selfies = selfies.encoder(target_canonical_smiles)
+
             if re.search(r"(?<=<SELFIES>).*?(?=</SELFIES>)", prediction) is not None:
                 prediction_selfies = re.search(
                     r"(?<=<SELFIES>).*?(?=</SELFIES>)", prediction
@@ -174,6 +174,9 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
         except:
             failure_idxs.append(i)
             prediction_mol = None
+            print(
+                f"Failed to convert smiles to mol, target : {target}, prediction : {prediction}"
+            )
             continue
 
         if prediction_mol is not None:
@@ -318,7 +321,9 @@ def get_task_specific_list(predictions, targets, tasks, probs, prompts):
     )
 
 
-def task_specifically_evaluate(predictions, targets, tasks, probs, prompts, tokenizer, total_task_subtask_pairs):
+def task_specifically_evaluate(
+    predictions, targets, tasks, probs, prompts, tokenizer, total_task_subtask_pairs
+):
     # get unique items from all_tasks
     unique_tasks = list(set(tasks))
     # remove tasks_to_be_removed
