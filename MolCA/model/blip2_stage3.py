@@ -35,6 +35,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 logging.set_verbosity_info()
 
+
 def load_ignore_unexpected(model, state_dict):
     keys = set(model.state_dict().keys())
     state_dict = {k: v for k, v in state_dict.items() if k in keys}
@@ -320,7 +321,9 @@ class Blip2Stage3(pl.LightningModule):
 
         self.total_avg_loss = 0.0
         self.total_seen_data_size = 0
-        self.task_subtask_name_pairs = self.trainer.datamodule.dataset_split['test'].task_subtask_name_pairs
+        self.task_subtask_name_pairs = self.trainer.datamodule.dataset_split[
+            "test"
+        ].task_subtask_name_pairs
         self.eval_dataset_losses = {
             task_subtask_pair: {"avg_loss": 0.0, "num_instances": 0}
             for task_subtask_pair in self.task_subtask_name_pairs
@@ -434,7 +437,7 @@ class Blip2Stage3(pl.LightningModule):
             batch_size=self.total_seen_data_size,
         )
         flattened_metric_keys = []
-        flattened_metric_tensors = torch.empty(size=(0,2), device=self.device)
+        flattened_metric_tensors = torch.empty(size=(0, 2), device=self.device)
 
         # tied to order of self.task_subtask_name_pairs
         for task_subtask_pair in evaluation_results:
@@ -442,20 +445,17 @@ class Blip2Stage3(pl.LightningModule):
                 flattened_metric_keys.append(f"{mode}/{task_subtask_pair}/{metric}")
                 metric_value = evaluation_results[task_subtask_pair][metric]
                 num_instance = evaluation_results[task_subtask_pair]["num_instances"]
-                metric_count_pair = [
-                    metric_value * num_instance, 
-                    num_instance
-                    ]
-                
+                metric_count_pair = [metric_value * num_instance, num_instance]
+
                 flattened_metric_tensors = torch.cat(
                     [
                         flattened_metric_tensors,
                         torch.tensor(
                             metric_count_pair,
                             device=self.device,
-                        ).unsqueeze(0)
+                        ).unsqueeze(0),
                     ],
-                    dim=0
+                    dim=0,
                 )
 
         # tied to order of self.task_subtask_name_pairs
@@ -463,33 +463,39 @@ class Blip2Stage3(pl.LightningModule):
             flattened_metric_keys.append(f"{mode}/{dataset}/avg_loss")
             metric_value = self.eval_dataset_losses[dataset]["avg_loss"]
             num_instance = self.eval_dataset_losses[dataset]["num_instances"]
-            metric_count_pair = [
-                metric_value * num_instance, 
-                num_instance
-                ]
+            metric_count_pair = [metric_value * num_instance, num_instance]
             flattened_metric_tensors = torch.cat(
                 [
                     flattened_metric_tensors,
                     torch.tensor(
                         metric_count_pair,
                         device=self.device,
-                    ).unsqueeze(0)
+                    ).unsqueeze(0),
                 ],
-                dim=0
+                dim=0,
             )
-        
-        assert flattened_metric_tensors.shape[0] == len(flattened_metric_keys), f"flattened_metric_tensors.shape[0]: {flattened_metric_tensors.shape[0]}, len(flattened_metric_keys): {len(flattened_metric_keys)}"        
+
+        assert flattened_metric_tensors.shape[0] == len(
+            flattened_metric_keys
+        ), f"flattened_metric_tensors.shape[0]: {flattened_metric_tensors.shape[0]}, len(flattened_metric_keys): {len(flattened_metric_keys)}"
         if self.trainer.world_size > 1:
             print("gather the metrics across devices")
-            gathered_flattened_metric_tensors = self.all_gather(flattened_metric_tensors) # [world_size, num_metrics, metric_value * per_device_instance_count, per_device_instance_count]
-            print("metrics are gathered, {}".format(gathered_flattened_metric_tensors.shape))
-            summed_flattened_metric_tensors = gathered_flattened_metric_tensors[:, :, 0].sum(dim=0)
+            gathered_flattened_metric_tensors = self.all_gather(
+                flattened_metric_tensors
+            )  # [world_size, num_metrics, metric_value * per_device_instance_count, per_device_instance_count]
+            print(
+                "metrics are gathered, {}".format(
+                    gathered_flattened_metric_tensors.shape
+                )
+            )
+            summed_flattened_metric_tensors = gathered_flattened_metric_tensors[
+                :, :, 0
+            ].sum(dim=0)
             total_instance_count = gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)
         else:
             summed_flattened_metric_tensors = flattened_metric_tensors[:, 0]
             total_instance_count = flattened_metric_tensors[:, 1]
 
-        
         # if total_instance_count is 0, set the metric to null value
         averaged_flattened_metric_tensors = torch.where(
             total_instance_count > 0,
@@ -498,17 +504,20 @@ class Blip2Stage3(pl.LightningModule):
         )
 
         print(averaged_flattened_metric_tensors)
-        if self.trainer.is_global_zero:
-            print("============================== Evaluation Results ==============================")
-            for i, key in enumerate(flattened_metric_keys):
-                print(f"{key}: {averaged_flattened_metric_tensors[i]}")
-                self.log(
-                    key,
-                    averaged_flattened_metric_tensors[i],
-                    sync_dist=False,
-                    batch_size=int(total_instance_count[i]),
-                )
-            print("=================================================================================")
-            
+        print(
+            "============================== Evaluation Results =============================="
+        )
+        for i, key in enumerate(flattened_metric_keys):
+            print(f"{key}: {averaged_flattened_metric_tensors[i]}")
+            self.log(
+                key,
+                averaged_flattened_metric_tensors[i],
+                sync_dist=False,
+                batch_size=int(total_instance_count[i]),
+                rank_zero_only=True,
+            )
+        print(
+            "================================================================================="
+        )
 
         print(f"\nDevice {self.device} on_evaluation_epoch_end end")
