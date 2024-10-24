@@ -433,19 +433,23 @@ class Stage3DM(LightningDataModule):
             else:
                 raise NotImplementedError
 
-            if split == "val":
+            if split == "val":  # for validation, we use test set
                 data_split = "test"
             elif split == "train":
-                if hasattr(self.args, "debug"):
+                if hasattr(
+                    self.args, "debug"
+                ):  # for debugging, we use test set instead of train set, for the training set is too large
                     data_split = "test" if self.args.debug else "train"
-                elif self.args.mode == "test":
+                elif (
+                    self.args.mode == "test"
+                ):  # for testing, do not load unecessary train set, for the training set is too large
                     data_split = "test"
                 else:
                     data_split = "train"
             elif split == "test" and self.args.test_on_trainset:
                 data_split = "train"
             else:
-                raise NotImplementedError
+                data_split = split
 
             self.dataset_split[split] = Mol_LLM_Dataset(
                 root=self.args.raw_data_root,
