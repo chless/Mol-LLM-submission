@@ -434,13 +434,18 @@ class Stage3DM(LightningDataModule):
                 raise NotImplementedError
 
             if split == "val":
-                data_split = f"test"
-            elif split == "train" and hasattr(self.args, "debug"):
-                data_split = f"test"
+                data_split = "test"
+            elif split == "train":
+                if hasattr(self.args, "debug"):
+                    data_split = "test" if self.args.debug else "train"
+                elif self.args.mode == "test":
+                    data_split = "test"
+                else:
+                    data_split = "train"
             elif split == "test" and self.args.test_on_trainset:
-                data_split = f"train"
+                data_split = "train"
             else:
-                data_split = f"{split}"
+                raise NotImplementedError
 
             self.dataset_split[split] = Mol_LLM_Dataset(
                 root=self.args.raw_data_root,
@@ -999,6 +1004,7 @@ class PackedData(Data):
             return getattr(self, f"{prefix}x.size")(0)
         return super().__inc__(key, value, *args, **kwargs)
 
+
 # Initialize with the data_list from ConcatDataset
 class Mol_LLM_Dataset(InMemoryDataset):
     def __init__(
@@ -1036,7 +1042,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             f"loaded dataset {self.processed_file_names}| data length: {len(self._data.input_ids)}"
         )
 
-        if mode == 'test':
+        if mode == "test":
             self.task_subtask_name_pairs = list(set(self.data.task_subtask_pair))
 
         self.set_data_indices()
