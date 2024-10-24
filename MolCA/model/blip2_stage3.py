@@ -483,15 +483,23 @@ class Blip2Stage3(pl.LightningModule):
             gathered_flattened_metric_tensors = self.all_gather(
                 flattened_metric_tensors
             )  # [world_size, num_metrics, metric_value * per_device_instance_count, per_device_instance_count]
-            print(
-                "metrics are gathered, {}".format(
-                    gathered_flattened_metric_tensors.shape
-                )
+
+            # get rid of nan values (nan )
+            gathered_flattened_metric_tensors = torch.where(
+                torch.isnan(gathered_flattened_metric_tensors),
+                torch.zeros_like(gathered_flattened_metric_tensors),
+                gathered_flattened_metric_tensors,
             )
             summed_flattened_metric_tensors = gathered_flattened_metric_tensors[
                 :, :, 0
             ].sum(dim=0)
-            total_instance_count = gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)
+
+            # total_instance_count = gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)
+            total_instance_count = torch.where(
+                torch.isnan(gathered_flattened_metric_tensors[:, :, 0]),
+                torch.zeros_like(gathered_flattened_metric_tensors[:, :, 1]),
+                gathered_flattened_metric_tensors[:, :, 1],
+            ).sum(dim=0)
         else:
             summed_flattened_metric_tensors = flattened_metric_tensors[:, 0]
             total_instance_count = flattened_metric_tensors[:, 1]
@@ -508,7 +516,9 @@ class Blip2Stage3(pl.LightningModule):
             "============================== Evaluation Results =============================="
         )
         for i, key in enumerate(flattened_metric_keys):
-            print(f"{key}: {averaged_flattened_metric_tensors[i]}")
+            print(
+                f"{key}: {averaged_flattened_metric_tensors[i]} | num_instance: {gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)[i]}"
+            )
             self.log(
                 key,
                 averaged_flattened_metric_tensors[i],
@@ -519,5 +529,18 @@ class Blip2Stage3(pl.LightningModule):
         print(
             "================================================================================="
         )
+        result_path = os.path.join(
+            self.logger.log_dir,
+            f"{mode}-step{self.global_step}-{self.global_rank}-results.json",
+        )
+        # zip the flattened metrics and averaged_flattened_metric_tensors
+        result_dict = {}
+        for i in range(len(flattened_metric_keys)):
+            result_dict[flattened_metric_keys[i]] = averaged_flattened_metric_tensors[
+                i
+            ].item()
+        # save result_dict in result_path
+        with open(result_path, "w") as f:
+            json.dump(result_dict, f, ensure_ascii=False, indent=4)
 
         print(f"\nDevice {self.device} on_evaluation_epoch_end end")
