@@ -240,7 +240,7 @@ class Blip2Stage3(pl.LightningModule):
             self.apply_separated_stage()
 
         if self.scheduler:
-            self.scheduler.step(self.trainer.current_epoch, self.trainer.global_step)
+            self.scheduler.step(self.trainer.current_epoch)
 
         batch_size = self.args.batch_size
 
