@@ -11,6 +11,7 @@ from lavis.common.optims import (
     LinearWarmupCosineLRScheduler,
     LinearWarmupStepLRScheduler,
 )
+from transformers import AdamW, get_cosine_schedule_with_warmup
 import json
 import torch.distributed as dist
 from peft import LoraConfig, TaskType
@@ -163,6 +164,15 @@ class Blip2Stage3(pl.LightningModule):
                     self.args.lr_decay_rate,
                     self.args.warmup_lr,
                     warmup_steps,
+                )
+            
+            elif self.args.scheduler == "cosine":
+                # get_cosine_schedule_with_warmup
+                steps_per_epoch = len(self.trainer.train_dataloader)
+                self.scheduler = get_cosine_schedule_with_warmup(
+                    optimizer,
+                    num_warmup_steps=self.args.warmup_steps,
+                    num_training_steps=self.args.max_epochs * steps_per_epoch,
                 )
             elif self.args.scheduler == "None":
                 self.scheduler = None
