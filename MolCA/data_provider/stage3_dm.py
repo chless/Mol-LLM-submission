@@ -433,14 +433,23 @@ class Stage3DM(LightningDataModule):
             else:
                 raise NotImplementedError
 
-            if split == "val":
-                data_split = f"test"
-            elif split == "train" and hasattr(self.args, "debug"):
-                data_split = f"test"
+            if split == "val":  # for validation, we use test set
+                data_split = "test"
+            elif split == "train":
+                if hasattr(
+                    self.args, "debug"
+                ):  # for debugging, we use test set instead of train set, for the training set is too large
+                    data_split = "test" if self.args.debug else "train"
+                elif (
+                    self.args.mode == "test"
+                ):  # for testing, do not load unecessary train set, for the training set is too large
+                    data_split = "test"
+                else:
+                    data_split = "train"
             elif split == "test" and self.args.test_on_trainset:
-                data_split = f"train"
+                data_split = "train"
             else:
-                data_split = f"{split}"
+                data_split = split
 
             self.dataset_split[split] = Mol_LLM_Dataset(
                 root=self.args.raw_data_root,
@@ -465,7 +474,7 @@ class Stage3DM(LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            pin_memory=False,
+            pin_memory=True,
             drop_last=True,
             persistent_workers=True if self.args.num_workers > 0 else False,
             collate_fn=DataCollater(
@@ -485,7 +494,7 @@ class Stage3DM(LightningDataModule):
             batch_size=self.inference_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            pin_memory=False,
+            pin_memory=True,
             drop_last=False,
             persistent_workers=True if self.args.num_workers > 0 else False,
             collate_fn=DataCollater(
@@ -505,7 +514,7 @@ class Stage3DM(LightningDataModule):
             batch_size=self.inference_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            pin_memory=False,
+            pin_memory=True,
             drop_last=False,
             persistent_workers=True if self.args.num_workers > 0 else False,
             collate_fn=DataCollater(
@@ -999,6 +1008,7 @@ class PackedData(Data):
             return getattr(self, f"{prefix}x.size")(0)
         return super().__inc__(key, value, *args, **kwargs)
 
+
 # Initialize with the data_list from ConcatDataset
 class Mol_LLM_Dataset(InMemoryDataset):
     def __init__(
@@ -1036,7 +1046,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             f"loaded dataset {self.processed_file_names}| data length: {len(self._data.input_ids)}"
         )
 
-        if mode == 'test':
+        if mode == "test":
             self.task_subtask_name_pairs = list(set(self.data.task_subtask_pair))
 
         self.set_data_indices()
