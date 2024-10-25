@@ -6,7 +6,7 @@ init-env:
 
 	pip install git+https://github.com/thunlp/OpenDelta.git
 	pip install rouge_score nltk ogb peft rdkit salesforce-lavis selfies deepchem Levenshtein evaluate memory_profiler
-	pip install -U transformers==4.40.1 pytorch-lightning
+	pip install -U transformers==4.44.2 pytorch-lightning
 	pip install transformers --upgrade
 	pip install deepspeed
 	pip install torch_geometric
