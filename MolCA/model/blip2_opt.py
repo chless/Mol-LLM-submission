@@ -218,8 +218,10 @@ class Blip2OPT(Blip2Base):
 
     def add_special_token(self):
         # pad toekn for galactica is "<pad>""
-        self.llm_tokenizer.add_special_tokens({"pad_token": "<pad>"})
-        self.llm_tokenizer.add_special_tokens({"eos_token": "\n"})
+        if not self.llm_tokenizer.pad_token:
+            self.llm_tokenizer.add_special_tokens({"pad_token": "<pad>"})
+        if not self.llm_tokenizer.eos_token:
+            self.llm_tokenizer.add_special_tokens({"eos_token": "\n"})
 
     def add_necessary_tokens(self):
         self.add_special_token()
