@@ -263,6 +263,8 @@ class DataCollater:
     def __call__(self, batch):
         target_texts = [instance.target_text for instance in batch]
         input_texts = [instance.input_text for instance in batch]
+        self.tokenizer.padding_side = "left"
+        
         if self.mode == "eval":
             prompt_texts = [instance.prompt_text for instance in batch]
             prompt_tokens = self.tokenizer(
@@ -291,7 +293,6 @@ class DataCollater:
         if isinstance(batch, PairData):
             batch.additional_batch = additional_batch
 
-        self.tokenizer.padding_side = "right"
         input_tokens = self.tokenizer(
             text=input_texts,
             truncation=self.truncation,
