@@ -330,7 +330,7 @@ class Blip2Stage3(pl.LightningModule):
         }
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
-        graphs, prompt_tokens, target_tokens = batch
+        graphs, input_tokens, target_tokens, prompt_tokens = batch
 
         samples = {"graphs": graphs, "input_tokens": prompt_tokens}
         outputs = self.blip2model.generate(
@@ -367,7 +367,8 @@ class Blip2Stage3(pl.LightningModule):
         self.list_logs["prompts"].extend(prompts)
 
         batch_size = prompt_tokens.input_ids.shape[0]
-        outputs = self.blip2model(batch)  # omit tasks when inputting to the model
+        # TODO: IMPORTANT! this loss calculateion should be fixed, with the change of data collater in eval mode
+        outputs = self.blip2model(batch[:-1])
         ##============== Overall Loss ===================##
 
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
@@ -500,9 +501,11 @@ class Blip2Stage3(pl.LightningModule):
                 torch.zeros_like(gathered_flattened_metric_tensors[:, :, 1]),
                 gathered_flattened_metric_tensors[:, :, 1],
             ).sum(dim=0)
+            total_instance_count_include_nan = gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)
         else:
             summed_flattened_metric_tensors = flattened_metric_tensors[:, 0]
             total_instance_count = flattened_metric_tensors[:, 1]
+            total_instance_count_include_nan = total_instance_count
 
         # if total_instance_count is 0, set the metric to null value
         averaged_flattened_metric_tensors = torch.where(
@@ -517,7 +520,7 @@ class Blip2Stage3(pl.LightningModule):
         )
         for i, key in enumerate(flattened_metric_keys):
             print(
-                f"{key}: {averaged_flattened_metric_tensors[i]} | num_instance: {gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)[i]}"
+                f"{key}: {averaged_flattened_metric_tensors[i]} | total #: {total_instance_count[i]} | total raw #: {total_instance_count_include_nan[i]}"
             )
             self.log(
                 key,

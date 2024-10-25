@@ -218,8 +218,12 @@ class Blip2OPT(Blip2Base):
 
     def add_special_token(self):
         # pad toekn for galactica is "<pad>""
-        self.llm_tokenizer.add_special_tokens({"pad_token": "<pad>"})
-        self.llm_tokenizer.add_special_tokens({"eos_token": "\n"})
+        if not self.llm_tokenizer.pad_token:
+            self.llm_tokenizer.add_special_tokens({"pad_token": "<pad>"})
+        # <DEBUG>
+        if not self.llm_tokenizer.eos_token:
+            self.llm_tokenizer.add_special_tokens({"eos_token": "\n"})
+        #self.llm_tokenizer.add_special_tokens({"eos_token": "\n"})
 
     def add_necessary_tokens(self):
         self.add_special_token()
@@ -372,6 +376,26 @@ class Blip2OPT(Blip2Base):
             "logits": outputs.logits,
         }
         return results
+    
+    def debug_pred(self, logits, targets):
+        max_logits = logits.argmax(dim=-1)
+        target_masks = targets != -100
+        predictions = []
+        labels = []
+        for i in range(max_logits.shape[0]):
+            max_logit = max_logits[i]
+            target = targets[i]
+            target_mask = target_masks[i]
+
+            #prediction = self.llm_tokenizer.decode(max_logit)
+            #label = self.llm_tokenizer.decode(target)
+
+            prediction = self.llm_tokenizer.decode(max_logit[target_mask])
+            label = self.llm_tokenizer.decode(target[target_mask])
+            predictions.append(prediction)
+            labels.append(label)
+        return predictions, labels
+
 
     def inject_graph_embeds2input_embeds(self, input_embeds, input_tokens, graphs):
         if "additional_x" in graphs.keys():

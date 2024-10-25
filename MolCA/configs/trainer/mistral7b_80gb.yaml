@@ -26,13 +26,14 @@ strategy_name: null
 accelerator: gpu
 devices: "0,1,2,3,4,5,6,7"
 precision: bf16-mixed
-max_steps: 1000000
+max_steps: -1
+max_epochs: 3
 second_stage_start_step: 1000
-every_n_train_steps: 200
+every_n_train_steps: 100
 task: null
 save_top_k: 10
 logging_dir: "/home/chanhui-lee/text-mol/MolCA/all_checkpoints/"
-llava_style: 1
+llava_style: 0
 num_workers: 0
 skip_sanity_check: false
 
