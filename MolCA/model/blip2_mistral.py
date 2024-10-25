@@ -26,6 +26,7 @@ def mask_by_len(input, lens, fill_value=0):
 from torch.nn import CrossEntropyLoss
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.utils import replace_return_docstrings
+from transformers import AutoModelForCausalLM
 
 from typing import Optional, List, Tuple, Union
 
@@ -79,7 +80,6 @@ class Blip2Mistral(Blip2OPT):
         self.system_prompt = "You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation."
 
     def set_llm_model(self, llm_model):
-
         self.llm_model = MistralForCausalLM_custom.from_pretrained(
             llm_model, torch_dtype=torch.bfloat16
         )
@@ -136,7 +136,9 @@ logger = logging.get_logger(__name__)
 class MistralForCausalLM_custom(MistralForCausalLM):
     def __init__(self, config):
         super().__init__(config)
-        self.model = MistralModel_sequence_packing(config)
+        # <DEBUG>
+        #self.model = MistralModel_sequence_packing(config)
+        self.model = MistralModel(config)
 
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(
