@@ -48,7 +48,7 @@ inference_max_length: 512
 gen_max_len: 256
 min_len: 8
 
-apply_sequence_packing: false
+apply_sequence_packing: true
 max_packing_size: -1
 
 weight_decay: 0.05
