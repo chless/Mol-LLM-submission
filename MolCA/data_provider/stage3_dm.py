@@ -262,10 +262,18 @@ class DataCollater:
 
     def __call__(self, batch):
         target_texts = [instance.target_text for instance in batch]
+        input_texts = [instance.input_text for instance in batch]
         if self.mode == "eval":
-            input_texts = [instance.prompt_text for instance in batch]
-        else:
-            input_texts = [instance.input_text for instance in batch]
+            prompt_texts = [instance.prompt_text for instance in batch]
+            prompt_tokens = self.tokenizer(
+                text=prompt_texts,
+                truncation=self.truncation,
+                padding=self.padding,
+                add_special_tokens=False,
+                max_length=self.max_length,
+                return_tensors="pt",
+                return_attention_mask=True,
+            )
 
         if isinstance(batch[0], PairData):
             additional_batch = torch.tensor([], dtype=torch.int64)
@@ -304,6 +312,8 @@ class DataCollater:
             )
             input_tokens["attention_mask"] = input_attention_mask
 
+        # TODO: reduce duplicated tokenization
+        # use input_len and pad_token_id
         target_tokens = self.tokenizer(
             text=target_texts,
             truncation=self.truncation,
@@ -313,7 +323,11 @@ class DataCollater:
             return_tensors="pt",
             return_attention_mask=True,
         )
-        return batch, input_tokens, target_tokens
+                
+        if self.mode == "eval":
+            return batch, input_tokens, target_tokens, prompt_tokens
+        else:
+            return batch, input_tokens, target_tokens
 
 
 def get_attention_mask_for_packed_sequence(x, eos_token_id, include_eos: bool = True):
