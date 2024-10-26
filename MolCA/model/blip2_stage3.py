@@ -7,21 +7,15 @@ from model.blip2_mistral import Blip2Mistral
 from model.blip2_t5 import Blip2T5
 import pytorch_lightning as pl
 from torch import optim
-from lavis.common.optims import (
-    LinearWarmupCosineLRScheduler,
-    LinearWarmupStepLRScheduler,
-)
-from transformers import AdamW, get_cosine_schedule_with_warmup
+from model.scheduler import LinearWarmupCosineLRScheduler, LinearWarmupStepLRScheduler
+from transformers import get_cosine_schedule_with_warmup
 import json
-import torch.distributed as dist
-from peft import LoraConfig, TaskType
 from model.help_funcs import (
     task_specifically_evaluate,
     AttrDict,
     convert_logit2binary_prob,
 )
 from transformers import Adafactor
-import ast
 import json
 from data_provider.stage3_dm import (
     TOTAL_BENCHMARKS,
@@ -138,22 +132,26 @@ class Blip2Stage3(pl.LightningModule):
             self.scheduler = None
         else:
             self.trainer.fit_loop.setup_data()
-            warmup_steps = min(
-                len(self.trainer.train_dataloader), self.args.warmup_steps
-            )
             optimizer = optim.AdamW(
                 self.parameters(),
                 lr=self.args.init_lr,
                 weight_decay=self.args.weight_decay,
             )
+
+            steps_per_epoch = len(self.trainer.train_dataloader)
+            max_step = self.args.max_epochs * steps_per_epoch
+            warmup_steps = max(0, int(max_step / 20))
+            # get total training steps
+            num_total_steps = self.trainer.max_steps
+
             if self.args.scheduler == "linear_warmup_cosine_lr":
                 self.scheduler = LinearWarmupCosineLRScheduler(
-                    optimizer,
-                    self.args.max_epochs,
-                    self.args.min_lr,
-                    self.args.init_lr,
-                    warmup_steps,
-                    self.args.warmup_lr,
+                    optimizer=optimizer,
+                    max_step=max_step,
+                    min_lr=self.args.min_lr,
+                    init_lr=self.args.init_lr,
+                    warmup_steps=warmup_steps,
+                    warmup_start_lr=self.args.warmup_lr,
                 )
             elif self.args.scheduler == "linear_warmup_step_lr":
                 self.scheduler = LinearWarmupStepLRScheduler(
@@ -164,15 +162,6 @@ class Blip2Stage3(pl.LightningModule):
                     self.args.lr_decay_rate,
                     self.args.warmup_lr,
                     warmup_steps,
-                )
-            
-            elif self.args.scheduler == "cosine":
-                # get_cosine_schedule_with_warmup
-                steps_per_epoch = len(self.trainer.train_dataloader)
-                self.scheduler = get_cosine_schedule_with_warmup(
-                    optimizer,
-                    num_warmup_steps=self.args.warmup_steps,
-                    num_training_steps=self.args.max_epochs * steps_per_epoch,
                 )
             elif self.args.scheduler == "None":
                 self.scheduler = None
@@ -240,7 +229,7 @@ class Blip2Stage3(pl.LightningModule):
             self.apply_separated_stage()
 
         if self.scheduler:
-            self.scheduler.step(self.trainer.current_epoch)
+            self.scheduler.step(cur_step=self.trainer.global_step)
 
         batch_size = self.args.batch_size
 
