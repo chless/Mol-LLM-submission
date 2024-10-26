@@ -259,10 +259,25 @@ class DataCollater:
         self.padding = padding
         self.mode = mode
         self.apply_sequence_packing = apply_sequence_packing
+        self.tokenizer_name = self.tokenizer.__class__.__name__
 
     def __call__(self, batch):
-        target_texts = [instance.target_text for instance in batch]
-        input_texts = [instance.input_text for instance in batch]
+        #target_texts = [instance.target_text for instance in batch]
+        #input_texts = [instance.input_text for instance in batch]
+
+        # <DEBUG>
+        target_texts = []
+        input_texts = []
+        for instance in batch:
+            target_text = instance.target_text
+            input_text = instance.input_text
+            if "Llama" in self.tokenizer_name:
+                target_text = re.sub(r"\n$", self.tokenizer.eos_token, target_text)
+                input_text = re.sub(r"\n$", self.tokenizer.eos_token, input_text)
+
+            target_texts.append(target_text)
+            input_texts.append(input_text)
+
         self.tokenizer.padding_side = "left"
         
         if self.mode == "eval":
