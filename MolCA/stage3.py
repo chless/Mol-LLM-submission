@@ -47,16 +47,7 @@ def main(cfg):
     cfg = flatten_dictconfig(cfg)
     pl.seed_everything(cfg.seed)
 
-    model = Blip2Stage3
-
-    # decide model initialization
-    if cfg.stage2_path:
-        model = model(cfg)
-        ckpt = torch.load(cfg.stage2_path, map_location="cpu")
-        model.load_state_dict(ckpt["state_dict"], strict=False)
-        print(f"loaded stage2 model from {cfg.stage2_path}")
-    else:
-        model = model(cfg)
+    model = Blip2Stage3(cfg)
 
     print("total params:", sum(p.numel() for p in model.parameters()))
 
@@ -134,11 +125,10 @@ def main(cfg):
     if cfg.mode in {"pretrain", "ft", "multi_task"}:
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         outputs = trainer.test(model, datamodule=dm)
-
-    elif cfg.mode == "eval":
-        trainer.fit_loop.epoch_progress.current.completed = cfg.caption_eval_epoch - 1
-        trainer.validate(model, datamodule=dm)
     elif cfg.mode == "test":
+        ckpt = torch.load(cfg.ckpt_path, map_location="cpu")
+        model.load_state_dict(ckpt["state_dict"], strict=False)
+        print(f"loaded stage2 model from {cfg.ckpt_path}")
         outputs = trainer.test(model, datamodule=dm)
     else:
         raise NotImplementedError()
