@@ -514,7 +514,7 @@ def classification_evaluate(predictions, targets, probs):
             ].numpy(),  # Use y_score here because roc_auc_score expects probability scores
         )
     except:
-        roc_auc = -1.0
+        roc_auc = float("nan")
 
     evaluation_results = {
         "accuracy": acc,
