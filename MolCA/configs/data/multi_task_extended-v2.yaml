@@ -28,6 +28,13 @@ target_benchmarks:
   - chebi-20-text2mol
   - chebi-20-mol2text
 
+ignore_eval:
+  - smol-name_conversion-s2f
+  - smol-name_conversion-s2i
+  - smol-name_conversion-i2s
+  - smol-name_conversion-i2f
+  - qm9_additional_label
+
 duplication_check_train:
  - smol-forward_synthesis
  - smol-retrosynthesis

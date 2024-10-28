@@ -1393,8 +1393,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
             task, subtask_idx = self.task_subtask_pairs[i]
             # data leakage check: not use val, test set of the tasks subject to duplication check
             if (
-                hasattr(self.args, "duplication_check_train")
-                and task in self.args.duplication_check_train
+                hasattr(self.args, "ignore_eval")
+                and task in self.args.ignore_eval
                 and self.split in ["val", "test"]
             ):
                 continue
