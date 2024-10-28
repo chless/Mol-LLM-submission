@@ -480,15 +480,15 @@ class Blip2Stage3(pl.LightningModule):
         ), f"flattened_metric_tensors.shape[0]: {flattened_metric_tensors.shape[0]}, len(flattened_metric_keys): {len(flattened_metric_keys)}"
         if self.trainer.world_size > 1:
             print("gather the metrics across devices")
-            gathered_flattened_metric_tensors = self.all_gather(
+            raw_gathered_flattened_metric_tensors = self.all_gather(
                 flattened_metric_tensors
             )  # [world_size, num_metrics, metric_value * per_device_instance_count, per_device_instance_count]
 
             # get rid of nan values (nan )
             gathered_flattened_metric_tensors = torch.where(
-                torch.isnan(gathered_flattened_metric_tensors),
-                torch.zeros_like(gathered_flattened_metric_tensors),
-                gathered_flattened_metric_tensors,
+                torch.isnan(raw_gathered_flattened_metric_tensors),
+                torch.zeros_like(raw_gathered_flattened_metric_tensors),
+                raw_gathered_flattened_metric_tensors,
             )
             scaled_flattened_metric_tensors = gathered_flattened_metric_tensors[
                 :, :, 0
