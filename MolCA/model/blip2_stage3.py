@@ -490,7 +490,7 @@ class Blip2Stage3(pl.LightningModule):
                 torch.zeros_like(gathered_flattened_metric_tensors),
                 gathered_flattened_metric_tensors,
             )
-            summed_flattened_metric_tensors = gathered_flattened_metric_tensors[
+            scaled_flattened_metric_tensors = gathered_flattened_metric_tensors[
                 :, :, 0
             ].sum(dim=0)
 
@@ -502,14 +502,14 @@ class Blip2Stage3(pl.LightningModule):
             ).sum(dim=0)
             total_instance_count_include_nan = gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)
         else:
-            summed_flattened_metric_tensors = flattened_metric_tensors[:, 0]
+            scaled_flattened_metric_tensors = flattened_metric_tensors[:, 0]
             total_instance_count = flattened_metric_tensors[:, 1]
             total_instance_count_include_nan = total_instance_count
 
         # if total_instance_count is 0, set the metric to null value
         averaged_flattened_metric_tensors = torch.where(
             total_instance_count > 0,
-            summed_flattened_metric_tensors / total_instance_count,
+            scaled_flattened_metric_tensors / total_instance_count,
             torch.tensor(float("nan"), device=self.device),
         )
 
