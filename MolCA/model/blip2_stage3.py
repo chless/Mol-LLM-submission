@@ -478,6 +478,13 @@ class Blip2Stage3(pl.LightningModule):
         assert flattened_metric_tensors.shape[0] == len(
             flattened_metric_keys
         ), f"flattened_metric_tensors.shape[0]: {flattened_metric_tensors.shape[0]}, len(flattened_metric_keys): {len(flattened_metric_keys)}"
+        # prepare idx to sort the flattened_metric_keys in alphabetical order
+        indexed_flattened_metric_keys = list(enumerate(flattened_metric_keys))
+        # get indices to sort the flattened_metric_keys in alphabetical order
+        sorted_idx = [idx for idx, key in sorted(indexed_flattened_metric_keys, key=lambda x: x[1])]
+        flattened_metric_keys = [flattened_metric_keys[idx] for idx in sorted_idx]
+        flattened_metric_tensors = flattened_metric_tensors[sorted_idx]
+        
         if self.trainer.world_size > 1:
             print("gather the metrics across devices")
             raw_gathered_flattened_metric_tensors = self.all_gather(
