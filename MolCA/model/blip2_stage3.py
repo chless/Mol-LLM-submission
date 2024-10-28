@@ -455,13 +455,14 @@ class Blip2Stage3(pl.LightningModule):
             size=(self.num_per_device_cls, 4), device=self.device, dtype=torch.float
         )
         non_zero_count = 0
+        cls_idx = 0
         for i in range(len(self.list_logs['tasks'])):
             task_subtask_pair = self.list_logs['tasks'][i]
             if task_subtask_pair in self.cls_task_subtask_name_pair_dict.keys():
                 probs = self.list_logs['probs'][i]
                 label = int("True" in self.list_logs['targets'][i] or "true" in self.list_logs['targets'][i])
                 pair_ids = self.cls_task_subtask_name_pair_dict[task_subtask_pair]
-                self.per_device_cls_tensor[i] = torch.tensor(
+                self.per_device_cls_tensor[cls_idx] = torch.tensor(
                     [probs[0], probs[1], pair_ids, label], device=self.device, dtype=torch.float
                 )
                 non_zero_count += 1
