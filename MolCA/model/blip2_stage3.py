@@ -450,7 +450,7 @@ class Blip2Stage3(pl.LightningModule):
             idx: task_subtask_pair
             for task_subtask_pair, idx in self.cls_task_subtask_name_pair_dict.items()
         }
-        self.num_per_device_cls = 4000
+        self.num_per_device_cls = 10000
         self.per_device_cls_tensor = torch.zeros(
             size=(self.num_per_device_cls, 4), device=self.device, dtype=torch.float
         )
