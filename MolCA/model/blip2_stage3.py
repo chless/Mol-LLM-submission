@@ -574,38 +574,49 @@ class Blip2Stage3(pl.LightningModule):
         )
         
         # convert classification_evaluation_result to flattened_metric_keys and flattened_metric_tensors
+        cls_flattened_metric_keys = []
+        cls_flattented_metric_tensors = torch.empty(size=(0, 1), device=self.device)
         for task_subtask_pair in classification_evaluation_result:
             for metric in classification_evaluation_result[task_subtask_pair]:
-                flattened_metric_keys.append(f"{mode}/{task_subtask_pair}/{metric}")
+                cls_flattened_metric_keys.append(f"{mode}/{task_subtask_pair}/{metric}")
                 metric_value = classification_evaluation_result[task_subtask_pair][metric]
-                num_instance = classification_evaluation_result[task_subtask_pair]["num_instances"]
-                metric_count_pair = [metric_value * num_instance, num_instance]
 
-                flattened_metric_tensors = torch.cat(
+                cls_flattented_metric_tensors = torch.cat(
                     [
-                        flattened_metric_tensors,
+                        cls_flattented_metric_tensors,
                         torch.tensor(
-                            metric_count_pair,
+                            [metric_value],
                             device=self.device,
                         ).unsqueeze(0),
                     ],
                     dim=0,
                 )
+        cls_flattented_metric_tensors = cls_flattented_metric_tensors.squeeze(-1)
+        flattened_metric_keys += cls_flattened_metric_keys
+        averaged_flattened_metric_tensors = torch.cat(
+            [averaged_flattened_metric_tensors, cls_flattented_metric_tensors], dim=0
+        )
         
 
-        print(averaged_flattened_metric_tensors)
+        # sort flattened_metric_keys in alphabetical order
+        indexed_flattened_metric_keys = list(enumerate(flattened_metric_keys))
+        # get indices to sort the flattened_metric_keys in alphabetical order
+        sorted_idx = [idx for idx, key in sorted(indexed_flattened_metric_keys, key=lambda x: x[1])]
+        flattened_metric_keys = [flattened_metric_keys[idx] for idx in sorted_idx]
+        averaged_flattened_metric_tensors = averaged_flattened_metric_tensors[sorted_idx]
         print(
             "============================== Evaluation Results =============================="
         )
         for i, key in enumerate(flattened_metric_keys):
+            if "num_instances" in key: # num_instance here is actually mean of quadratic of num_instance
+                continue
             print(
-                f"{key}: {averaged_flattened_metric_tensors[i]} | total #: {total_instance_count[i]} | total raw #: {total_instance_count_include_nan[i]}"
+                f"{key}: {averaged_flattened_metric_tensors[i]} "
             )
             self.log(
                 key,
                 averaged_flattened_metric_tensors[i],
                 sync_dist=False,
-                batch_size=int(total_instance_count[i]),
                 rank_zero_only=True,
             )
         print(
