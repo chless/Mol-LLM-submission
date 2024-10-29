@@ -140,8 +140,7 @@ class Blip2Stage3(pl.LightningModule):
             )
 
             steps_per_epoch = len(self.trainer.train_dataloader)
-            max_step = self.args.max_epochs * steps_per_epoch
-            warmup_steps = max(0, int(max_step / 20))
+            max_step = self.args.max_epochs * steps_per_epoch / self.args.accumulate_grad_batches
             # get total training steps
             num_total_steps = self.trainer.max_steps
 
@@ -151,7 +150,7 @@ class Blip2Stage3(pl.LightningModule):
                     max_step=max_step,
                     min_lr=self.args.min_lr,
                     init_lr=self.args.init_lr,
-                    warmup_steps=warmup_steps,
+                    warmup_steps=self.args.warmup_steps,
                     warmup_start_lr=self.args.warmup_lr,
                 )
             elif self.args.scheduler == "linear_warmup_step_lr":
@@ -162,7 +161,7 @@ class Blip2Stage3(pl.LightningModule):
                     self.args.init_lr,
                     self.args.lr_decay_rate,
                     self.args.warmup_lr,
-                    warmup_steps,
+                    self.args.warmup_steps,
                 )
             elif self.args.scheduler == "None":
                 self.scheduler = None
