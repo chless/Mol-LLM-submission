@@ -140,7 +140,7 @@ class Blip2Stage3(pl.LightningModule):
             )
 
             steps_per_epoch = len(self.trainer.train_dataloader)
-            max_step = self.args.max_epochs * steps_per_epoch / self.args.accumulate_grad_batches
+            max_step = int(self.args.max_epochs * steps_per_epoch / self.args.accumulate_grad_batches)
             # get total training steps
             num_total_steps = self.trainer.max_steps
 
