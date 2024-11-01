@@ -7,20 +7,15 @@ from model.blip2_mistral import Blip2Mistral
 from model.blip2_t5 import Blip2T5
 import pytorch_lightning as pl
 from torch import optim
-from lavis.common.optims import (
-    LinearWarmupCosineLRScheduler,
-    LinearWarmupStepLRScheduler,
-)
+from model.scheduler import LinearWarmupCosineLRScheduler, LinearWarmupStepLRScheduler
 import json
-import torch.distributed as dist
-from peft import LoraConfig, TaskType
 from model.help_funcs import (
-    task_specifically_evaluate,
+    per_device_evaluate,
+    total_device_evaluate,
     AttrDict,
     convert_logit2binary_prob,
 )
 from transformers import Adafactor
-import ast
 import json
 from data_provider.stage3_dm import (
     TOTAL_BENCHMARKS,
@@ -137,22 +132,29 @@ class Blip2Stage3(pl.LightningModule):
             self.scheduler = None
         else:
             self.trainer.fit_loop.setup_data()
-            warmup_steps = min(
-                len(self.trainer.train_dataloader), self.args.warmup_steps
-            )
             optimizer = optim.AdamW(
                 self.parameters(),
                 lr=self.args.init_lr,
                 weight_decay=self.args.weight_decay,
             )
+
+            steps_per_epoch = len(self.trainer.train_dataloader)
+            max_step = int(
+                self.args.max_epochs
+                * steps_per_epoch
+                / self.args.accumulate_grad_batches
+            )
+            # get total training steps
+            num_total_steps = self.trainer.max_steps
+
             if self.args.scheduler == "linear_warmup_cosine_lr":
                 self.scheduler = LinearWarmupCosineLRScheduler(
-                    optimizer,
-                    self.args.max_epochs,
-                    self.args.min_lr,
-                    self.args.init_lr,
-                    warmup_steps,
-                    self.args.warmup_lr,
+                    optimizer=optimizer,
+                    max_step=max_step,
+                    min_lr=self.args.min_lr,
+                    init_lr=self.args.init_lr,
+                    warmup_steps=self.args.warmup_steps,
+                    warmup_start_lr=self.args.warmup_lr,
                 )
             elif self.args.scheduler == "linear_warmup_step_lr":
                 self.scheduler = LinearWarmupStepLRScheduler(
@@ -162,7 +164,7 @@ class Blip2Stage3(pl.LightningModule):
                     self.args.init_lr,
                     self.args.lr_decay_rate,
                     self.args.warmup_lr,
-                    warmup_steps,
+                    self.args.warmup_steps,
                 )
             elif self.args.scheduler == "None":
                 self.scheduler = None
@@ -230,7 +232,7 @@ class Blip2Stage3(pl.LightningModule):
             self.apply_separated_stage()
 
         if self.scheduler:
-            self.scheduler.step(self.trainer.current_epoch, self.trainer.global_step)
+            self.scheduler.step(cur_step=self.trainer.global_step)
 
         batch_size = self.args.batch_size
 
@@ -357,9 +359,6 @@ class Blip2Stage3(pl.LightningModule):
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
         ]
 
-        # TODO: calculate evaluation metric incide a process, and average using count from task_subtask_pair
-        # TODO: save predictions incide a process asynchrously
-
         self.list_logs["predictions"].extend(predictions)
         self.list_logs["targets"].extend(targets)
         self.list_logs["tasks"].extend(tasks)
@@ -397,12 +396,11 @@ class Blip2Stage3(pl.LightningModule):
     def on_evaluation_epoch_end(self, mode="val") -> None:
         print(f"\nDevice {self.device} on_evaluation_epoch_end start")
 
-        evaluation_results, failed_cases = task_specifically_evaluate(
+        evaluation_results, failed_cases = per_device_evaluate(
             predictions=self.list_logs["predictions"],
             targets=self.list_logs["targets"],
             tasks=self.list_logs["tasks"],
             prompts=self.list_logs["prompts"],
-            probs=self.list_logs["probs"],
             tokenizer=self.blip2model.llm_tokenizer,
             total_task_subtask_pairs=self.task_subtask_name_pairs,
         )
@@ -437,6 +435,48 @@ class Blip2Stage3(pl.LightningModule):
             sync_dist=True,
             batch_size=self.total_seen_data_size,
         )
+
+        # evaluate classification tasks
+        self.cls_task_subtask_name_pair = [
+            task_subtask_pair
+            for task_subtask_pair in self.task_subtask_name_pairs
+            if task_subtask_pair.split("/")[0] in CLASSIFICATION_BENCHMARKS
+        ]
+        # sort classification task_subtask_name_pairs in alphabetical order
+        self.cls_task_subtask_name_pair.sort()
+        self.cls_task_subtask_name_pair_dict = {
+            task_subtask_pair: idx
+            for idx, task_subtask_pair in enumerate(self.cls_task_subtask_name_pair)
+        }
+        # get inverse of self.cls_task_subtask_name_pair_dict
+        self.cls_task_subtask_name_pair_dict_inv = {
+            idx: task_subtask_pair
+            for task_subtask_pair, idx in self.cls_task_subtask_name_pair_dict.items()
+        }
+        self.num_per_device_cls = 10000
+        self.per_device_cls_tensor = torch.zeros(
+            size=(self.num_per_device_cls, 4), device=self.device, dtype=torch.float
+        )
+        non_zero_count = 0
+        cls_idx = 0
+        for i in range(len(self.list_logs["tasks"])):
+            task_subtask_pair = self.list_logs["tasks"][i]
+            if task_subtask_pair in self.cls_task_subtask_name_pair_dict.keys():
+                probs = self.list_logs["probs"][i]
+                label = int(
+                    "True" in self.list_logs["targets"][i]
+                    or "true" in self.list_logs["targets"][i]
+                )
+                pair_ids = self.cls_task_subtask_name_pair_dict[task_subtask_pair]
+                self.per_device_cls_tensor[cls_idx] = torch.tensor(
+                    [probs[0], probs[1], pair_ids, label],
+                    device=self.device,
+                    dtype=torch.float,
+                )
+                non_zero_count += 1
+                cls_idx += 1
+
+        # evaluate the other tasks
         flattened_metric_keys = []
         flattened_metric_tensors = torch.empty(size=(0, 2), device=self.device)
 
@@ -479,19 +519,29 @@ class Blip2Stage3(pl.LightningModule):
         assert flattened_metric_tensors.shape[0] == len(
             flattened_metric_keys
         ), f"flattened_metric_tensors.shape[0]: {flattened_metric_tensors.shape[0]}, len(flattened_metric_keys): {len(flattened_metric_keys)}"
+        # prepare idx to sort the flattened_metric_keys in alphabetical order
+        indexed_flattened_metric_keys = list(enumerate(flattened_metric_keys))
+        # get indices to sort the flattened_metric_keys in alphabetical order
+        sorted_idx = [
+            idx
+            for idx, key in sorted(indexed_flattened_metric_keys, key=lambda x: x[1])
+        ]
+        flattened_metric_keys = [flattened_metric_keys[idx] for idx in sorted_idx]
+        flattened_metric_tensors = flattened_metric_tensors[sorted_idx]
+
         if self.trainer.world_size > 1:
             print("gather the metrics across devices")
-            gathered_flattened_metric_tensors = self.all_gather(
+            raw_gathered_flattened_metric_tensors = self.all_gather(
                 flattened_metric_tensors
             )  # [world_size, num_metrics, metric_value * per_device_instance_count, per_device_instance_count]
 
             # get rid of nan values (nan )
             gathered_flattened_metric_tensors = torch.where(
-                torch.isnan(gathered_flattened_metric_tensors),
-                torch.zeros_like(gathered_flattened_metric_tensors),
-                gathered_flattened_metric_tensors,
+                torch.isnan(raw_gathered_flattened_metric_tensors),
+                torch.zeros_like(raw_gathered_flattened_metric_tensors),
+                raw_gathered_flattened_metric_tensors,
             )
-            summed_flattened_metric_tensors = gathered_flattened_metric_tensors[
+            scaled_flattened_metric_tensors = gathered_flattened_metric_tensors[
                 :, :, 0
             ].sum(dim=0)
 
@@ -501,32 +551,96 @@ class Blip2Stage3(pl.LightningModule):
                 torch.zeros_like(gathered_flattened_metric_tensors[:, :, 1]),
                 gathered_flattened_metric_tensors[:, :, 1],
             ).sum(dim=0)
-            total_instance_count_include_nan = gathered_flattened_metric_tensors[:, :, 1].sum(dim=0)
+            total_instance_count_include_nan = gathered_flattened_metric_tensors[
+                :, :, 1
+            ].sum(dim=0)
+
+            gathered_cls_tensor = self.all_gather(self.per_device_cls_tensor)
+            uniform_cls_tensor = torch.cat(
+                [cls_tensor for cls_tensor in gathered_cls_tensor], dim=0
+            )
         else:
-            summed_flattened_metric_tensors = flattened_metric_tensors[:, 0]
+            scaled_flattened_metric_tensors = flattened_metric_tensors[:, 0]
             total_instance_count = flattened_metric_tensors[:, 1]
             total_instance_count_include_nan = total_instance_count
+
+            uniform_cls_tensor = self.per_device_cls_tensor
 
         # if total_instance_count is 0, set the metric to null value
         averaged_flattened_metric_tensors = torch.where(
             total_instance_count > 0,
-            summed_flattened_metric_tensors / total_instance_count,
+            scaled_flattened_metric_tensors / total_instance_count,
             torch.tensor(float("nan"), device=self.device),
         )
 
-        print(averaged_flattened_metric_tensors)
+        # evaluate classification tasks
+        # get total_cls_tensor only where total_cls_tensor[:, :2].sum(-1) > 0
+        actual_cls_tensor = uniform_cls_tensor[uniform_cls_tensor[:, :2].sum(-1) > 0]
+
+        total_probs = actual_cls_tensor[:, :2].cpu()
+        total_labels = actual_cls_tensor[:, 3].cpu().to(torch.long)
+        tasks_subtask_idx = actual_cls_tensor[:, 2].to(torch.int32).tolist()
+        # get task names using self.cls_task_subtask_name_pair_dict_inv
+        total_tasks = [
+            self.cls_task_subtask_name_pair_dict_inv[idx] for idx in tasks_subtask_idx
+        ]
+        classification_evaluation_result = total_device_evaluate(
+            total_labels=total_labels,
+            total_probs=total_probs,
+            total_tasks=total_tasks,
+            classification_task_subtask_pairs=self.cls_task_subtask_name_pair,
+        )
+
+        # convert classification_evaluation_result to flattened_metric_keys and flattened_metric_tensors
+        cls_flattened_metric_keys = []
+        cls_flattented_metric_tensors = torch.empty(size=(0, 1), device=self.device)
+        for task_subtask_pair in classification_evaluation_result:
+            for metric in classification_evaluation_result[task_subtask_pair]:
+                cls_flattened_metric_keys.append(f"{mode}/{task_subtask_pair}/{metric}")
+                metric_value = classification_evaluation_result[task_subtask_pair][
+                    metric
+                ]
+
+                cls_flattented_metric_tensors = torch.cat(
+                    [
+                        cls_flattented_metric_tensors,
+                        torch.tensor(
+                            [metric_value],
+                            device=self.device,
+                        ).unsqueeze(0),
+                    ],
+                    dim=0,
+                )
+        cls_flattented_metric_tensors = cls_flattented_metric_tensors.squeeze(-1)
+        flattened_metric_keys += cls_flattened_metric_keys
+        averaged_flattened_metric_tensors = torch.cat(
+            [averaged_flattened_metric_tensors, cls_flattented_metric_tensors], dim=0
+        )
+
+        # sort flattened_metric_keys in alphabetical order
+        indexed_flattened_metric_keys = list(enumerate(flattened_metric_keys))
+        # get indices to sort the flattened_metric_keys in alphabetical order
+        sorted_idx = [
+            idx
+            for idx, key in sorted(indexed_flattened_metric_keys, key=lambda x: x[1])
+        ]
+        flattened_metric_keys = [flattened_metric_keys[idx] for idx in sorted_idx]
+        averaged_flattened_metric_tensors = averaged_flattened_metric_tensors[
+            sorted_idx
+        ]
         print(
             "============================== Evaluation Results =============================="
         )
         for i, key in enumerate(flattened_metric_keys):
-            print(
-                f"{key}: {averaged_flattened_metric_tensors[i]} | total #: {total_instance_count[i]} | total raw #: {total_instance_count_include_nan[i]}"
-            )
+            if (
+                "num_instances" in key
+            ):  # num_instance here is actually mean of quadratic of num_instance
+                continue
+            print(f"{key}: {averaged_flattened_metric_tensors[i]} ")
             self.log(
                 key,
                 averaged_flattened_metric_tensors[i],
                 sync_dist=False,
-                batch_size=int(total_instance_count[i]),
                 rank_zero_only=True,
             )
         print(
@@ -545,5 +659,15 @@ class Blip2Stage3(pl.LightningModule):
         # save result_dict in result_path
         with open(result_path, "w") as f:
             json.dump(result_dict, f, ensure_ascii=False, indent=4)
+
+        # save flattend_metric_keys
+        with open(
+            os.path.join(
+                self.logger.log_dir,
+                f"{mode}-step{self.global_step}-{self.global_rank}-keys.json",
+            ),
+            "w",
+        ) as f:
+            json.dump(flattened_metric_keys, f, ensure_ascii=False, indent=4)
 
         print(f"\nDevice {self.device} on_evaluation_epoch_end end")

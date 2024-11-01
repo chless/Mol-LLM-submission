@@ -55,14 +55,14 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
             ref = pattern["dual_side"].search(target).group()
         else:
             ref = pattern["left_side"].search(target).group()
-        ref_tokens = tokenizer.tokenize(ref, truncation=False, padding="longest")
+        ref_tokens = tokenizer.tokenize(ref, truncation=False)
 
         try:
             if pattern["dual_side"].search(prediction):
                 pred = pattern["dual_side"].search(prediction).group()
             else:
                 pred = pattern["left_side"].search(prediction).group()
-            pred_tokens = tokenizer.tokenize(pred, truncation=False, padding="longest")
+            pred_tokens = tokenizer.tokenize(pred, truncation=False)
 
             references.append([ref_tokens])
             hypotheses.append(pred_tokens)
@@ -184,19 +184,19 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
             levs.append(lev(target_canonical_smiles, prediction_canonical_smiles))
 
             pred_selfies = tokenizer.tokenize(
-                prediction_canonical_selfies, truncation=False, padding="longest"
+                prediction_canonical_selfies, truncation=False
             )
             pred_smiles = tokenizer.tokenize(
-                prediction_canonical_smiles, truncation=False, padding="longest"
+                prediction_canonical_smiles, truncation=False
             )
             pred_selfies_list.append(pred_selfies)
             pred_smiles_list.append(pred_smiles)
 
             ref_selfies = tokenizer.tokenize(
-                target_canonical_selfies, truncation=False, padding="longest"
+                target_canonical_selfies, truncation=False
             )
             ref_smiles = tokenizer.tokenize(
-                target_canonical_smiles, truncation=False, padding="longest"
+                target_canonical_smiles, truncation=False
             )
             ref_selfies_list.append([ref_selfies])
             ref_smiles_list.append([ref_smiles])
@@ -302,48 +302,45 @@ def pad_and_concat(tensor_list, fill_value=0):
     raise NotImplementedError()
 
 
-def get_task_specific_list(predictions, targets, tasks, probs, prompts):
+def get_task_specific_list(predictions, targets, tasks, prompts):
     unique_tasks = list(set(tasks))
     task_specific_predictions = {t: [] for t in unique_tasks}
     task_specific_targets = {t: [] for t in unique_tasks}
-    task_specific_probs = {t: [] for t in unique_tasks}
     task_specific_prompts = {t: [] for t in unique_tasks}
     for i, t in enumerate(tasks):
         task_specific_predictions[t].append(predictions[i])
         task_specific_targets[t].append(targets[i])
-        task_specific_probs[t].append(probs[i])
         task_specific_prompts[t].append(prompts[i])
     return (
         task_specific_predictions,
         task_specific_targets,
-        task_specific_probs,
         task_specific_prompts,
     )
 
 
-def task_specifically_evaluate(
-    predictions, targets, tasks, probs, prompts, tokenizer, total_task_subtask_pairs
+# correspond to all the tasks other than classification
+def per_device_evaluate(
+    predictions, targets, tasks, prompts, tokenizer, total_task_subtask_pairs
 ):
     # get unique items from all_tasks
     unique_tasks = list(set(tasks))
     # remove tasks_to_be_removed
     tasks_to_be_removed = [
-        "smol-name_conversion-i2f/smol-name_conversion-i2f",
-        "smol-name_conversion-s2f/smol-name_conversion-s2f",
-        "smol-name_conversion-i2s/smol-name_conversion-i2s",
-        "smol-name_conversion-s2i/smol-name_conversion-s2i",
-    ]
+        "smol-name_conversion-i2f",
+        "smol-name_conversion-s2f",
+        "smol-name_conversion-i2s",
+        "smol-name_conversion-s2i",
+    ] + CLASSIFICATION_BENCHMARKS
 
-    unique_tasks = [t for t in unique_tasks if t not in tasks_to_be_removed]
+    unique_tasks = [t for t in unique_tasks if t.split("/")[0] not in tasks_to_be_removed]
 
     evaluation_results = {task: dict() for task in unique_tasks}
 
     (
         task_specific_predictions,
         task_specific_targets,
-        task_specific_probs,
         task_specific_prompts,
-    ) = get_task_specific_list(predictions, targets, tasks, probs, prompts)
+    ) = get_task_specific_list(predictions, targets, tasks, prompts)
     failed_cases = {
         "predictions": [],
         "targets": [],
@@ -354,20 +351,12 @@ def task_specifically_evaluate(
     # initialize evaluation results for all tasks with null values
     # necessary to make uniform shape of evaluation results
     for t in total_task_subtask_pairs:
-        if t in tasks_to_be_removed:
+        if t.split("/")[0] in tasks_to_be_removed:
             continue
 
         task_name = t.split("/")[0]
         null_value = 0
-        if task_name in CLASSIFICATION_BENCHMARKS:
-            results = {
-                "accuracy": null_value,
-                "f1": null_value,
-                "precision": null_value,
-                "recall": null_value,
-                "roc_auc": null_value,
-            }
-        elif task_name in REGRESSION_BENCHMARKS:
+        if task_name in REGRESSION_BENCHMARKS:
             results = {
                 "mae": null_value,
                 "mse": null_value,
@@ -403,21 +392,15 @@ def task_specifically_evaluate(
         evaluation_results[t] = results
 
     for t in task_specific_predictions.keys():
-        if t in tasks_to_be_removed:
+        if t.split("/")[0] in tasks_to_be_removed:
             continue
 
         task_predictions = task_specific_predictions[t]
         task_targets = task_specific_targets[t]
-        task_probs = task_specific_probs[t]
         task_prompts = task_specific_prompts[t]
         task_name = t.split("/")[0]
-        if task_name in CLASSIFICATION_BENCHMARKS:
-            results = classification_evaluate(
-                predictions=task_predictions,
-                targets=task_targets,
-                probs=task_probs,
-            )
-        elif task_name in REGRESSION_BENCHMARKS:
+
+        if task_name in REGRESSION_BENCHMARKS:
             results, _failed_cases = regression_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
@@ -454,6 +437,84 @@ def task_specifically_evaluate(
 
     return evaluation_results, failed_cases
 
+def classification_evaluate(total_labels, total_probs):
+    total_preds = total_probs.argmax(dim=-1)
+
+    # Convert tensors to numpy arrays for use with scikit-learn metrics
+    total_preds_np = total_preds.numpy()
+    total_labels_np = total_labels.numpy()
+
+    # Calculate metrics
+    acc = accuracy_score(y_true=total_labels_np, y_pred=total_preds_np)
+    f1 = f1_score(y_true=total_labels_np, y_pred=total_preds_np)
+    prec = precision_score(y_true=total_labels_np, y_pred=total_preds_np)
+    rec = recall_score(y_true=total_labels_np, y_pred=total_preds_np)
+    try:
+        roc_auc = roc_auc_score(
+            y_true=total_labels_np,
+            y_score=total_probs[
+                :, 1
+            ].numpy(),  # Use y_score here because roc_auc_score expects probability scores
+        )
+    except:
+        roc_auc = float("nan")
+
+    evaluation_results = {
+        "accuracy": acc,
+        "f1": f1,
+        "precision": prec,
+        "recall": rec,
+        "roc_auc": roc_auc,
+    }
+    return evaluation_results
+
+# correspond to classification tasks
+def total_device_evaluate(
+    total_labels, total_tasks, total_probs, classification_task_subtask_pairs
+):
+    evaluation_results = {}
+    
+    # initialize evaluation results for classification tasks with null values
+    for t in classification_task_subtask_pairs:
+        task_name = t.split("/")[0]
+        null_value = float("nan")
+        results = {
+            "accuracy": null_value,
+            "f1": null_value,
+            "precision": null_value,
+            "recall": null_value,
+            "roc_auc": null_value,
+            "num_instances": 0,
+        }
+        evaluation_results[t] = results
+    
+    unique_tasks = list(set(total_tasks))
+    task_specific_labels = {t: [] for t in unique_tasks}
+    task_specific_probs = {t: [] for t in unique_tasks}
+    
+    for i, t in enumerate(total_tasks):
+        task_specific_labels[t].append(total_labels[i])
+        task_specific_probs[t].append(total_probs[i])
+
+    for t in task_specific_labels.keys():
+        task_probs = task_specific_probs[t]
+        task_probs = torch.stack(task_probs, dim=0)
+        task_labels = task_specific_labels[t]
+        task_labels = torch.stack(task_labels, dim=0)
+        task_name = t.split("/")[0]
+        if task_name in CLASSIFICATION_BENCHMARKS:
+            results = classification_evaluate(
+                total_probs=task_probs,
+                total_labels=task_labels,
+            )
+        else:
+            raise NotImplementedError("Task not implemented")
+        # update number of instances
+        results["num_instances"] = len(total_labels)
+        evaluation_results[t] = results
+
+    return evaluation_results
+
 
 from sklearn.metrics import (
     f1_score,
@@ -482,48 +543,6 @@ def convert_logit2binary_prob(logits, tokenizer):
         ).softmax(-1)
     total_probs = [p.tolist() for p in total_probs]
     return total_probs
-
-
-def classification_evaluate(predictions, targets, probs):
-    probs = [torch.tensor(p) for p in probs]
-
-    total_labels = torch.zeros(len(predictions), dtype=torch.long)
-
-    for i in range(len(predictions)):
-        label = int("True" in targets[i] or "true" in targets[i])
-        total_labels[i] = label
-
-    probs_unsqueezed = [p.unsqueeze(0) for p in probs]
-    total_probs = torch.cat(probs_unsqueezed, dim=0)
-    total_preds = total_probs.argmax(dim=-1)
-
-    # Convert tensors to numpy arrays for use with scikit-learn metrics
-    total_preds_np = total_preds.numpy()
-    total_labels_np = total_labels.numpy()
-
-    # Calculate metrics
-    acc = accuracy_score(y_true=total_labels_np, y_pred=total_preds_np)
-    f1 = f1_score(y_true=total_labels_np, y_pred=total_preds_np)
-    prec = precision_score(y_true=total_labels_np, y_pred=total_preds_np)
-    rec = recall_score(y_true=total_labels_np, y_pred=total_preds_np)
-    try:
-        roc_auc = roc_auc_score(
-            y_true=total_labels_np,
-            y_score=total_probs[
-                :, 1
-            ].numpy(),  # Use y_score here because roc_auc_score expects probability scores
-        )
-    except:
-        roc_auc = -1.0
-
-    evaluation_results = {
-        "accuracy": acc,
-        "f1": f1,
-        "precision": prec,
-        "recall": rec,
-        "roc_auc": roc_auc,
-    }
-    return evaluation_results
 
 
 def regression_evaluate(predictions, targets, prompts):

@@ -259,10 +259,25 @@ class DataCollater:
         self.padding = padding
         self.mode = mode
         self.apply_sequence_packing = apply_sequence_packing
+        self.tokenizer_name = self.tokenizer.__class__.__name__
 
     def __call__(self, batch):
-        target_texts = [instance.target_text for instance in batch]
-        input_texts = [instance.input_text for instance in batch]
+        #target_texts = [instance.target_text for instance in batch]
+        #input_texts = [instance.input_text for instance in batch]
+
+        # <DEBUG>
+        target_texts = []
+        input_texts = []
+        for instance in batch:
+            target_text = instance.target_text
+            input_text = instance.input_text
+            if "Llama" in self.tokenizer_name:
+                target_text = re.sub(r"\n$", self.tokenizer.eos_token, target_text)
+                input_text = re.sub(r"\n$", self.tokenizer.eos_token, input_text)
+
+            target_texts.append(target_text)
+            input_texts.append(input_text)
+
         self.tokenizer.padding_side = "left"
         
         if self.mode == "eval":
@@ -1378,8 +1393,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
             task, subtask_idx = self.task_subtask_pairs[i]
             # data leakage check: not use val, test set of the tasks subject to duplication check
             if (
-                hasattr(self.args, "duplication_check_train")
-                and task in self.args.duplication_check_train
+                hasattr(self.args, "ignore_eval")
+                and task in self.args.ignore_eval
                 and self.split in ["val", "test"]
             ):
                 continue
