@@ -8,7 +8,6 @@ from model.blip2_t5 import Blip2T5
 import pytorch_lightning as pl
 from torch import optim
 from model.scheduler import LinearWarmupCosineLRScheduler, LinearWarmupStepLRScheduler
-from transformers import get_cosine_schedule_with_warmup
 import json
 from model.help_funcs import (
     per_device_evaluate,
@@ -140,7 +139,11 @@ class Blip2Stage3(pl.LightningModule):
             )
 
             steps_per_epoch = len(self.trainer.train_dataloader)
-            max_step = int(self.args.max_epochs * steps_per_epoch / self.args.accumulate_grad_batches)
+            max_step = int(
+                self.args.max_epochs
+                * steps_per_epoch
+                / self.args.accumulate_grad_batches
+            )
             # get total training steps
             num_total_steps = self.trainer.max_steps
 
