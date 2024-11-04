@@ -383,6 +383,7 @@ CLASSIFICATION_BENCHMARKS = [
     "clintox",  # 2 tasks # molca, biot5+, llasmol
     "toxcast",  # 617 # molca
     "sider",  # 27 # molca, llasmol
+    "smol-property_prediction-sider",
     "tox21",  # 12 tasks # molca
     "hiv",  # 1 tasks # biot5+, instructmol, llasmol
 ]
