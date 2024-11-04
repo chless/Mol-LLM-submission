@@ -18,6 +18,7 @@ from model.blip2_stage3 import Blip2Stage3
 import json
 import hydra
 from omegaconf import OmegaConf, DictConfig
+from datetime import timedelta
 
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -36,6 +37,18 @@ torch.set_float32_matmul_precision(
 
 
 class MyDDPStrategy(strategies.DDPStrategy):
+    def __init__(
+        self,
+        find_unused_parameters=False,
+        start_method="spawn",
+        timeout=timedelta(minutes=90),
+    ):
+        super().__init__(
+            find_unused_parameters=find_unused_parameters,
+            start_method=start_method,
+            timeout=timeout,
+        )
+
     def load_model_state_dict(self, checkpoint, strict=False):
         assert self.lightning_module is not None
         self.lightning_module.load_state_dict(checkpoint["state_dict"], strict=strict)
@@ -82,7 +95,11 @@ def main(cfg):
         elif cfg.strategy_name == "deepspeed":
             strategy = strategies.DeepSpeedStrategy(stage=3)
         else:
-            strategy = MyDDPStrategy(find_unused_parameters=False, start_method="spawn")
+            strategy = MyDDPStrategy(
+                find_unused_parameters=False,
+                start_method="spawn",
+                timeout=timedelta(minutes=90),
+            )
     else:
         strategy = "auto"
         cfg.devices = [eval(cfg.devices)]
