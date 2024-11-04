@@ -12,7 +12,6 @@ from data_provider.stage3_dm import (
     REGRESSION_BENCHMARKS,
     MOL2TEXT_BENCHMARKS,
     TEXT2MOL_BENCHMARKS,
-    TOTAL_BENCHMARKS,
 )
 
 from model.blip2_stage3 import Blip2Stage3

@@ -18,12 +18,7 @@ from model.help_funcs import (
 from transformers import Adafactor
 import json
 from data_provider.stage3_dm import (
-    TOTAL_BENCHMARKS,
-    REGRESSION_BENCHMARKS,
     CLASSIFICATION_BENCHMARKS,
-    REACTION_BENCHMARKS,
-    MOL2TEXT_BENCHMARKS,
-    TEXT2MOL_BENCHMARKS,
 )
 from transformers.utils import logging
 

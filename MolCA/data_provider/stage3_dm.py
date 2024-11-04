@@ -420,14 +420,6 @@ REACTION_BENCHMARKS = [
     "smol-retrosynthesis",
 ]
 
-TOTAL_BENCHMARKS = (
-    REACTION_BENCHMARKS
-    + MOL2TEXT_BENCHMARKS
-    + TEXT2MOL_BENCHMARKS
-    + CLASSIFICATION_BENCHMARKS
-    + REGRESSION_BENCHMARKS
-)
-
 
 class Stage3DM(LightningDataModule):
     def __init__(
