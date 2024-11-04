@@ -62,7 +62,7 @@ def prepare_tokenized_instance(
         return_length=True,
         return_token_type_ids=False,
     )
-    prompt_tokens = tokenizer(llm_prompt, return_length=True)
+    prompt_tokens = tokenizer(llm_prompt, return_length=True, add_special_tokens=False)
 
     if isinstance(prompt_tokens.length, list):
         prompt_tokens_length = prompt_tokens.length[0]
@@ -262,8 +262,8 @@ class DataCollater:
         self.tokenizer_name = self.tokenizer.__class__.__name__
 
     def __call__(self, batch):
-        #target_texts = [instance.target_text for instance in batch]
-        #input_texts = [instance.input_text for instance in batch]
+        # target_texts = [instance.target_text for instance in batch]
+        # input_texts = [instance.input_text for instance in batch]
 
         # <DEBUG>
         target_texts = []
@@ -279,7 +279,7 @@ class DataCollater:
             input_texts.append(input_text)
 
         self.tokenizer.padding_side = "left"
-        
+
         if self.mode == "eval":
             prompt_texts = [instance.prompt_text for instance in batch]
             prompt_tokens = self.tokenizer(
@@ -316,6 +316,7 @@ class DataCollater:
             max_length=self.max_length,
             return_tensors="pt",
             return_attention_mask=True,
+            return_length=True,
         )
         input_tokens["is_mol_token"] = (
             input_tokens.input_ids == self.tokenizer.mol_token_id
@@ -339,7 +340,10 @@ class DataCollater:
             return_tensors="pt",
             return_attention_mask=True,
         )
-                
+
+        tlen = [len(self.tokenizer(t).input_ids) for t in target_texts]
+        ilen = [len(self.tokenizer(t).input_ids) for t in input_texts]
+
         if self.mode == "eval":
             return batch, input_tokens, target_tokens, prompt_tokens
         else:
