@@ -341,9 +341,6 @@ class DataCollater:
             return_attention_mask=True,
         )
 
-        tlen = [len(self.tokenizer(t).input_ids) for t in target_texts]
-        ilen = [len(self.tokenizer(t).input_ids) for t in input_texts]
-
         if self.mode == "eval":
             return batch, input_tokens, target_tokens, prompt_tokens
         else:
