@@ -115,8 +115,8 @@ smol_molecule_captioning = [
     '<INPUT> The above is a compound. Could you please tell me something about it?',
     '<INPUT> What do you know about the molecule?',
     'Here is a molecule represented with SMILE: <INPUT> . Please describe it in natural language.',
-    'Can you briefly describe the molecular encoded by this SMILES notation? <INPUT>',
-    'I need a brief explanation of the molecule denoted in this SMILES notation. <INPUT>', "I'd like a short overview about this molecule. Can you do that? <INPUT>",
+    'Can you briefly describe the molecular encoded by this SELFIES notation? <INPUT>',
+    'I need a brief explanation of the molecule denoted in this SELFIES notation. <INPUT>', "I'd like a short overview about this molecule. Can you do that? <INPUT>",
     'May I have a capsulized explanation for this molecule? <INPUT>',
     'What can you tell me about this molecule? <INPUT>'
 ]
