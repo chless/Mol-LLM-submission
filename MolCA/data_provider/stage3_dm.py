@@ -10,7 +10,7 @@ import selfies as sf
 import torch
 from datasets import load_dataset
 from rdkit import Chem
-from torch.utils.data import DataLoader, Dataset, Subset
+from torch.utils.data import DataLoader, Dataset, Subset, ConcatDataset
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.data.separate import separate
 from torch_geometric.loader.dataloader import Collater
@@ -205,39 +205,37 @@ def group_data_idx_by_length(
 import multiprocessing as mp
 
 
-def filter_duplication(train_dataset, test_dataset, num_procs=20):
+def filter_duplication(subject_dataset, subject_list, reference_list, num_procs=20):
 
     dup_idx = mp.Manager().list()
     procs = []
-    # mol_strings
-    train_data = [instance[2] for instance in train_dataset]
-    test_data = test_dataset[:][2]
-    indices = np.arange(len(train_data))
+
+    indices = np.arange(len(subject_list))
     chuncked_idx = np.array_split(indices, num_procs)
     for i in range(num_procs):
         proc = mp.Process(
             target=check_duplication,
-            args=(train_data, test_data, chuncked_idx[i], dup_idx),
+            args=(subject_list, reference_list, chuncked_idx[i], dup_idx),
         )
         procs.append(proc)
         proc.start()
     for proc in procs:
         proc.join()
     dup_idx = list(dup_idx)
-    print(f"Number of duplicated data: {len(dup_idx)}")
+
     # remove data instance corresponding to duplicated index from train_dataset
-    train_idxs = np.arange(len(train_dataset))
-    train_idxs = np.delete(train_idxs, dup_idx)
-    filtered_train_dataset = Subset(train_dataset, train_idxs)
+    subject_idxs = np.arange(len(subject_dataset))
+    subject_idxs = np.delete(subject_idxs, dup_idx)
+    filtered_train_dataset = Subset(subject_dataset, subject_idxs)
     return filtered_train_dataset
 
 
-def check_duplication(train_data, test_data, train_idxs, dup_idx):
-    iter_bar = tqdm(range(len(train_idxs)))
+def check_duplication(subject_list, reference_list, subject_idxs, dup_idx):
+    iter_bar = tqdm(range(len(subject_idxs)))
     checked_dup = []
     for i in tqdm(iter_bar):
-        if train_data[train_idxs[i]] in test_data:
-            checked_dup.append(train_idxs[i])
+        if subject_list[subject_idxs[i]] in reference_list:
+            checked_dup.append(subject_idxs[i])
     dup_idx.extend(checked_dup)
 
 
@@ -379,7 +377,6 @@ REGRESSION_BENCHMARKS = [
     "qm9_additional_label",
     "smol-property_prediction-esol",  # 1 task # llasmol
     "smol-property_prediction-lipo",  # 1 task # llasmol
-    "freesolv"
 ]
 
 MOL2TEXT_BENCHMARKS = [
@@ -896,113 +893,90 @@ class SMolInstructDataset(Dataset):
             total=len(self.data),
             desc=self.task,
         )
+        self.count_invalid_smiles = 0
 
-        outputs = []
         for i in iter_bar:
-            outputs.append(self.get_necessary_data(i, raw_inputs[i], raw_outputs[i]))
-        for o in outputs:
-            if isinstance(o, Exception):
-                print(o)
-                continue
-            self.input_mol_string_list.append(o["input_mol_string"])
-            self.graph_list.append(o["graph"])
-            self.instruction_list.append(o["instruction"])
-            self.label_list.append(o["label"])
-
-        print(
-            f"{self.task}: Invalid smiles ratio: {1.0 - len(self.label_list)/len(self.data)}"
-        )
+            try:
+                graph, label, input_mol_string, instruction = self.get_necessary_data(i, raw_inputs[i], raw_outputs[i])
+                self.graph_list.append(graph)
+                self.label_list.append(label)
+                self.input_mol_string_list.append(input_mol_string)
+                self.instruction_list.append(instruction)
+            except Exception as e:
+                self.count_invalid_smiles += 1
+        if self.count_invalid_smiles > 0:
+            print(f"{self.task}: Number of invalid smiles: {self.count_invalid_smiles}")
+            print(
+                f"{self.task}: Invalid smiles ratio: {1.0 - len(self.label_list)/len(self.data)}"
+            )
 
     def __len__(self):
         return len(self.label_list)
 
     def get_necessary_data(self, index, raw_input, raw_output):
-        try:
-            raw_input = raw_input
-            label = raw_output
-            instruction = np.random.choice(self.instruction_templates)
+        raw_input = raw_input
+        label = raw_output
 
-            if ";" in raw_input:
-                self.semi_colon_count_input += 1
-            if ";" in raw_output:
-                self.semi_colon_count_label += 1
+        if ";" in raw_input:
+            self.semi_colon_count_input += 1
+        if ";" in raw_output:
+            self.semi_colon_count_label += 1
 
-            if self.task in TEXT2MOL_BENCHMARKS:
-                """
-                "chebi-20-text2mol",
-                "smol-name_conversion-i2s",
-                "smol-name_conversion-i2f",
-                "smol-molecule_generation",
-                """
-                s_token, e_token = (
-                    added_tokens.IUPAC
-                    if self.task
-                    in ["smol-name_conversion-i2s", "smol-name_conversion-i2f"]
-                    else added_tokens.DESCRIPTION
-                )
-                description = raw_input
-                description = s_token + description + e_token
-                instruction = np.random.choice(self.instruction_templates)
-                instruction = instruction.replace(
-                    "<INPUT>", description
-                )
-                graph = smiles2data(
-                    "CC"
-                )  # null smiles, just input dummy graph for batch processing
-                input_mol_string = "<None>"
-                label = re.sub(r"\s*;\s*", ".", label)
-            elif self.task in REACTION_BENCHMARKS:
-                instruction = np.random.choice(self.instruction_templates)
-                input_mol_string = raw_input
-                smiles = sf.decoder(input_mol_string)
-                graph = smiles2data(smiles)
-            # multi labeled property prediction datasets
-            elif self.task in ['smol-property_prediction-sider']:
-                target = self.data[index]["target"].lower()
-                target_template_list = [i for i in self.instruction_templates if target in i.lower()]
-                assert len(target_template_list) > 0
-                instruction = np.random.choice(target_template_list)
-                # use re sub to replace ";" with "."
-                input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
-                smiles = sf.decoder(input_mol_string)
-                graph = smiles2data(smiles)
-            elif self.task in MOL2TEXT_BENCHMARKS + CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
-                """
-                "chebi-20-mol2text",
-                "smol-name_conversion-s2f",
-                "smol-name_conversion-s2i",
-                "smol-molecule_captioning",
-                ...
-                """
-                instruction = np.random.choice(self.instruction_templates)
-                # use re sub to replace ";" with "."
-                input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
-                smiles = sf.decoder(input_mol_string)
-                graph = smiles2data(smiles)
-                if self.task in CLASSIFICATION_BENCHMARKS:
-                    if label.lower() == "true" or label.lower() == "yes":
-                        label = True
-                    elif label.lower() == "false" or label.lower() == "no":
-                        label = False
-                    else:
-                        raise NotImplementedError(f"Label: {label} is not supported")
-            else:
-                raise NotImplementedError(f"Task: {self.task} is not supported")
-
-            label = wrap_label(label, self.task)
-            input_mol_string = (
-                added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
+        if self.task in TEXT2MOL_BENCHMARKS:
+            s_token, e_token = (
+                added_tokens.IUPAC
+                if self.task
+                in ["smol-name_conversion-i2s", "smol-name_conversion-i2f"]
+                else added_tokens.DESCRIPTION
             )
-            output = {
-                "graph": graph,
-                "label": label,
-                "input_mol_string": input_mol_string,
-                "instruction": instruction,
-            }
+            description = raw_input
+            description = s_token + description + e_token
+            instruction = np.random.choice(self.instruction_templates)
+            instruction = instruction.replace(
+                "<INPUT>", description
+            )
+            graph = smiles2data(
+                "CC"
+            )  # null smiles, just input dummy graph for batch processing
+            input_mol_string = "<None>"
+            label = re.sub(r"\s*;\s*", ".", label)
+        elif self.task in REACTION_BENCHMARKS:
+            instruction = np.random.choice(self.instruction_templates)
+            input_mol_string = raw_input
+            smiles = sf.decoder(input_mol_string)
+            graph = smiles2data(smiles)
+        # multi labeled property prediction datasets
+        elif self.task in ['smol-property_prediction-sider']:
+            instance_input = self.data[index]['input']
+            assert re.search(r"\[.*\]", instance_input) is not None
+            instruction = re.sub(r"\[.*\]", "<INPUT>", instance_input)
 
-            return output
-        except Exception as e:
-            return e
+            # use re sub to replace ";" with "."
+            input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
+            smiles = sf.decoder(input_mol_string)
+            graph = smiles2data(smiles)
+        elif self.task in MOL2TEXT_BENCHMARKS + CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
+            instruction = np.random.choice(self.instruction_templates)
+            # use re sub to replace ";" with "."
+            input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
+            smiles = sf.decoder(input_mol_string)
+            graph = smiles2data(smiles)
+            if self.task in CLASSIFICATION_BENCHMARKS:
+                if label.lower() == "true" or label.lower() == "yes":
+                    label = True
+                elif label.lower() == "false" or label.lower() == "no":
+                    label = False
+                else:
+                    raise NotImplementedError(f"Label: {label} is not supported")
+        else:
+            raise NotImplementedError(f"Task: {self.task} is not supported")
+
+        label = wrap_label(label, self.task)
+        input_mol_string = (
+            added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
+        )
+
+        return graph, label, input_mol_string, instruction
 
     # LLM input order: <instruction><qformer_output><smiles_tokens>
     def __getitem__(self, index):
@@ -1164,6 +1138,13 @@ class Mol_LLM_Dataset(InMemoryDataset):
             f"{task}_subtask-{subtask_idx}_{self.split}.pth"
             for task, subtask_idx in self.task_subtask_pairs
         ]
+        # remove names from list if the file belongs to self.args.ignore_eval
+        if hasattr(self.args, "ignore_eval") and self.split in ["val", "test"]:
+            raw_files = [
+                f
+                for f in raw_files
+                if not any([ign in f for ign in self.args.ignore_eval])
+            ]
         return raw_files
 
     @property
@@ -1312,7 +1293,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
             data_split = multi_task_datasets[task_name][
                 1:
             ]  # train_set, val_set, test_set
-            # dataset processed via MoleculeNetDatasetDeepChem
             if "smol" in task_name:
                 dataset = SMolInstructDataset
             elif task_name in [
@@ -1355,7 +1335,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
             if task_name in "qm9_additional_label":
                 # concat datasets using torch ConcatDataset
-                concat_dataset = torch.utils.data.ConcatDataset([valid_dataset, test_dataset, train_dataset])
+                concat_dataset = ConcatDataset([valid_dataset, test_dataset, train_dataset])
                 torch.save(
                     concat_dataset,
                     f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_train.pth",
@@ -1375,8 +1355,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 )
 
     def process(self):
-        # <debug>
-        assert False, "only save raw data"
+        #assert False, "only save raw"
         # load raw datasets in target_benchmarks
         raw_data_list = []
         iter_bar = tqdm(
@@ -1384,8 +1363,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
             desc="Loading raw data",
             total=len(self.task_subtask_pairs),
         )
+        duplication_subjects = [item['subject'] for item in self.args.duplication_check]
+        duplication_reference = {item['subject']: item['reference'] for item in self.args.duplication_check}
         for i in iter_bar:
             task, subtask_idx = self.task_subtask_pairs[i]
+            raw_file_name = f"{task}_subtask-{subtask_idx}_{self.split}"
             # data leakage check: not use val, test set of the tasks subject to duplication check
             if (
                 hasattr(self.args, "ignore_eval")
@@ -1396,37 +1378,56 @@ class Mol_LLM_Dataset(InMemoryDataset):
             # data leakage check: not use duplicated train idx of the tasks subject to duplication check
             # TODO: move this phase to download method
             elif (
-                hasattr(self.args, "duplication_check_train")
-                and task in self.args.duplication_check_train
-                and self.split == "train"
+                hasattr(self.args, "duplication_check")
+                and raw_file_name in duplication_subjects
             ):
-                # find train task idx in duplication_check_train
-                train_task_idx = self.args.duplication_check_train.index(task)
-                test_task = self.args.duplication_check_test[train_task_idx]
-                print(
-                    f"Checking duplication between train: {task} and test: {test_task}"
-                )
+                if os.path.isfile(f"{self.raw_dir}/{raw_file_name}_dup_checked.pth"):
+                    iter_bar.set_description(
+                        f"Loading {raw_file_name}_dup_checked"
+                    )
+                    raw_data = list(torch.load(f"{self.raw_dir}/{raw_file_name}_dup_checked.pth"))
+                else:
 
-                # not permit same molecule across train and test set
-                test_data = torch.load(f"{self.raw_dir}/{test_task}_subtask-0_test.pth")
-                train_data = list(
-                    torch.load(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_train.pth")
-                )
-                before_len = len(train_data)
-                raw_data = filter_duplication(train_data, test_data, num_procs=50)
-                print(
-                    f"Number of removed data for duplication: {before_len - len(raw_data)}"
-                )
+                    # find train task idx in duplication_check_train
+                    subject_data = torch.load(f"{self.raw_dir}/{raw_file_name}.pth")
+                    list_reference_data = []
+                    for test_task in duplication_reference[raw_file_name]:
+                        reference_data = torch.load(f"{self.raw_dir}/{test_task}.pth")
+                        list_reference_data.append(reference_data)
+                    reference_data = ConcatDataset(list_reference_data)
+
+                    before_len = len(subject_data)
+                    if task in TEXT2MOL_BENCHMARKS:
+                        # instance: [graph, label, input_mol_string, task_subtask_pair, instruction]
+                        # check by label molecule
+                        # assume no one2many, but many2one is possible
+                        subject_list = [i[1] for i in subject_data]
+                        reference_list = [i[1] for i in reference_data]
+                    else:
+                        # check by input_mol_string
+                        subject_list = [i[2] for i in subject_data]
+                        reference_list = [i[2] for i in reference_data]
+                    raw_data = filter_duplication(
+                        subject_dataset=subject_data, 
+                        subject_list=subject_list, 
+                        reference_list=reference_list,
+                        num_procs=50)
+                    print(
+                        f"{raw_file_name}: No_left/No_removed/No_original for duplication: {len(raw_data)}/{before_len - len(raw_data)}/{before_len}"
+                    )
+                    torch.save(raw_data, f"{self.raw_dir}/{raw_file_name}_dup_checked.pth")
+                    print(f"Saved {raw_file_name}_dup_checked.pth")
             else:
                 iter_bar.set_description(
-                    f"Loading {task}_subtask-{subtask_idx}_{self.split}"
+                    f"Loading {raw_file_name}"
                 )
                 raw_data = list(
                     torch.load(
-                        f"{self.raw_dir}/{task}_subtask-{subtask_idx}_{self.split}.pth"
+                        f"{self.raw_dir}/{raw_file_name}.pth"
                     )
                 )
             raw_data_list.extend(raw_data)
+        assert False, "only duplication check"
 
         # process raw_data_list
         processed_data_list = []
