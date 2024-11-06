@@ -611,6 +611,7 @@ class MoleculeNetDatasetDeepChem(Dataset):
                 self.instruction_templates = getattr(
                     instructions_smol, f"{task}_{subtask_full_name}"
                 )
+                assert len(self.instruction_templates) > 1, "Instruction is not enough"
             else:
                 self.instruction_templates = getattr(instructions_smol, self.task)
             self.label_tokens = added_tokens.FLOAT
@@ -1352,19 +1353,26 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 subtask_idx=subtask_idx,
             )
 
-
-            torch.save(
-                valid_dataset,
-                f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_val.pth",
-            )
-            torch.save(
-                test_dataset,
-                f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_test.pth",
-            )
-            torch.save(
-                train_dataset,
-                f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_train.pth",
-            )
+            if task_name in "qm9_additional_label":
+                # concat datasets using torch ConcatDataset
+                concat_dataset = torch.utils.data.ConcatDataset([valid_dataset, test_dataset, train_dataset])
+                torch.save(
+                    valid_dataset,
+                    f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_train.pth",
+                )
+            else:
+                torch.save(
+                    valid_dataset,
+                    f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_val.pth",
+                )
+                torch.save(
+                    test_dataset,
+                    f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_test.pth",
+                )
+                torch.save(
+                    train_dataset,
+                    f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_train.pth",
+                )
 
     def process(self):
         # <debug>
