@@ -1,10 +1,14 @@
 raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
 data_tag: "extended-v5"
+
 target_benchmarks:
-  - smol-molecule_captioning
+  - smol-property_prediction-sider
+
+target_benchmark:
   - chebi-20-mol2text
-  - smol-molecule_generation
   - chebi-20-text2mol
+  - smol-molecule_captioning
+  - smol-molecule_generation
   - smol-forward_synthesis
   - forward_reaction_prediction
   - smol-retrosynthesis
@@ -65,7 +69,7 @@ duplication_check:
       - smol-molecule_captioning_subtask-0_train
       - smol-molecule_captioning_subtask-0_test
 
-  - subject: chebi-20-mol2text_subtask-0_train
+  - subject: chebi-20-text2mol_subtask-0_train
     reference: 
-      - smol-molecule_captioning_subtask-0_test
-      - smol-molecule_captioning_subtask-0_test
+      - smol-molecule_generation_subtask-0_train
+      - smol-molecule_generation_subtask-0_test
