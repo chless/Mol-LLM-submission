@@ -228,35 +228,35 @@ qm9_homo_lumo_gap = [
 ]
 
 qm9_dipole_moment = [
-"<INPUT> Based on the molecule given above, could you please provide its dipole moment?"
-"Based on the given molecule: <INPUT>, could you please provide its dipole moment?"
-"Given the following molecule, please provide its dipole moment. <INPUT>"
-"<INPUT> Given the above molecule, could you please provide its dipole moment?"
-"Please provide the dipole moment that could be measured for this molecule: <INPUT>."
-"Consider that for a molecule, if <INPUT> is given, what is its dipole moment?"
-"Propose the dipole moment for this molecule. <INPUT>"
-"Predict the dipole moment of a molecule with <INPUT>."
-"Can you tell me the dipole moment of a molecule that has the structure <INPUT>?"
-"Using <INPUT> as the molecule, could you please provide its dipole moment?"
-"Predict the dipole moment from the listed molecule. <INPUT>"
-"<INPUT> Considering the given molecule, what is its dipole moment?"
-"A molecule has the structure <INPUT>, what could be its dipole moment?"
+    "<INPUT> Based on the molecule given above, could you please provide its dipole moment?",
+    "Based on the given molecule: <INPUT>, could you please provide its dipole moment?",
+    "Given the following molecule, please provide its dipole moment. <INPUT>",
+    "<INPUT> Given the above molecule, could you please provide its dipole moment?",
+    "Please provide the dipole moment that could be measured for this molecule: <INPUT>.",
+    "Consider that for a molecule, if <INPUT> is given, what is its dipole moment?",
+    "Propose the dipole moment for this molecule. <INPUT>",
+    "Predict the dipole moment of a molecule with <INPUT>.",
+    "Can you tell me the dipole moment of a molecule that has the structure <INPUT>?",
+    "Using <INPUT> as the molecule, could you please provide its dipole moment?",
+    "Predict the dipole moment from the listed molecule. <INPUT>",
+    "<INPUT> Considering the given molecule, what is its dipole moment?",
+    "A molecule has the structure <INPUT>, what could be its dipole moment?",
 ]
 
 qm9_isotropic_polarizability = [
-"<INPUT> Based on the molecule given above, could you please provide its isotropic polarizability?",
-"Based on the given molecule: <INPUT>, what is its isotropic polarizability?",
-"Given the following molecule, please provide its isotropic polarizability. <INPUT>",
-"<INPUT> Given the above molecule, what is its isotropic polarizability?",
-"Please provide a feasible isotropic polarizability value for this molecule: <INPUT>.",
-"Consider that for a molecule, if <INPUT> is given, what is its isotropic polarizability?",
-"Propose the isotropic polarizability for this molecule. <INPUT>",
-"Predict the isotropic polarizability of a molecule with <INPUT>.",
-"Can you tell me the isotropic polarizability of a molecule that has the structure <INPUT>?",
-"Using <INPUT> as the molecule, please tell me its isotropic polarizability.",
-"Predict the isotropic polarizability from the listed molecule. <INPUT>",
-"<INPUT> Considering the given molecule, what is its isotropic polarizability?",
-"A molecule has the structure <INPUT>, what could be its isotropic polarizability?"
+    "<INPUT> Based on the molecule given above, could you please provide its isotropic polarizability?",
+    "Based on the given molecule: <INPUT>, what is its isotropic polarizability?",
+    "Given the following molecule, please provide its isotropic polarizability. <INPUT>",
+    "<INPUT> Given the above molecule, what is its isotropic polarizability?",
+    "Please provide a feasible isotropic polarizability value for this molecule: <INPUT>.",
+    "Consider that for a molecule, if <INPUT> is given, what is its isotropic polarizability?",
+    "Propose the isotropic polarizability for this molecule. <INPUT>",
+    "Predict the isotropic polarizability of a molecule with <INPUT>.",
+    "Can you tell me the isotropic polarizability of a molecule that has the structure <INPUT>?",
+    "Using <INPUT> as the molecule, please tell me its isotropic polarizability.",
+    "Predict the isotropic polarizability from the listed molecule. <INPUT>",
+    "<INPUT> Considering the given molecule, what is its isotropic polarizability?",
+    "A molecule has the structure <INPUT>, what could be its isotropic polarizability?"
 ]
 
 qm9_electronic_spatial_extent = [
@@ -292,67 +292,67 @@ qm9_zero_point_vibrational_energy = [
 ]
 
 qm9_heat_capacity_298K = [
-"<INPUT> Based on the molecule given above, could you please provide its heat capacity at 298.15K?"
-"Based on the given molecule: <INPUT>, what is its heat capacity at 298.15K?"
-"Given the following molecule, please provide its heat capacity at 298.15K. <INPUT>"
-"<INPUT> Given the above molecule, what could be its heat capacity at 298.15K?"
-"Please provide a feasible heat capacity at 298.15K that could be measured for this molecule: <INPUT>."
-"Consider that for a molecule, if <INPUT> is given, what can be its heat capacity at 298.15K?"
-"Propose the heat capacity at 298.15K for this molecule. <INPUT>"
-"Predict the heat capacity at 298.15K of a molecule with <INPUT>."
-"Can you tell me the heat capacity at 298.15K of a molecule that has the structure <INPUT>?"
-"Using <INPUT> as the molecule, please tell me its heat capacity at 298.15K."
-"Predict the heat capacity at 298.15K from the listed molecule. <INPUT>"
-"<INPUT> Considering the given molecule, what might be its heat capacity at 298.15K?"
-"A molecule has the structure <INPUT>, what could be its heat capacity at 298.15K?"
+"<INPUT> Based on the molecule given above, could you please provide its heat capacity at 298.15K?",
+"Based on the given molecule: <INPUT>, what is its heat capacity at 298.15K?",
+"Given the following molecule, please provide its heat capacity at 298.15K. <INPUT>",
+"<INPUT> Given the above molecule, what could be its heat capacity at 298.15K?",
+"Please provide a feasible heat capacity at 298.15K that could be measured for this molecule: <INPUT>.",
+"Consider that for a molecule, if <INPUT> is given, what can be its heat capacity at 298.15K?",
+"Propose the heat capacity at 298.15K for this molecule. <INPUT>",
+"Predict the heat capacity at 298.15K of a molecule with <INPUT>.",
+"Can you tell me the heat capacity at 298.15K of a molecule that has the structure <INPUT>?",
+"Using <INPUT> as the molecule, please tell me its heat capacity at 298.15K.",
+"Predict the heat capacity at 298.15K from the listed molecule. <INPUT>",
+"<INPUT> Considering the given molecule, what might be its heat capacity at 298.15K?",
+"A molecule has the structure <INPUT>, what could be its heat capacity at 298.15K?",
 ]
 
 qm9_internal_energy_298K = [
-"<INPUT> Based on the molecule given above, could you please provide its internal energy at 298.15K?"
-"Based on the given molecule: <INPUT>, what is its internal energy at 298.15K?"
-"Given the following molecule, please provide its internal energy at 298.15K. <INPUT>"
-"<INPUT> Given the above molecule, what could be its internal energy at 298.15K?"
-"Please provide a feasible internal energy at 298.15K that could be measured for this molecule: <INPUT>."
-"Consider that for a molecule, if <INPUT> is given, what can be its internal energy at 298.15K?"
-"Propose the internal energy at 298.15K for this molecule. <INPUT>"
-"Predict the internal energy at 298.15K of a molecule with <INPUT>."
-"Can you tell me the internal energy at 298.15K of a molecule that has the structure <INPUT>?"
-"Using <INPUT> as the molecule, please tell me its internal energy at 298.15K."
-"Predict the internal energy at 298.15K from the listed molecule. <INPUT>"
-"<INPUT> Considering the given molecule, what might be its internal energy at 298.15K?"
-"A molecule has the structure <INPUT>, what could be its internal energy at 298.15K?"
+"<INPUT> Based on the molecule given above, could you please provide its internal energy at 298.15K?",
+"Based on the given molecule: <INPUT>, what is its internal energy at 298.15K?",
+"Given the following molecule, please provide its internal energy at 298.15K. <INPUT>",
+"<INPUT> Given the above molecule, what could be its internal energy at 298.15K?",
+"Please provide a feasible internal energy at 298.15K that could be measured for this molecule: <INPUT>.",
+"Consider that for a molecule, if <INPUT> is given, what can be its internal energy at 298.15K?",
+"Propose the internal energy at 298.15K for this molecule. <INPUT>",
+"Predict the internal energy at 298.15K of a molecule with <INPUT>.",
+"Can you tell me the internal energy at 298.15K of a molecule that has the structure <INPUT>?",
+"Using <INPUT> as the molecule, please tell me its internal energy at 298.15K.",
+"Predict the internal energy at 298.15K from the listed molecule. <INPUT>",
+"<INPUT> Considering the given molecule, what might be its internal energy at 298.15K?",
+"A molecule has the structure <INPUT>, what could be its internal energy at 298.15K?",
 ]
 
 qm9_enthalpy_298K = [
-"<INPUT> Based on the molecule given above, could you please provide its enthalpy at 298.15K?"
-"Based on the given molecule: <INPUT>, what is its enthalpy at 298.15K?"
-"Given the following molecule, please provide its enthalpy at 298.15K. <INPUT>"
-"<INPUT> Given the above molecule, what could be its enthalpy at 298.15K?"
-"Please provide a feasible enthalpy at 298.15K that could be measured for this molecule: <INPUT>."
-"Consider that for a molecule, if <INPUT> is given, what can be its enthalpy at 298.15K?"
-"Propose the enthalpy at 298.15K for this molecule. <INPUT>"
-"Predict the enthalpy at 298.15K of a molecule with <INPUT>."
-"Can you tell me the enthalpy at 298.15K of a molecule that has the structure <INPUT>?"
-"Using <INPUT> as the molecule, please tell me its enthalpy at 298.15K."
-"Predict the enthalpy at 298.15K from the listed molecule. <INPUT>"
-"<INPUT> Considering the given molecule, what might be its enthalpy at 298.15K?"
-"A molecule has the structure <INPUT>, what could be its enthalpy at 298.15K?"
+"<INPUT> Based on the molecule given above, could you please provide its enthalpy at 298.15K?",
+"Based on the given molecule: <INPUT>, what is its enthalpy at 298.15K?",
+"Given the following molecule, please provide its enthalpy at 298.15K. <INPUT>",
+"<INPUT> Given the above molecule, what could be its enthalpy at 298.15K?",
+"Please provide a feasible enthalpy at 298.15K that could be measured for this molecule: <INPUT>.",
+"Consider that for a molecule, if <INPUT> is given, what can be its enthalpy at 298.15K?",
+"Propose the enthalpy at 298.15K for this molecule. <INPUT>",
+"Predict the enthalpy at 298.15K of a molecule with <INPUT>.",
+"Can you tell me the enthalpy at 298.15K of a molecule that has the structure <INPUT>?",
+"Using <INPUT> as the molecule, please tell me its enthalpy at 298.15K.",
+"Predict the enthalpy at 298.15K from the listed molecule. <INPUT>",
+"<INPUT> Considering the given molecule, what might be its enthalpy at 298.15K?",
+"A molecule has the structure <INPUT>, what could be its enthalpy at 298.15K?",
 ]
 
 qm9_free_energy_298K = [
-"<INPUT> Based on the molecule given above, could you please provide its free energy at 298.15K?"
-"Based on the given molecule: <INPUT>, what is its free energy at 298.15K?"
-"Given the following molecule, please provide its free energy at 298.15K. <INPUT>"
-"<INPUT> Given the above molecule, what could be its free energy at 298.15K?"
-"Please provide a feasible free energy at 298.15K that could be measured for this molecule: <INPUT>."
-"Consider that for a molecule, if <INPUT> is given, what can be its free energy at 298.15K?"
-"Propose the free energy at 298.15K for this molecule. <INPUT>"
-"Predict the free energy at 298.15K of a molecule with <INPUT>."
-"Can you tell me the free energy at 298.15K of a molecule that has the structure <INPUT>?"
-"Using <INPUT> as the molecule, please tell me its free energy at 298.15K."
-"Predict the free energy at 298.15K from the listed molecule. <INPUT>"
-"<INPUT> Considering the given molecule, what might be its free energy at 298.15K?"
-"A molecule has the structure <INPUT>, what could be its free energy at 298.15K?"
+"<INPUT> Based on the molecule given above, could you please provide its free energy at 298.15K?",
+"Based on the given molecule: <INPUT>, what is its free energy at 298.15K?",
+"Given the following molecule, please provide its free energy at 298.15K. <INPUT>",
+"<INPUT> Given the above molecule, what could be its free energy at 298.15K?",
+"Please provide a feasible free energy at 298.15K that could be measured for this molecule: <INPUT>.",
+"Consider that for a molecule, if <INPUT> is given, what can be its free energy at 298.15K?",
+"Propose the free energy at 298.15K for this molecule. <INPUT>",
+"Predict the free energy at 298.15K of a molecule with <INPUT>.",
+"Can you tell me the free energy at 298.15K of a molecule that has the structure <INPUT>?",
+"Using <INPUT> as the molecule, please tell me its free energy at 298.15K.",
+"Predict the free energy at 298.15K from the listed molecule. <INPUT>",
+"<INPUT> Considering the given molecule, what might be its free energy at 298.15K?",
+"A molecule has the structure <INPUT>, what could be its free energy at 298.15K?",
 ]
 
 
@@ -508,7 +508,7 @@ property_prediction_sider = [
     'Do the side effects of <INPUT> impact congenital, familial, and genetic disorders?',
     'Can <INPUT> result in an elevated chance of congenital, familial, and genetic disorders?',
     'Can the use of <INPUT> lead to a higher likelihood of congenital, familial, and genetic disorders?',
-    'Does <INPUT> contribute to an amplified hazard of congenital, familial, and genetic disorders?',
+    'Does <INPUT> contribute to an amplified hazard of congenital, familial, anGastrointestinald genetic disorders?',
     'Can <INPUT> cause respiratory, thoracic, and mediastinal disorders?',
     'Are respiratory, thoracic, and mediastinal disorders a side effect of <INPUT> ?',
     'Is <INPUT> known to cause respiratory, thoracic, and mediastinal disorders?',
@@ -536,7 +536,8 @@ property_prediction_sider = [
     'Can <INPUT> cause issues for pregnant or postpartum women?',
     'Is <INPUT> known to cause issues for pregnant or postpartum women?',
     'Can <INPUT> cause side effects that affect pregnant or postpartum women?',
-    'Are there any known side effects of <INPUT> affecting pregnant or postpartum women?', "Does <INPUT> have side effects to women's pregnancy, puerperium, and perinatal conditions?", "Are there adverse effects of <INPUT> on women's pregnancy, postpartum period, and perinatal health?",
+    'Are there any known side effects of <INPUT> affecting pregnant or postpartum women?', "Does <INPUT> have side effects to women's pregnancy, puerperium, and perinatal conditions?", 
+    "Are there adverse effects of <INPUT> on women's pregnancy, postpartum period, and perinatal health?",
     'Does the use of <INPUT> have any negative impacts on pregnancy, postpartum recovery, or perinatal conditions in women?',
     'Can the consumption of <INPUT> lead to side effects for women in terms of pregnancy, puerperium, and perinatal conditions?',
     'Can <INPUT> cause ear disorders?',
