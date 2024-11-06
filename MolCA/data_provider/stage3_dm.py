@@ -1260,16 +1260,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
         downloading_task_subtask_pairs = []
         for task_subtask_pair in self.task_subtask_pairs:
             task, subtask_idx = task_subtask_pair
-            if (
-                os.path.exists(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_val.pth")
-                and os.path.exists(
-                    f"{self.raw_dir}/{task}_subtask-{subtask_idx}_test.pth"
-                )
-                and os.path.exists(
-                    f"{self.raw_dir}/{task}_subtask-{subtask_idx}_train.pth"
-                )
-            ):
-                print(f"{task}_{subtask_idx} already exists")
+            if os.path.exists(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_train.pth"):
+                if "qm9_additional" in task or (os.path.exists(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_val.pth") and os.path.exists(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_test.pth")):
+                    print(f"{task}_{subtask_idx} already exists")
+                else:
+                    downloading_task_subtask_pairs.append(task_subtask_pair)
             else:
                 downloading_task_subtask_pairs.append(task_subtask_pair)
 
@@ -1407,6 +1402,13 @@ class Mol_LLM_Dataset(InMemoryDataset):
                         # check by input_mol_string
                         subject_list = [i[2] for i in subject_data]
                         reference_list = [i[2] for i in reference_data]
+                    if task in REGRESSION_BENCHMARKS:
+                        reference_list = [i.replace("<SELFIES>", "").replace("</SELFIES>", "") for i in reference_list]
+                        reference_list = [sf.decoder(i) for i in reference_list]
+                        reference_list = [get_canonical_smiles(i) for i in reference_list]
+                        subject_list = [i.replace("<SELFIES>", "").replace("</SELFIES>", "") for i in subject_list]
+                        subject_list = [sf.decoder(i) for i in subject_list]
+                        subject_list = [get_canonical_smiles(i) for i in subject_list]
                     raw_data = filter_duplication(
                         subject_dataset=subject_data, 
                         subject_list=subject_list, 
@@ -1426,8 +1428,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
                         f"{self.raw_dir}/{raw_file_name}.pth"
                     )
                 )
+            assert len(raw_data) > 0, f"len(raw_data) = {len(raw_data)}"
             raw_data_list.extend(raw_data)
-        assert False, "only duplication check"
 
         # process raw_data_list
         processed_data_list = []
@@ -1490,6 +1492,14 @@ class Mol_LLM_Dataset(InMemoryDataset):
             ),
         )
 
+from rdkit import Chem
+
+def get_canonical_smiles(smiles):
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is not None:
+        return Chem.MolToSmiles(mol)
+    else:
+        return None
 
 if __name__ == "__main__":
     dm = Stage3DM(

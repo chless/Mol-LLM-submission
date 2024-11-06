@@ -2,11 +2,9 @@ raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
 data_tag: "extended-v5"
 
 target_benchmarks:
-  - smol-property_prediction-sider
-
-target_benchmark:
-  - chebi-20-mol2text
+  - qm9_additional_label: [0, 1, 5, 6, 7, 9, 10, 11]
   - chebi-20-text2mol
+  - chebi-20-mol2text
   - smol-molecule_captioning
   - smol-molecule_generation
   - smol-forward_synthesis
@@ -27,7 +25,6 @@ target_benchmark:
   - qm9_lumo
   - qm9_homo_lumo_gap
   - bace
-  - qm9_additional_label: [0, 1, 5, 6, 7, 9, 10, 11]
   - reagent_prediction
 
 ignore_eval:
@@ -73,3 +70,43 @@ duplication_check:
     reference: 
       - smol-molecule_generation_subtask-0_train
       - smol-molecule_generation_subtask-0_test
+
+  - subject: qm9_additional_label_subtask-0_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-1_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-5_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-6_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-7_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-9_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-10_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-11_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
