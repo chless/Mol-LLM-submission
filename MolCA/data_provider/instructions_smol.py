@@ -43,7 +43,7 @@ reagent_prediction = [
     'Given the following chemical reaction, what are some potential reagents that could have been employed? <INPUT>',
 ]
 
-smol_name_conversion_s2f = [
+name_conversion_s2f = [
     '<INPUT> is the SELFIES representation of a molecule. What is its molecular formula?',
     'Convert the SELFIES representation of a molecule <INPUT> into molecular formula.',
     'What is the formula of the molecule <INPUT> ?',
@@ -58,7 +58,7 @@ smol_name_conversion_s2f = [
     'Please provide the molecular formula for <INPUT> .'
 ]
 
-smol_name_conversion_s2i = [
+name_conversion_s2i = [
     '<INPUT> is the SELFIES representation of a molecule. What is its IUPAC name?',
     'Convert the SELFIES representation of a molecule <INPUT> into IUPAC name.',
     'What is the IUPAC name of the molecule <INPUT> ?',
@@ -74,7 +74,7 @@ smol_name_conversion_s2i = [
     'Turn the given SELFIES symbol of a molecule <INPUT> into its respective IUPAC name.'
 ]
 
-smol_name_conversion_i2s = [
+name_conversion_i2s = [
     '<INPUT> is the IUPAC name of a molecule. Please give its SELFIES representation.',
     'Convert the IUPAC name of a molecule <INPUT> into SELFIES representation.',
     'What is the SELFIES representation of the molecule with IUPAC name <INPUT> ?',
@@ -90,7 +90,7 @@ smol_name_conversion_i2s = [
     'What is the SELFIES representation for <INPUT> ?'
 ]
 
-smol_name_conversion_i2f = [
+name_conversion_i2f = [
     '<INPUT> is the IUPAC name of a molecule. Please give its molecular formula.',
     'Convert the IUPAC name of a molecule <INPUT> into molecular formula.',
     'What is the molecular formula of the molecule <INPUT> ?',
@@ -106,7 +106,7 @@ smol_name_conversion_i2f = [
     'What is the molecular formula of the compound with this IUPAC name <INPUT> ?'
 ]
 
-smol_molecule_captioning = [
+molecule_captioning = [
     'Could you give me a brief introduction to this molecule? <INPUT>',
     'Describe this molecule: <INPUT>',
     'Please give me some details about this molecule. <INPUT>',
@@ -121,7 +121,7 @@ smol_molecule_captioning = [
     'What can you tell me about this molecule? <INPUT>'
 ]
 
-smol_molecule_generation = [
+molecule_generation = [
     'Based on the given information, generate a molecule that meets the desired specifications: <INPUT>',
     'Give me a molecule that satisfies the conditions outlined in the description: <INPUT>',
     'Generate a molecule based on this description: <INPUT>',
@@ -330,7 +330,7 @@ bace = [
     "A molecule <INPUT> is given; what could be the biological activity against BACE-1?"
 ]
 
-bbbp = [
+property_prediction_bbbp = [
     'Can <INPUT> pass through the blood-brain barrier (BBB)?',
     'Can <INPUT> permeate the blood-brain barrier?',
     'Does <INPUT> have the blood-brain barrier permeability (BBBP)?',
@@ -346,36 +346,181 @@ bbbp = [
     'Would <INPUT> be able to successfully permeate the blood-brain barrier?'
 ]
 
-clintox_FDA_APPROVED = [
-    "Can <INPUT> gain approval from the FDA?",
-    "Is <INPUT> capable of receiving FDA approval?",
-    "Does <INPUT> have the potential to be approved by the FDA?",
-    "Is it likely for <INPUT> to be approved by the FDA?",
-    "Would <INPUT> be able to successfully obtain FDA approval?",
-    "Can <INPUT> meet the criteria for FDA approval?",
-    "Is FDA approval applicable to <INPUT> ?",
-    "Is FDA approval present for <INPUT> ?",
-    "Does FDA approval apply to <INPUT> ?",
-    "Is FDA approval a property of <INPUT> ?",
-    "Does <INPUT> demonstrate the potential for FDA approval?",
-    "Is <INPUT> currently approved by the FDA?",
-    "Has <INPUT> been granted FDA approval?"
+property_prediction_clintox = [
+    'Is <INPUT> toxic?',
+    'Is the molecule <INPUT> known to exhibit toxic properties in biological systems?',
+    'Is <INPUT> classified as a hazardous substance with documented toxicity?',
+    'Does <INPUT> have documented toxicity in biological systems?',
+    'Is <INPUT> considered to be a toxic substance?',
+    'Does <INPUT> have toxicity?',
+    'Do you think that <INPUT> is toxic?',
+    'Can <INPUT> be considered toxic?',
+    'Is <INPUT> associated with harmful and toxic effects?',
+    'Is the substance <INPUT> toxic for human?',
+    '<INPUT> Would you say that the molecule given above is toxic?',
+    '<INPUT> Is it toxic?',
+    'Tell me if <INPUT> is toxic.'
 ]
 
-clintox_CT_TOX = [
-    "Has <INPUT> successfully passed clinical trials?",
-    "Did <INPUT> pass its clinical trials?",
-    "Is <INPUT> a drug that has passed clinical trials?",
-    "Can you confirm if <INPUT> has passed clinical trials?",
-    "Does <INPUT> have successful clinical trial results?",
-    "Is it true that <INPUT> passed clinical trials?",
-    "Has <INPUT> successfully completed clinical trials?",
-    "Did <INPUT> achieve positive outcomes in clinical trials?",
-    "Is <INPUT> associated with successful clinical trial completion?",
-    "Has <INPUT> been proven effective in clinical trials?",
-    "Is <INPUT> a drug that successfully passed through clinical testing?",
-    "Can <INPUT> be considered to have passed clinical trials?",
-    "Has <INPUT> demonstrated success in clinical trials?"
+property_prediction_sider = [
+    'Can <INPUT> cause hepatobiliary disorders?',
+    'Are hepatobiliary disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause hepatobiliary disorders?',
+    'Can <INPUT> cause side effects that affect the hepatobiliary system?',
+    'Are there any known side effects of <INPUT> affecting the hepatobiliary system?',
+    'Does <INPUT> adversely affect the hepatobiliary system?',
+    'Do the side effects of <INPUT> impact the hepatobiliary system?',
+    'Are hepatobiliary system functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause metabolism and nutrition disorders?',
+    'Are metabolism and nutrition disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause metabolism and nutrition disorders?',
+    'Can <INPUT> cause side effects that affect metabolism and nutrition?',
+    'Are there any known side effects of <INPUT> affecting metabolism and nutrition?',
+    'Does <INPUT> adversely affect metabolism and nutrition?',
+    'Do the side effects of <INPUT> impact metabolism and nutrition?',
+    'Are metabolism and nutrition functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause eye disorders?',
+    'Are eye disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause eye disorders?',
+    'Can <INPUT> cause side effects that affect the eyes?',
+    'Are there any known side effects of <INPUT> affecting the eyes?',
+    'Does <INPUT> adversely affect the eyes?',
+    'Do the side effects of <INPUT> impact the eyes?',
+    'Are eye functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause musculoskeletal and connective tissue disorders?',
+    'Are musculoskeletal and connective tissue disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause musculoskeletal and connective tissue disorders?',
+    'Can <INPUT> cause side effects that affect the musculoskeletal system and the connective tissues?',
+    'Are there any known side effects of <INPUT> affecting the musculoskeletal system and the connective tissues?',
+    'Does <INPUT> adversely affect the musculoskeletal system and the connective tissues?',
+    'Do the side effects of <INPUT> impact the musculoskeletal system and the connective tissues?',
+    'Are musculoskeletal system and connective tissues functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause gastrointestinal disorders?',
+    'Are gastrointestinal disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause gastrointestinal disorders?',
+    'Can <INPUT> cause side effects that affect the gastrointestinal system?',
+    'Are there any known side effects of <INPUT> affecting the gastrointestinal system?',
+    'Does <INPUT> adversely affect the gastrointestinal system?',
+    'Do the side effects of <INPUT> impact the gastrointestinal system?',
+    'Are gastrointestinal system functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause immune system disorders?',
+    'Are immune system disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause immune system disorders?',
+    'Can <INPUT> cause side effects that affect the immune system?',
+    'Are there any known side effects of <INPUT> affecting the immune system?',
+    'Does <INPUT> adversely affect the immune system?',
+    'Do the side effects of <INPUT> impact the immune system?',
+    'Are immune system functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause reproductive system and breast disorders?',
+    'Are reproductive system and breast disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause reproductive system and breast disorders?',
+    'Can <INPUT> cause side effects that affect the reproductive system and the breasts?',
+    'Are there any known side effects of <INPUT> affecting the reproductive system and the breasts?',
+    'Does <INPUT> adversely affect the reproductive system and the breasts?',
+    'Do the side effects of <INPUT> impact the reproductive system and the breasts?',
+    'Are reproductive system and breast functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause neoplasms?',
+    'Are neoplasms a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause neoplasms?',
+    'Is <INPUT> linked to the development of neoplasms?',
+    'Can neoplasms be induced by <INPUT> ?',
+    'Does <INPUT> have the potential to trigger neoplasms?',
+    'Is there a correlation between <INPUT> and the occurrence of neoplasms?',
+    'Could <INPUT> lead to the formation of neoplasms?',
+    'Can <INPUT> cause endocrine disorders?',
+    'Are endocrine disorders a side effect of <INPUT> ?',
+    'Can <INPUT> cause side effects that affect the endocrine system?',
+    'Does <INPUT> adversely affect the endocrine system?',
+    'Does <INPUT> adversely affect hormones?',
+    'Do the side effects of <INPUT> impact the endocrine system?',
+    'Do the side effects of <INPUT> impact hormones?',
+    'Are endocrine system functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause vascular disorders?',
+    'Are vascular disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause vascular disorders?',
+    'Can <INPUT> cause side effects that affect the blood vessels?',
+    'Are there any known side effects of <INPUT> affecting the blood vessels?',
+    'Does <INPUT> adversely affect the blood vessels?',
+    'Do the side effects of <INPUT> impact the blood vessels?',
+    'Are vascular functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause blood and lymphatic system disorders?',
+    'Are blood and lymphatic system disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause blood and lymphatic system disorders?',
+    'Can <INPUT> cause side effects that affect the blood and lymphatic system?',
+    'Are there any known side effects of <INPUT> affecting the blood and lymphatic system?',
+    'Does <INPUT> adversely affect the blood and lymphatic system?',
+    'Do the side effects of <INPUT> impact the blood and lymphatic system?',
+    'Are blood and lymphatic system functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause skin and subcutaneous tissue disorders?',
+    'Are skin and subcutaneous tissue disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause skin and subcutaneous tissue disorders?',
+    'Can <INPUT> cause side effects that affect the skin and subcutaneous tissues?',
+    'Are there any known side effects of <INPUT> affecting the skin and subcutaneous tissues?',
+    'Does <INPUT> adversely affect the skin and subcutaneous tissues?',
+    'Do the side effects of <INPUT> impact the skin and subcutaneous tissues?',
+    'Are skin and subcutaneous tissues functions adversely affected by <INPUT> ?',
+    'Can <INPUT> increase risk of congenital, familial, and genetic disorders?',
+    'Is increased risk of congenital, familial, and genetic disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to increase risk of congenital, familial, and genetic disorders?',
+    'Does <INPUT> increase risk of congenital, familial, and genetic disorders?',
+    'Do the side effects of <INPUT> impact congenital, familial, and genetic disorders?',
+    'Can <INPUT> result in an elevated chance of congenital, familial, and genetic disorders?',
+    'Can the use of <INPUT> lead to a higher likelihood of congenital, familial, and genetic disorders?',
+    'Does <INPUT> contribute to an amplified hazard of congenital, familial, and genetic disorders?',
+    'Can <INPUT> cause respiratory, thoracic, and mediastinal disorders?',
+    'Are respiratory, thoracic, and mediastinal disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause respiratory, thoracic, and mediastinal disorders?',
+    'Can <INPUT> cause side effects that affect the respiratory system, thorax, and mediastina?',
+    'Are there any known side effects of <INPUT> affecting the respiratory system, thorax, and mediastina?',
+    'Does <INPUT> adversely affect the respiratory system, thorax, and mediastina?',
+    'Do the side effects of <INPUT> impact the respiratory system, thorax, and mediastina?',
+    'Are respiratory system, thorax, and mediastina functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause psychiatric disorders?',
+    'Are psychiatric disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause psychiatric disorders?',
+    'Can <INPUT> cause side effects that affect mental health?',
+    'Are there any known side effects of <INPUT> affecting mental health?',
+    'Does <INPUT> adversely affect mental health?',
+    'Do the side effects of <INPUT> impact mental health?',
+    'Is mental health adversely affected by <INPUT> ?',
+    'Can <INPUT> cause renal and urinary disorders?',
+    'Are renal and urinary disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause renal and urinary disorders?',
+    'Can <INPUT> cause side effects that affect the kidneys, bladder, and urinary system?',
+    'Are there any known side effects of <INPUT> affecting the kidneys, bladder, and urinary system?',
+    'Does <INPUT> adversely affect the kidneys, bladder and urinary system?',
+    'Do the side effects of <INPUT> impact the kidneys, bladder, and urinary system?',
+    'Are kidneys, bladder, and urinary system functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause issues for pregnant or postpartum women?',
+    'Is <INPUT> known to cause issues for pregnant or postpartum women?',
+    'Can <INPUT> cause side effects that affect pregnant or postpartum women?',
+    'Are there any known side effects of <INPUT> affecting pregnant or postpartum women?', "Does <INPUT> have side effects to women's pregnancy, puerperium, and perinatal conditions?", "Are there adverse effects of <INPUT> on women's pregnancy, postpartum period, and perinatal health?",
+    'Does the use of <INPUT> have any negative impacts on pregnancy, postpartum recovery, or perinatal conditions in women?',
+    'Can the consumption of <INPUT> lead to side effects for women in terms of pregnancy, puerperium, and perinatal conditions?',
+    'Can <INPUT> cause ear disorders?',
+    'Are ear disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause ear disorders?',
+    'Can <INPUT> cause side effects that affect the ears and auditory system?',
+    'Are there any known side effects of <INPUT> affecting the ears and auditory system?',
+    'Does <INPUT> adversely affect the ears and auditory system?',
+    'Do the side effects of <INPUT> impact the ears and auditory system?',
+    'Are ears and auditory system functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause cardiac disorders?',
+    'Are cardiac disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause cardiac disorders?',
+    'Can <INPUT> cause side effects that affect the heart?',
+    'Are there any known side effects of <INPUT> affecting the heart?',
+    'Does <INPUT> adversely affect the heart?',
+    'Do the side effects of <INPUT> impact the heart?',
+    'Are heart functions adversely affected by <INPUT> ?',
+    'Can <INPUT> cause nervous system disorders?',
+    'Are nervous system disorders a side effect of <INPUT> ?',
+    'Is <INPUT> known to cause nervous system disorders?',
+    'Can <INPUT> cause side effects that affect the nervous system?',
+    'Are there any known side effects of <INPUT> affecting the nervous system?',
+    'Does <INPUT> adversely affect the nervous system?',
+    'Do the side effects of <INPUT> impact the nervous system?',
+    'Are nervous system functions adversely affected by <INPUT> ?'
 ]
 
 toxcast = [
@@ -410,7 +555,7 @@ tox21 = [
     "A molecule <INPUT> is given; what could be the toxicity status in nuclear receptor signaling bioassays?"
 ]
 
-hiv = [
+property_prediction_hiv = [
     'Is <INPUT> known to inhibit HIV replication?',
     'Does <INPUT> inhibit viral replication for HIV?',
     'Could <INPUT> be used to prevent HIV replication?',
@@ -426,7 +571,7 @@ hiv = [
     '<INPUT> Predict if the molecule given above have an inhibitory impact on HIV.'
 ]
 
-esol = [
+property_prediction_esol = [
     'What is the log solubility of <INPUT> in water?',
     'Please predict the log solubility of <INPUT> in water.',
     'Tell me the solubility of <INPUT> in water.',
@@ -442,7 +587,7 @@ esol = [
     '<INPUT> Could you tell me the log solubility in water for the molecule given above?'
 ]
 
-lipo = [
+property_prediction_lipo = [
     'What is the octanol/water distribution coefficient (logD at pH 7.4) of <INPUT> ?',
     'Please predict the octanol/water distribution coefficient (logD at pH 7.4) of <INPUT> .',
     'Tell me the octanol/water distribution coefficient (logD at pH 7.4) of <INPUT> .',
