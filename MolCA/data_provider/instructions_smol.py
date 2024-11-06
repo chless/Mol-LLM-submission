@@ -137,7 +137,49 @@ molecule_generation = [
     'I give you a description of a molecule, and you need to return one molecule in SELFIES that meets the description. The description: <INPUT>'
 ]
 
-homo = [
+filtering_template_homo = [
+    "I would like to know the highest occupied molecular orbital (HOMO) energy of this molecule, could you please provide it?",
+    "Please provide the HOMO energy value for this molecule.",
+    "I am interested in the HOMO energy of this molecule, could you tell me what it is?",
+    "What is the highest occupied molecular orbital (HOMO) energy of this molecule?",
+    "Could you give me the HOMO energy value of this molecule?",
+    "What is the HOMO energy of this molecule?",
+    "Please provide the highest occupied molecular orbital (HOMO) energy value for this molecule.",
+    "Please provide me with the HOMO energy value of this molecule.",
+    "What is the HOMO level of energy for this molecule?",
+    "I would like to know the HOMO energy of this molecule, could you please provide it?",
+    "Can you tell me the value of the HOMO energy for this molecule?",
+    "Please provide the highest occupied molecular orbital (HOMO) energy of this molecule.",
+]
+
+filtering_template_lumo = [
+    "Please provide me with the LUMO energy value of this molecule.",
+    "I am interested in the LUMO energy of this molecule, could you tell me what it is?",
+    "I would like to know the lowest unoccupied molecular orbital (LUMO) energy of this molecule, could you please provide it?",
+    "What is the LUMO energy of this molecule?",
+    "What is the LUMO level of energy for this molecule?",
+    "I would like to know the LUMO energy of this molecule, could you please provide it?",
+    "What is the lowest unoccupied molecular orbital (LUMO) energy of this molecule?",
+    "Could you give me the LUMO energy value of this molecule?",
+    "Please provide the lowest unoccupied molecular orbital (LUMO) energy value for this molecule.",
+    "Please provide the lowest unoccupied molecular orbital (LUMO) energy of this molecule.",
+    "Can you tell me the value of the LUMO energy for this molecule?",
+    "Please provide the LUMO energy value for this molecule.",
+]
+
+filtering_template_homo_lumo_gap = [
+    "Please provide the gap between HOMO and LUMO of this molecule.",
+    "I would like to know the HOMO-LUMO gap of this molecule, can you provide it?",
+    "Please give me the HOMO-LUMO gap energy for this molecule.",
+    "Can you give me the energy difference between the HOMO and LUMO orbitals of this molecule?",
+    "Please provide the energy separation between the highest occupied and lowest unoccupied molecular orbitals (HOMO-LUMO gap) of this molecule.",
+    "I need to know the HOMO-LUMO gap energy of this molecule, could you please provide it?",
+    "What is the energy separation between the HOMO and LUMO of this molecule?",
+    "Could you tell me the energy difference between HOMO and LUMO for this molecule?",
+    "What is the HOMO-LUMO gap of this molecule?",
+]
+
+qm9_homo = [
     "<INPUT> Based on the molecule given above, suggest the HOMO energy.",
     "Based on the given molecule: <INPUT>, what HOMO energy could potentially be measured?",
     "Given the following molecule, please provide the HOMO energy. <INPUT>",
@@ -153,7 +195,7 @@ homo = [
     "A molecule <INPUT> is given; what could be the HOMO energy?"
 ]
 
-lumo = [
+qm9_lumo = [
     "<INPUT> Based on the molecule given above, suggest the LUMO energy.",
     "Based on the given molecule: <INPUT>, what LUMO energy could potentially be measured?",
     "Given the following molecule, please provide the LUMO energy. <INPUT>",
@@ -169,7 +211,7 @@ lumo = [
     "A molecule <INPUT> is given; what could be the LUMO energy?"
 ]
 
-homo_lumo_gap = [
+qm9_homo_lumo_gap = [
     "<INPUT> Based on the molecule given above, suggest the HOMO-LUMO gap.",
     "Based on the given molecule: <INPUT>, what HOMO-LUMO gap could potentially be measured?",
     "Given the following molecule, please provide the HOMO-LUMO gap. <INPUT>",
@@ -348,18 +390,18 @@ property_prediction_bbbp = [
 
 property_prediction_clintox = [
     'Is <INPUT> toxic?',
-    'Is the molecule <INPUT> known to exhibit toxic properties in biological systems?',
-    'Is <INPUT> classified as a hazardous substance with documented toxicity?',
-    'Does <INPUT> have documented toxicity in biological systems?',
-    'Is <INPUT> considered to be a toxic substance?',
-    'Does <INPUT> have toxicity?',
-    'Do you think that <INPUT> is toxic?',
-    'Can <INPUT> be considered toxic?',
-    'Is <INPUT> associated with harmful and toxic effects?',
+    'Is the molecule <INPUT> known to exhibit toxic properties to human?',
+    'Is <INPUT> classified as a hazardous substance with documented toxicity to human?',
+    'Does <INPUT> have documented toxicity to human?',
+    'Is <INPUT> considered to be a toxic substance to human?',
+    'Does <INPUT> have toxicity to human?',
+    'Do you think that <INPUT> is toxic to human?',
+    'Can <INPUT> be considered toxic to human?',
+    'Is <INPUT> associated with harmful and toxic effects to human?',
     'Is the substance <INPUT> toxic for human?',
-    '<INPUT> Would you say that the molecule given above is toxic?',
-    '<INPUT> Is it toxic?',
-    'Tell me if <INPUT> is toxic.'
+    '<INPUT> Would you say that the molecule given above is toxic to human?',
+    '<INPUT> Is it toxic to human?',
+    'Tell me if <INPUT> is toxic to human.'
 ]
 
 property_prediction_sider = [

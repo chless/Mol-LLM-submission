@@ -20,6 +20,7 @@ from typing import List, Dict, Any
 from data_provider import instructions_smol
 import model.added_tokens as added_tokens
 from pytorch_lightning import LightningDataModule
+import pandas as pd
 
 
 # we split individual characters inside special tokens like [START_DNA]
@@ -364,21 +365,21 @@ def get_attention_mask_for_packed_sequence(x, eos_token_id, include_eos: bool = 
 # binary classification
 CLASSIFICATION_BENCHMARKS = [
     "bace",  # 1 task # molca, biot5+, instructmol
-    "bbbp",  # 1 task # molca, biot5+, instructmol, llasmol
-    "clintox",  # 2 tasks # molca, biot5+, llasmol
-    "toxcast",  # 617 # molca
-    "sider",  # 27 # molca, llasmol
-    "smol-property_prediction-sider",
     "tox21",  # 12 tasks # molca
-    "hiv",  # 1 tasks # biot5+, instructmol, llasmol
+    "toxcast",  # 617 # molca
+    "smol-property_prediction-bbbp",  # 1 task # molca, biot5+, instructmol, llasmol
+    "smol-property_prediction-clintox",  # 2 tasks # molca, biot5+, llasmol
+    "smol-property_prediction-hiv",  # 1 tasks # biot5+, instructmol, llasmol
+    "smol-property_prediction-sider",  # 27 # molca, llasmol
 ]
 REGRESSION_BENCHMARKS = [
     "qm9_homo",
     "qm9_lumo",
     "qm9_homo_lumo_gap",
     "qm9_additional_label",
-    "esol",  # 1 task # llasmol
-    "lipo",  # 1 task # llasmol
+    "smol-property_prediction-esol",  # 1 task # llasmol
+    "smol-property_prediction-lipo",  # 1 task # llasmol
+    "freesolv"
 ]
 
 MOL2TEXT_BENCHMARKS = [
@@ -629,9 +630,7 @@ class MoleculeNetDatasetDeepChem(Dataset):
         label = wrap_label(label, self.task)
         graph = smiles2data(smiles)
         # randomly select one instruction from list
-        instruction = self.instruction_templates[
-            np.random.choice(len(self.instruction_templates))
-        ]
+        instruction = np.random.choice(self.instruction_templates)
         return graph, label, input_mol_string, instruction
 
     def set_necessary_data(self):
@@ -690,9 +689,13 @@ class MolInstructionDatset(Dataset):
         self.set_necesary_data()
 
     def set_necesary_data(self):
-        self.input_list = self.data["input"][:]
-        self.label_list = self.data["output"][:]
-        self.instruction_list = self.data["instruction"][:]
+        if self.task == "bace":
+            self.input_list = self.data["SELFIES"][:]
+            self.label_list = self.data["label"][:]
+        else:
+            self.input_list = self.data["input"][:]
+            self.label_list = self.data["output"][:]
+        self.instruction_templates = getattr(instructions_smol, self.task)
 
         input_list = []
         label_list = []
@@ -730,7 +733,7 @@ class MolInstructionDatset(Dataset):
         return len(self.label_list)
 
     def get_necessary_data(self, index):
-        instruction = self.instruction_list[index]
+        instruction = np.random.choice(self.instruction_templates)
         input = self.input_list[index]  # if mol_string, representation is selfies
         label = self.label_list[index]  # if mol_string, representation is selfies
 
@@ -752,7 +755,10 @@ class MolInstructionDatset(Dataset):
                 input_mol_string = input
                 smiles = sf.decoder(input_mol_string)
                 graph = smiles2data(smiles)
-
+        elif self.task in CLASSIFICATION_BENCHMARKS:
+            input_mol_string = input
+            smiles = sf.decoder(input_mol_string)
+            graph = smiles2data(smiles)
         else:
             # one selfies in input
             input_mol_string = input
@@ -824,9 +830,7 @@ class ChEBIDataset(Dataset):
         return len(self.label_list)
 
     def get_necessary_data(self, index):
-        instruction = self.instruction_templates[
-            np.random.choice(len(self.instruction_templates))
-        ]
+        instruction = np.random.choice(self.instruction_templates)
         descriptiopn = self.description_list[index]
         selfies = self.selfies_list[index]
         smiles = sf.decoder(selfies)
@@ -850,7 +854,6 @@ class ChEBIDataset(Dataset):
         input_mol_string = (
             added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
         )
-
         return graph, label, input_mol_string, instruction
 
     # LLM input order: <instruction><qformer_output><smiles_tokens>
@@ -868,10 +871,16 @@ class SMolInstructDataset(Dataset):
         self.data = data
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
-        self.instruction_templates = getattr(instructions_smol, self.task.replace("smol-", ""))
+        if "forward_synthesis" in self.task:
+            self.instruction_templates = getattr(instructions_smol, "forward_reaction_prediction")
+        else:
+            self.instruction_templates = getattr(instructions_smol, self.task.replace("smol-", "").replace("-", "_"))
         self.set_necesary_data()
 
     def set_necesary_data(self):
+        self.semi_colon_count_input = 0
+        self.semi_colon_count_label = 0
+
         self.input_mol_string_list = []
         self.graph_list = []
         self.instruction_list = []
@@ -908,12 +917,14 @@ class SMolInstructDataset(Dataset):
 
     def get_necessary_data(self, index, raw_input, raw_output):
         try:
-            data = self.data[index]
             raw_input = raw_input
             label = raw_output
-            instruction = self.instruction_templates[
-                np.random.choice(len(self.instruction_templates))
-            ]
+            instruction = np.random.choice(self.instruction_templates)
+
+            if ";" in raw_input:
+                self.semi_colon_count_input += 1
+            if ";" in raw_output:
+                self.semi_colon_count_label += 1
 
             if self.task in TEXT2MOL_BENCHMARKS:
                 """
@@ -930,7 +941,7 @@ class SMolInstructDataset(Dataset):
                 )
                 description = raw_input
                 description = s_token + description + e_token
-
+                instruction = np.random.choice(self.instruction_templates)
                 instruction = instruction.replace(
                     "<INPUT>", description
                 )
@@ -939,23 +950,43 @@ class SMolInstructDataset(Dataset):
                 )  # null smiles, just input dummy graph for batch processing
                 input_mol_string = "<None>"
                 label = re.sub(r"\s*;\s*", ".", label)
-            elif self.task in MOL2TEXT_BENCHMARKS:
+            elif self.task in REACTION_BENCHMARKS:
+                instruction = np.random.choice(self.instruction_templates)
+                input_mol_string = raw_input
+                smiles = sf.decoder(input_mol_string)
+                graph = smiles2data(smiles)
+            # multi labeled property prediction datasets
+            elif self.task in ['smol-property_prediction-sider']:
+                target = self.data[index]["target"].lower()
+                target_template_list = [i for i in self.instruction_templates if target in i.lower()]
+                assert len(target_template_list) > 0
+                instruction = np.random.choice(target_template_list)
+                # use re sub to replace ";" with "."
+                input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
+                smiles = sf.decoder(input_mol_string)
+                graph = smiles2data(smiles)
+            elif self.task in MOL2TEXT_BENCHMARKS + CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
                 """
                 "chebi-20-mol2text",
                 "smol-name_conversion-s2f",
                 "smol-name_conversion-s2i",
                 "smol-molecule_captioning",
+                ...
                 """
-
+                instruction = np.random.choice(self.instruction_templates)
                 # use re sub to replace ";" with "."
                 input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
                 smiles = sf.decoder(input_mol_string)
                 graph = smiles2data(smiles)
-            elif self.task in REACTION_BENCHMARKS:
-                input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
-                label = re.sub(r"\s*;\s*", ".", label)
-                smiles = sf.decoder(input_mol_string)
-                graph = smiles2data(smiles)
+                if self.task in CLASSIFICATION_BENCHMARKS:
+                    if label.lower() == "true" or label.lower() == "yes":
+                        label = True
+                    elif label.lower() == "false" or label.lower() == "no":
+                        label = False
+                    else:
+                        raise NotImplementedError(f"Label: {label} is not supported")
+            else:
+                raise NotImplementedError(f"Task: {self.task} is not supported")
 
             label = wrap_label(label, self.task)
             input_mol_string = (
@@ -1156,8 +1187,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
             )
             test_dataset = smol_dataset["test"].filter(lambda x: x["task"] == _task)
             tasks = [task_name]
-        elif task_name == "bace":
-            loading_fn = dc.molnet.load_bace_classification
         elif task_name in [
             "toxcast",
             "tox21",
@@ -1165,9 +1194,19 @@ class Mol_LLM_Dataset(InMemoryDataset):
             loading_fn = getattr(dc.molnet, f"load_{task_name}")
         elif task_name == "qm9_additional_label":
             loading_fn = dc.molnet.load_qm9
+        elif task_name == "bace":
+            train_dataset = pd.read_csv(
+                os.path.join(self.args.raw_data_root, "raw/BioT5_bace_train.csv")
+            )
+            valid_dataset = pd.read_csv(
+                os.path.join(self.args.raw_data_root, "raw/BioT5_bace_valid.csv")
+            )
+            test_dataset = pd.read_csv(
+                os.path.join(self.args.raw_data_root, "raw/BioT5_bace_test.csv")
+            )
+            tasks = [task_name]
         elif "chebi-20" in task_name:
             # load data from csv
-            import pandas as pd
             train_dataset = pd.read_csv(
                 os.path.join(self.args.raw_data_root, "raw/BioT5_chebi20_train.csv")
             )
@@ -1197,10 +1236,11 @@ class Mol_LLM_Dataset(InMemoryDataset):
             if "qm9_" in task_name:
                 dataset = mol_instruction_dataset["property_prediction"]
                 subtask_name = task_name.split("_")[1]
-                subtask_instruction_templates = getattr(instructions_smol, subtask_name)
+                subtask_instruction_templates = getattr(instructions_smol, "filtering_template_" + subtask_name)
                 dataset = dataset.filter(
                     lambda x: x["instruction"] in subtask_instruction_templates
                 )
+                assert len(dataset) > 0, f"len(dataset) = {len(dataset)}"
             else:
                 dataset = mol_instruction_dataset[task_name]
 
@@ -1216,7 +1256,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         # dataset from deepchem
         if (
             task_name in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS
-            and task_name not in ["qm9_homo", "qm9_lumo", "qm9_homo_lumo_gap"]
+            and task_name not in ["qm9_homo", "qm9_lumo", "qm9_homo_lumo_gap", "bace"]
             and "smol" not in task_name
         ):
             base_path = f"dataset/{task_name}"
@@ -1275,7 +1315,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
             if "smol" in task_name:
                 dataset = SMolInstructDataset
             elif task_name in [
-                "bace",
                 "toxcast",
                 "tox21",
                 "qm9_additional_label",
@@ -1293,6 +1332,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 "qm9_homo",
                 "qm9_lumo",
                 "qm9_homo_lumo_gap",
+                "bace"
             ]:
                 dataset = MolInstructionDatset
 
@@ -1327,6 +1367,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
             )
 
     def process(self):
+        # <debug>
+        assert False, "only save raw data"
         # load raw datasets in target_benchmarks
         raw_data_list = []
         iter_bar = tqdm(
