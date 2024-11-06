@@ -776,7 +776,7 @@ class MolInstructionDatset(Dataset):
         return graph, label, input_mol_string, self.task_subtask_pair, instruction
 
 
-class ChEBIDatset(Dataset):
+class ChEBIDataset(Dataset):
     def __init__(self, data, task_subtask_pair, **kwargs):
         self.data = data
         self.task_subtask_pair = task_subtask_pair
@@ -833,11 +833,12 @@ class ChEBIDatset(Dataset):
 
         if self.task in TEXT2MOL_BENCHMARKS:
             label = selfies
-            instruction += (
-                + added_tokens.DESCRIPTION[0]
+            description = (
+                added_tokens.DESCRIPTION[0]
                 + descriptiopn
                 + added_tokens.DESCRIPTION[1]
             )
+            instruction = instruction.replace("<INPUT>", description)
             graph = smiles2data("CC")  # null smiles, just input dummy graph for batch processing
             input_mol_string = "<None>"
         elif self.task in MOL2TEXT_BENCHMARKS:
@@ -927,7 +928,7 @@ class SMolInstructDataset(Dataset):
                     in ["smol-name_conversion-i2s", "smol-name_conversion-i2f"]
                     else added_tokens.DESCRIPTION
                 )
-
+                description = raw_input
                 description = s_token + description + e_token
 
                 instruction = instruction.replace(
@@ -937,6 +938,7 @@ class SMolInstructDataset(Dataset):
                     "CC"
                 )  # null smiles, just input dummy graph for batch processing
                 input_mol_string = "<None>"
+                label = re.sub(r"\s*;\s*", ".", label)
             elif self.task in MOL2TEXT_BENCHMARKS:
                 """
                 "chebi-20-mol2text",
@@ -945,11 +947,13 @@ class SMolInstructDataset(Dataset):
                 "smol-molecule_captioning",
                 """
 
-                input_mol_string = raw_input
+                # use re sub to replace ";" with "."
+                input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
                 smiles = sf.decoder(input_mol_string)
                 graph = smiles2data(smiles)
             elif self.task in REACTION_BENCHMARKS:
-                input_mol_string = raw_input
+                input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
+                label = re.sub(r"\s*;\s*", ".", label)
                 smiles = sf.decoder(input_mol_string)
                 graph = smiles2data(smiles)
 
@@ -1278,7 +1282,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
             ]:
                 dataset = MoleculeNetDatasetDeepChem
             elif task_name in ["chebi-20-mol2text", "chebi-20-text2mol"]:
-                dataset = ChEBIDatset
+                dataset = ChEBIDataset
             # qm9 in regression benchmark is processed via MolInstructionDataset
             elif task_name in [
                 "chebi-20-text2mol",
