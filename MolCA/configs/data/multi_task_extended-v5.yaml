@@ -1,0 +1,63 @@
+raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
+data_tag: "extended-v5"
+target_benchmarks:
+  - smol-forward_synthesis
+  - forward_reaction_prediction
+  - smol-molecule_captioning
+  - chebi-20-mol2text
+  - smol-molecule_generation
+  - chebi-20-text2mol
+  - smol-retrosynthesis
+  - retrosynthesis
+  - smol-name_conversion-s2f
+  - smol-name_conversion-s2i
+  - smol-name_conversion-i2s
+  - smol-name_conversion-i2f
+  - smol-property_prediction-esol
+  - smol-property_prediction-lipo
+  - smol-property_prediction-bbbp
+  - smol-property_prediction-clintox
+  - smol-property_prediction-hiv
+  - smol-property_prediction-sider
+  - qm9_homo
+  - qm9_lumo
+  - qm9_homo_lumo_gap
+  - bace
+  - qm9_additional_label: [0, 1, 5, 6, 7, 9, 10, 11]
+  - reagent_prediction
+
+ignore_eval:
+  - smol-name_conversion-s2f
+  - smol-name_conversion-s2i
+  - smol-name_conversion-i2s
+  - smol-name_conversion-i2f
+  - qm9_additional_label
+
+duplication_check:
+  - subject: smol-forward_synthesis_subtask-0_train
+    reference: 
+      - forward_reaction_prediction_subtask-0_test
+
+  - subject: smol-retrosynthesis_subtask-0_train
+    reference: 
+      - retrosynthesis_subtask-0_test
+
+  - subject: forward_reaction_prediction_subtask-0_train
+    reference: 
+      - smol-forward_synthesis_subtask-0_train
+      - smol-forward_synthesis_subtask-0_test
+
+  - subject: retrosynthesis_subtask-0_train
+    reference: 
+      - smol-retrosynthesis_subtask-0_train
+      - smol-retrosynthesis_subtask-0_test
+  
+  - subject: chebi-20-mol2text_subtask-0_train
+    reference: 
+      - smol-molecule_captioning_subtask-0_train
+      - smol-molecule_captioning_subtask-0_test
+
+  - subject: chebi-20-mol2text_subtask-0_train
+    reference: 
+      - smol-molecule_captioning_subtask-0_test
+      - smol-molecule_captioning_subtask-0_test
