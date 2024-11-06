@@ -17,11 +17,9 @@ from torch_geometric.loader.dataloader import Collater
 from tqdm import tqdm
 from typing import List, Dict, Any
 
-from data_provider import instructions
+from data_provider import instructions_smol
 import model.added_tokens as added_tokens
 from pytorch_lightning import LightningDataModule
-from transformers.tokenization_utils_base import BatchEncoding
-import ast
 
 
 # we split individual characters inside special tokens like [START_DNA]
@@ -262,21 +260,8 @@ class DataCollater:
         self.tokenizer_name = self.tokenizer.__class__.__name__
 
     def __call__(self, batch):
-        # target_texts = [instance.target_text for instance in batch]
-        # input_texts = [instance.input_text for instance in batch]
-
-        # <DEBUG>
-        target_texts = []
-        input_texts = []
-        for instance in batch:
-            target_text = instance.target_text
-            input_text = instance.input_text
-            if "Llama" in self.tokenizer_name:
-                target_text = re.sub(r"\n$", self.tokenizer.eos_token, target_text)
-                input_text = re.sub(r"\n$", self.tokenizer.eos_token, input_text)
-
-            target_texts.append(target_text)
-            input_texts.append(input_text)
+        target_texts = [instance.target_text for instance in batch]
+        input_texts = [instance.input_text for instance in batch]
 
         self.tokenizer.padding_side = "left"
 
@@ -606,12 +591,7 @@ class MoleculeNetDatasetDeepChem(Dataset):
         self.task, self.subtask = task_subtask_pair.split("/")
 
         if self.task in CLASSIFICATION_BENCHMARKS:
-            if self.task in ["clintox"]:
-                self.instruction_templates = getattr(
-                    instructions, f"{self.task}_{self.subtask}"
-                )
-            else:
-                self.instruction_templates = getattr(instructions, self.task)
+            self.instruction_templates = getattr(instructions_smol, self.task)
             self.label_tokens = added_tokens.BOOL
         elif self.task in REGRESSION_BENCHMARKS:
             if self.task in ["qm9_additional_label"]:
@@ -628,10 +608,10 @@ class MoleculeNetDatasetDeepChem(Dataset):
                 task = self.task.replace("_additional_label", "")
                 subtask_full_name = subtask_full_name_dict[self.subtask]
                 self.instruction_templates = getattr(
-                    instructions, f"{task}_{subtask_full_name}"
+                    instructions_smol, f"{task}_{subtask_full_name}"
                 )
             else:
-                self.instruction_templates = getattr(instructions, self.task)
+                self.instruction_templates = getattr(instructions_smol, self.task)
             self.label_tokens = added_tokens.FLOAT
         else:
             raise NotImplementedError
@@ -753,16 +733,8 @@ class MolInstructionDatset(Dataset):
         instruction = self.instruction_list[index]
         input = self.input_list[index]  # if mol_string, representation is selfies
         label = self.label_list[index]  # if mol_string, representation is selfies
-        # one smiles in output
-        if self.task in TEXT2MOL_BENCHMARKS:
-            # output smiles do not need to be converted to graph
-            # but assign graph = None retrieve error in torch_geometric, so assign graph label intended as null graph
-            instruction += "\n" + input
-            graph = smiles2data(
-                sf.decoder(label)
-            )  # output smiles do not need to be converted to graph
-            input_mol_string = "<None>"  # no input molstring in text2mol
-        elif self.task in REACTION_BENCHMARKS:
+
+        if self.task in REACTION_BENCHMARKS:
             # two smiles in input0
             if self.task in ["reagent_prediction"]:
                 assert ">>" in input
@@ -813,10 +785,14 @@ class ChEBIDatset(Dataset):
         self.set_necesary_data()
 
     def set_necesary_data(self):
-        self.description_list = self.data["description"][:]
-        self.selfies_list = self.data["SELFIES"][:]
-        self.smiles_list = self.data["SMILES"][:]
-        self.instruction_templates = getattr(instructions, self.task.replace("-", "_"))
+        self.description_list = self.data["description"]
+        self.selfies_list = self.data["SELFIES"]
+        if "mol2text" in self.task:
+            self.instruction_templates = getattr(instructions_smol, "molecule_captioning")
+        elif "text2mol" in self.task:
+            self.instruction_templates = getattr(instructions_smol, "molecule_generation")
+        else:
+            raise NotImplementedError
 
         self.input_mol_string_list = []
         self.graph_list = []
@@ -853,17 +829,16 @@ class ChEBIDatset(Dataset):
         ]
         descriptiopn = self.description_list[index]
         selfies = self.selfies_list[index]
-        smiles = self.smiles_list[index]
+        smiles = sf.decoder(selfies)
 
         if self.task in TEXT2MOL_BENCHMARKS:
             label = selfies
             instruction += (
-                "\n"
                 + added_tokens.DESCRIPTION[0]
                 + descriptiopn
                 + added_tokens.DESCRIPTION[1]
             )
-            graph = smiles2data(smiles)
+            graph = smiles2data("CC")  # null smiles, just input dummy graph for batch processing
             input_mol_string = "<None>"
         elif self.task in MOL2TEXT_BENCHMARKS:
             label = descriptiopn
@@ -892,7 +867,7 @@ class SMolInstructDataset(Dataset):
         self.data = data
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
-        self.instruction_templates = getattr(instructions, self.task.replace("-", "_"))
+        self.instruction_templates = getattr(instructions_smol, self.task.replace("smol-", ""))
         self.set_necesary_data()
 
     def set_necesary_data(self):
@@ -932,9 +907,9 @@ class SMolInstructDataset(Dataset):
 
     def get_necessary_data(self, index, raw_input, raw_output):
         try:
+            data = self.data[index]
             raw_input = raw_input
             label = raw_output
-            # randomly select one instruction from list
             instruction = self.instruction_templates[
                 np.random.choice(len(self.instruction_templates))
             ]
@@ -953,12 +928,14 @@ class SMolInstructDataset(Dataset):
                     else added_tokens.DESCRIPTION
                 )
 
-                description = raw_input
+                description = s_token + description + e_token
 
-                instruction += "\n" + s_token + description + e_token
+                instruction = instruction.replace(
+                    "<INPUT>", description
+                )
                 graph = smiles2data(
-                    "CCCC"
-                )  # null smiles, just input for batch processing
+                    "CC"
+                )  # null smiles, just input dummy graph for batch processing
                 input_mol_string = "<None>"
             elif self.task in MOL2TEXT_BENCHMARKS:
                 """
@@ -1158,66 +1135,8 @@ class Mol_LLM_Dataset(InMemoryDataset):
         return f"{self.llm_model_name}_{self.data_tag}_{self.split}.pt"
 
     def get_dataset(self, task_name):
-        base_path = f"dataset/{task_name}"
-        os.makedirs(base_path, exist_ok=True)
-
         # get dataset from deepchem
-        if task_name == "bace":
-            loading_fn = dc.molnet.load_bace_classification
-        elif task_name in [
-            "bbbp",
-            "clintox",
-            "toxcast",
-            "sider",
-            "tox21",
-            "hiv",
-            "lipo",
-        ]:
-            loading_fn = getattr(dc.molnet, f"load_{task_name}")
-        elif task_name == "esol":
-            loading_fn = dc.molnet.load_delaney
-        elif task_name == "qm9_additional_label":
-            loading_fn = dc.molnet.load_qm9
-        elif "chebi-20" in task_name:
-            dataset = load_dataset("liupf/ChEBI-20-MM", trust_remote_code=True)
-            train_dataset = dataset["train"]
-            valid_dataset = dataset["validation"]
-            test_dataset = dataset["test"]
-            tasks = [task_name]
-
-        # mol-instruction datasets
-        elif task_name in [
-            "chebi-20-text2mol",
-            "chebi-20-mol2text",
-            "reagent_prediction",
-            "forward_reaction_prediction",
-            "retrosynthesis",
-            "qm9_homo",
-            "qm9_lumo",
-            "qm9_homo_lumo_gap",
-        ]:
-            mol_instruction_dataset = load_dataset(
-                "zjunlp/Mol-Instructions",
-                "Molecule-oriented Instructions",
-                trust_remote_code=True,
-            )
-            if "qm9_" in task_name:
-                dataset = mol_instruction_dataset["property_prediction"]
-                subtask_name = task_name.split("_")[1]
-                subtask_instruction_templates = getattr(instructions, subtask_name)
-                dataset = dataset.filter(
-                    lambda x: x["instruction"] in subtask_instruction_templates
-                )
-            else:
-                dataset = mol_instruction_dataset[task_name]
-
-            train_dataset = dataset.filter(lambda x: "train" in x["metadata"])
-            split = train_dataset.train_test_split(test_size=0.02, shuffle=True)
-            train_dataset, valid_dataset = split["train"], split["test"]
-
-            test_dataset = dataset.filter(lambda x: "test" in x["metadata"])
-            tasks = [task_name]
-        elif "smol" in task_name:
+        if "smol" in task_name:
             smol_dataset = load_dataset(
                 "osunlp/SMolInstruct",
                 use_selfies=True,
@@ -1233,6 +1152,60 @@ class Mol_LLM_Dataset(InMemoryDataset):
             )
             test_dataset = smol_dataset["test"].filter(lambda x: x["task"] == _task)
             tasks = [task_name]
+        elif task_name == "bace":
+            loading_fn = dc.molnet.load_bace_classification
+        elif task_name in [
+            "toxcast",
+            "tox21",
+        ]:
+            loading_fn = getattr(dc.molnet, f"load_{task_name}")
+        elif task_name == "qm9_additional_label":
+            loading_fn = dc.molnet.load_qm9
+        elif "chebi-20" in task_name:
+            # load data from csv
+            import pandas as pd
+            train_dataset = pd.read_csv(
+                os.path.join(self.args.raw_data_root, "raw/BioT5_chebi20_train.csv")
+            )
+            valid_dataset = pd.read_csv(
+                os.path.join(self.args.raw_data_root, "raw/BioT5_chebi20_valid.csv")
+            )
+            test_dataset = pd.read_csv(
+                os.path.join(self.args.raw_data_root, "raw/BioT5_chebi20_test.csv")
+            )
+
+            tasks = [task_name]
+
+        # mol-instruction datasets
+        elif task_name in [
+            "reagent_prediction",
+            "forward_reaction_prediction",
+            "retrosynthesis",
+            "qm9_homo",
+            "qm9_lumo",
+            "qm9_homo_lumo_gap",
+        ]:
+            mol_instruction_dataset = load_dataset(
+                "zjunlp/Mol-Instructions",
+                "Molecule-oriented Instructions",
+                trust_remote_code=True,
+            )
+            if "qm9_" in task_name:
+                dataset = mol_instruction_dataset["property_prediction"]
+                subtask_name = task_name.split("_")[1]
+                subtask_instruction_templates = getattr(instructions_smol, subtask_name)
+                dataset = dataset.filter(
+                    lambda x: x["instruction"] in subtask_instruction_templates
+                )
+            else:
+                dataset = mol_instruction_dataset[task_name]
+
+            train_dataset = dataset.filter(lambda x: "train" in x["metadata"])
+            split = train_dataset.train_test_split(test_size=0.02, shuffle=True)
+            train_dataset, valid_dataset = split["train"], split["test"]
+
+            test_dataset = dataset.filter(lambda x: "test" in x["metadata"])
+            tasks = [task_name]
         else:
             raise NotImplementedError
 
@@ -1240,7 +1213,10 @@ class Mol_LLM_Dataset(InMemoryDataset):
         if (
             task_name in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS
             and task_name not in ["qm9_homo", "qm9_lumo", "qm9_homo_lumo_gap"]
+            and "smol" not in task_name
         ):
+            base_path = f"dataset/{task_name}"
+            os.makedirs(base_path, exist_ok=True)
             tasks, datasets, transformers = loading_fn(
                 featurizer="Raw",
                 splitter="scaffold",
@@ -1292,16 +1268,12 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 1:
             ]  # train_set, val_set, test_set
             # dataset processed via MoleculeNetDatasetDeepChem
-            if task_name in [
+            if "smol" in task_name:
+                dataset = SMolInstructDataset
+            elif task_name in [
                 "bace",
-                "bbbp",
-                "clintox",
                 "toxcast",
-                "sider",
                 "tox21",
-                "hiv",
-                "lipo",
-                "esol",
                 "qm9_additional_label",
             ]:
                 dataset = MoleculeNetDatasetDeepChem
@@ -1319,17 +1291,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 "qm9_homo_lumo_gap",
             ]:
                 dataset = MolInstructionDatset
-            elif task_name in [
-                "smol-molecule_captioning",
-                "smol-molecule_generation",
-                "smol-name_conversion-s2f",
-                "smol-name_conversion-s2i",
-                "smol-name_conversion-i2s",
-                "smol-name_conversion-i2f",
-                "smol-forward_synthesis",
-                "smol-retrosynthesis",
-            ]:
-                dataset = SMolInstructDataset
 
             valid_dataset = dataset(
                 data=data_split[1],
@@ -1347,21 +1308,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 subtask_idx=subtask_idx,
             )
 
-            if (
-                hasattr(self.args, "duplication_check_train")
-                and task_name in self.args.duplication_check_train
-            ):
-                train_task_idx = self.args.duplication_check_train.index(task_name)
-                test_task = self.args.duplication_check_test[train_task_idx]
 
-                print(
-                    f"Checking duplication between train: {task_name} and test: {test_task}"
-                )
-                test_data = torch.load(f"{self.raw_dir}/{test_task}_subtask-0_test.pth")
-                # get data_list from train_data
-                train_dataset = filter_duplication(
-                    train_dataset, test_data, num_procs=30
-                )
             torch.save(
                 valid_dataset,
                 f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_val.pth",
