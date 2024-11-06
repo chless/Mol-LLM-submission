@@ -1357,7 +1357,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 # concat datasets using torch ConcatDataset
                 concat_dataset = torch.utils.data.ConcatDataset([valid_dataset, test_dataset, train_dataset])
                 torch.save(
-                    valid_dataset,
+                    concat_dataset,
                     f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_train.pth",
                 )
             else:
