@@ -1350,8 +1350,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 )
 
     def process(self):
-        #assert False, "only save raw"
-        # load raw datasets in target_benchmarks
         raw_data_list = []
         iter_bar = tqdm(
             range(len(self.task_subtask_pairs)),
@@ -1430,6 +1428,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 )
             assert len(raw_data) > 0, f"len(raw_data) = {len(raw_data)}"
             raw_data_list.extend(raw_data)
+            iter_bar.set_description(
+                f"Loading {raw_file_name}|Num data: {len(raw_data_list)}"
+            )
 
         # process raw_data_list
         processed_data_list = []
