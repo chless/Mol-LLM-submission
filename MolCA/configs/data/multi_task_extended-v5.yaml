@@ -3,18 +3,10 @@ data_tag: "extended-v5"
 
 target_benchmarks:
   - qm9_additional_label: [0, 1, 5, 6, 7, 9, 10, 11]
-  - chebi-20-text2mol
-  - chebi-20-mol2text
-  - smol-molecule_captioning
-  - smol-molecule_generation
-  - smol-forward_synthesis
-  - forward_reaction_prediction
-  - smol-retrosynthesis
-  - retrosynthesis
-  - smol-name_conversion-s2f
-  - smol-name_conversion-s2i
   - smol-name_conversion-i2s
   - smol-name_conversion-i2f
+  - smol-name_conversion-s2f
+  - smol-name_conversion-s2i
   - smol-property_prediction-esol
   - smol-property_prediction-lipo
   - smol-property_prediction-bbbp
@@ -26,6 +18,14 @@ target_benchmarks:
   - qm9_homo_lumo_gap
   - bace
   - reagent_prediction
+  - chebi-20-text2mol
+  - chebi-20-mol2text
+  - smol-molecule_captioning
+  - smol-molecule_generation
+  - smol-forward_synthesis
+  - forward_reaction_prediction
+  - smol-retrosynthesis
+  - retrosynthesis
 
 ignore_eval:
   - smol-name_conversion-s2f
