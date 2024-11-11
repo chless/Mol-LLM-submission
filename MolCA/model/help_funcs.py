@@ -55,14 +55,14 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
             ref = pattern["dual_side"].search(target).group()
         else:
             ref = pattern["left_side"].search(target).group()
-        ref_tokens = tokenizer.tokenize(ref, truncation=False)
+        ref_tokens = tokenizer.tokenize(ref)
 
         try:
             if pattern["dual_side"].search(prediction):
                 pred = pattern["dual_side"].search(prediction).group()
             else:
                 pred = pattern["left_side"].search(prediction).group()
-            pred_tokens = tokenizer.tokenize(pred, truncation=False)
+            pred_tokens = tokenizer.tokenize(pred)
 
             references.append([ref_tokens])
             hypotheses.append(pred_tokens)
@@ -184,19 +184,19 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
             levs.append(lev(target_canonical_smiles, prediction_canonical_smiles))
 
             pred_selfies = tokenizer.tokenize(
-                prediction_canonical_selfies, truncation=False
+                prediction_canonical_selfies
             )
             pred_smiles = tokenizer.tokenize(
-                prediction_canonical_smiles, truncation=False
+                prediction_canonical_smiles
             )
             pred_selfies_list.append(pred_selfies)
             pred_smiles_list.append(pred_smiles)
 
             ref_selfies = tokenizer.tokenize(
-                target_canonical_selfies, truncation=False
+                target_canonical_selfies
             )
             ref_smiles = tokenizer.tokenize(
-                target_canonical_smiles, truncation=False
+                target_canonical_smiles
             )
             ref_selfies_list.append([ref_selfies])
             ref_smiles_list.append([ref_smiles])
