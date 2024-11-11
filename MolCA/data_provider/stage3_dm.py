@@ -473,7 +473,6 @@ class Stage3DM(LightningDataModule):
 
     def init_tokenizer(self, tokenizer):
         self.tokenizer = tokenizer
-        self.mol_token_id = self.tokenizer.mol_token_id
 
     def train_dataloader(self):
         loader = DataLoader(
