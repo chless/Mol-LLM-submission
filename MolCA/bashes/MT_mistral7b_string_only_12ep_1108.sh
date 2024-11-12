@@ -7,3 +7,4 @@ python3 MolCA/stage3.py \
 data=multi_task_extended-v5 \
 trainer=mistral7b_80gb \
 ++trainer.mol_representation=string_only \
+++ckpt_path="'/home/chanhui-lee/text-mol/MolCA/all_checkpoints/MT_mistral7b_string_only_12ep_1108/last.ckpt'"
