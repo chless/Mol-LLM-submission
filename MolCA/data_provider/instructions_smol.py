@@ -630,6 +630,22 @@ property_prediction_esol = [
     '<INPUT> Could you tell me the log solubility in water for the molecule given above?'
 ]
 
+property_prediction_esol_used_later = [
+    'What is the log solubility of <INPUT> in water?',
+    'Please predict the log solubility of <INPUT> in water.',
+    'Tell me the log solubility of <INPUT> in water.',
+    'Predict the log solubility of <INPUT> in water.',
+    '<INPUT> What is the log solubility in water for the molecule given above?',
+    'For this molecule <INPUT>, predict the log solubility in water.',
+    'Could you provide information on the log solubility of <INPUT> in water?',
+    'What is the log solubility of <INPUT> in water?',
+    '<INPUT> What is the log solubility in water for the given molecule?',
+    'What value does the log solubility in water have for <INPUT>?',
+    'What is the log solubility in water associated with <INPUT>?',
+    'Provide the log solubility in water of <INPUT>.',
+    '<INPUT> Please predict the log solubility in water for the molecule given above.'
+]
+
 property_prediction_lipo = [
     'What is the octanol/water distribution coefficient (logD at pH 7.4) of <INPUT> ?',
     'Please predict the octanol/water distribution coefficient (logD at pH 7.4) of <INPUT> .',
