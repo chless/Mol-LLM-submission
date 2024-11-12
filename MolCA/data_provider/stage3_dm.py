@@ -559,14 +559,15 @@ def wrap_label(label, task):
             return label_tokens[0] + "False" + label_tokens[1]
     elif task in REGRESSION_BENCHMARKS:
         if isinstance(label, float):
-            label = "{:.4f}".format(label)
+            label = "{:.10f}".format(label)
+        else:
+            label = format(float(label), ".10f")
+
         # force to predict the sign of label first
-        if "-" not in label:
+        if "-" not in label and "+" not in label:
             label = "+" + label
         # unify the length of label to 7
         label = label[:7]
-        while len(label) < 7:
-            label += "0"
         converted_label = "".join([f"<|{char}|>" for char in label])
         return label_tokens[0] + converted_label + label_tokens[1]
     elif task in REACTION_BENCHMARKS + MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
