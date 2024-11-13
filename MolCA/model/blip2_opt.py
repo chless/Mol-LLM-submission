@@ -395,14 +395,14 @@ class Blip2OPT(Blip2Base):
         return predictions, labels
 
 
-    def inject_graph_embeds2input_embeds(self, input_embeds, input_tokens, graphs):
-        if "additional_x" in graphs.keys():
+    def inject_graph_embeds2input_embeds(self, input_embeds, input_tokens, batch):
+        if "additional_x" in batch.keys():
             mol_token_sequence = []
             for prefix in ["", "additional_"]:
-                mol_x = graphs[f"{prefix}x"]
-                mol_edge_index = graphs[f"{prefix}edge_index"]
-                mol_edge_attr = graphs[f"{prefix}edge_attr"]
-                mol_batch = graphs[f"{prefix}batch"]
+                mol_x = batch[f"{prefix}x"]
+                mol_edge_index = batch[f"{prefix}edge_index"]
+                mol_edge_attr = batch[f"{prefix}edge_attr"]
+                mol_batch = batch[f"{prefix}batch"]
                 mol_embeds, mol_masks = self.graph_encoder(
                     mol_x, mol_edge_index, mol_edge_attr, mol_batch
                 )
@@ -421,7 +421,7 @@ class Blip2OPT(Blip2Base):
             mol_tokens = torch.cat(mol_token_sequence, dim=1)
 
         else:
-            graph_embeds, graph_masks = self.graph_encoder(graphs)
+            graph_embeds, graph_masks = self.graph_encoder(batch)
             if not self.tune_gnn:
                 graph_embeds = graph_embeds.detach()
             graph_embeds = self.ln_graph(graph_embeds, graph_masks)
@@ -452,7 +452,8 @@ class Blip2OPT(Blip2Base):
     @torch.no_grad()
     def generate(
         self,
-        samples,
+        batch,
+        input_tokens,
         do_sample=False,
         num_beams=5,
         max_length=128,
@@ -476,15 +477,13 @@ class Blip2OPT(Blip2Base):
         Returns:
             captions (list): A list of strings of length batch_size * num_captions.
         """
-        graphs = samples["graphs"]
-        input_tokens = samples["input_tokens"]
 
         input_embeds = self.llm_model.get_input_embeddings()(input_tokens.input_ids)
         if "graph" in self.args.mol_representation:
             input_embeds = self.inject_graph_embeds2input_embeds(
                 input_embeds=input_embeds,
                 input_tokens=input_tokens,
-                graphs=graphs,
+                batch=batch,
             )
 
         outputs = self.llm_model.generate(

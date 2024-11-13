@@ -327,7 +327,7 @@ class Blip2Stage3(pl.LightningModule):
         }
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
-        graphs, input_tokens, target_tokens, prompt_tokens = batch
+        graphs, prompt_tokens, target_tokens = batch
 
         samples = {"graphs": graphs, "input_tokens": prompt_tokens}
         outputs = self.blip2model.generate(
