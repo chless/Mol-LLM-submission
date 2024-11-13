@@ -44,13 +44,7 @@ def prepare_tokenized_instance(
     fit_llm_input_convention,
     fit_llm_output_convention,
 ):
-    llm_prompt = prepare_llm_input(
-        mol_string=input_mol_string,
-        instruction=instruction,
-        mol_ph=tokenizer.mol_ph_token,
-        mol_representation="string_only",
-        fit_llm_input_convention=fit_llm_input_convention,
-    )
+        # name conversion tasks are included
 
     label = fit_llm_output_convention(label)
 
