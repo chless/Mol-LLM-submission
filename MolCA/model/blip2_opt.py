@@ -255,12 +255,7 @@ class Blip2OPT(Blip2Base):
         self.llm_tokenizer.add_tokens(additional_tokens)
 
         self.llm_tokenizer.mol_token = added_tokens.MOL_EMBEDDING[0]
-        self.llm_tokenizer.mol_ph_token = (
-            self.llm_tokenizer.mol_token * self.args.num_query_token
-        )
-        self.llm_tokenizer.mol_token_id = self.llm_tokenizer(
-            self.llm_tokenizer.mol_token, add_special_tokens=False
-        ).input_ids[0]
+        self.llm_tokenizer.mol_token_id = self.llm_tokenizer.convert_tokens_to_ids(self.llm_tokenizer.mol_token)
 
     def merge_and_initialize_lora(self):
         self.model.blip2model.llm_model.merge_and_unload(progressbar=True)
