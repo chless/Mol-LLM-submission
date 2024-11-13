@@ -617,16 +617,12 @@ property_prediction_hiv = [
 property_prediction_esol = [
     'What is the log solubility of <INPUT> in water?',
     'Please predict the log solubility of <INPUT> in water.',
-    'Tell me the solubility of <INPUT> in water.',
-    'How soluble is <INPUT> ?',
-    'What concentration of <INPUT> can be dissolved in water?',
-    'What is the solubility of <INPUT> ?',
-    'How many mols of <INPUT> can be dissolved in a liter of water?',
-    'Could you provide the logarithmic solubility value of <INPUT> in aqueous solutions?',
-    'Give me the log water solubility for the following molecule: <INPUT> .',
+    'Tell me the log solubility of <INPUT> in water.',
+    'Could you provide the log solubility of <INPUT> in aqueous solutions?',
+    'Give me the log water solubility for the following molecule: <INPUT>.',
     '<INPUT> What is the log solubility in water for the molecule given above?',
-    'What is the logarithmic value of the solubility of <INPUT> in water??',
-    'Can you predict the water solubility of <INPUT> ?',
+    'What is the logarithmic value of the solubility of <INPUT> in water?',
+    'Can you predict the water log solubility of <INPUT>?',
     '<INPUT> Could you tell me the log solubility in water for the molecule given above?'
 ]
 
