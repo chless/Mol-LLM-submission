@@ -576,10 +576,12 @@ def wrap_label(label, task):
         raise NotImplementedError
 
     if task in CLASSIFICATION_BENCHMARKS:
-        if label:
-            return label_tokens[0] + "True" + label_tokens[1]
+        if "true" in label.lower() or "yes" in label.lower():
+            label = label_tokens[0] + "True" + label_tokens[1]
+        elif "false" in label.lower() or "no" in label.lower():
+            label = label_tokens[0] + "False" + label_tokens[1]
         else:
-            return label_tokens[0] + "False" + label_tokens[1]
+            raise NotImplementedError(f"Label: {label} is not supported in classification task")
     elif task in REGRESSION_BENCHMARKS:
         if isinstance(label, float):
             label = "{:.10f}".format(label)
@@ -984,16 +986,9 @@ class SMolInstructDataset(Dataset):
             input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
-            if self.task in CLASSIFICATION_BENCHMARKS:
-                if label.lower() == "true" or label.lower() == "yes":
-                    label = True
-                elif label.lower() == "false" or label.lower() == "no":
-                    label = False
-                else:
-                    raise NotImplementedError(f"Label: {label} is not supported")
         else:
             raise NotImplementedError(f"Task: {self.task} is not supported")
-
+        
         label = wrap_label(label, self.task)
         input_mol_string = (
             added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
