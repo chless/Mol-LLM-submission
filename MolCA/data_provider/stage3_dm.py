@@ -576,12 +576,16 @@ def wrap_label(label, task):
         raise NotImplementedError
 
     if task in CLASSIFICATION_BENCHMARKS:
-        if "true" in label.lower() or "yes" in label.lower():
-            label = label_tokens[0] + "True" + label_tokens[1]
-        elif "false" in label.lower() or "no" in label.lower():
-            label = label_tokens[0] + "False" + label_tokens[1]
+        if isinstance(label, str):
+            if "true" in label.lower() or "yes" in label.lower():
+                label = "True"
+            elif "false" in label.lower() or "no" in label.lower():
+                label = "False"
+            else:
+                raise NotImplementedError(f"Label: {label} is not supported in classification task")
         else:
-            raise NotImplementedError(f"Label: {label} is not supported in classification task")
+            label = "True" if label else "False"
+        label = label_tokens[0] + label + label_tokens[1]
     elif task in REGRESSION_BENCHMARKS:
         if isinstance(label, float):
             label = "{:.10f}".format(label)
