@@ -303,16 +303,19 @@ class DataCollater:
             return_length=True,
         )
 
-        input_tokens = self.tokenizer(
-            text=input_texts,
-            truncation=self.truncation,
-            padding=self.padding,
-            add_special_tokens=False,
-            max_length=self.max_length,
-            return_tensors="pt",
-            return_attention_mask=True,
-            return_length=True,
-        )
+        if self.mode != "eval":
+            input_tokens = prompt_tokens
+        else:
+            input_tokens = self.tokenizer(
+                text=input_texts,
+                truncation=self.truncation,
+                padding=self.padding,
+                add_special_tokens=False,
+                max_length=self.max_length,
+                return_tensors="pt",
+                return_attention_mask=True,
+                return_length=True,
+            )
 
         input_tokens["is_mol_token"] = (
             input_tokens.input_ids == self.tokenizer.mol_token_id
@@ -342,10 +345,7 @@ class DataCollater:
             return_length=True,
         )
 
-        if self.mode == "eval":
-            return batch, prompt_tokens, padded_target_tokens
-        else:
-            return batch, input_tokens, padded_target_tokens
+        return batch, input_tokens, padded_target_tokens
 
 
 def get_attention_mask_for_packed_sequence(x, eos_token_id, include_eos: bool = True):
