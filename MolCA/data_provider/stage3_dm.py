@@ -34,20 +34,32 @@ CUSTOM_SEQ_RE = re.compile(r"(<SELFIES>)(.*?)(</SELFIES>)")
 # literally in the source code in case we ever include it in the training data.
 
 
-def prepare_tokenized_instance(
+def prepare_text_data(
     data,
     label,
     input_mol_string,
     task_subtask_pair,
     instruction,
-    tokenizer,
     fit_llm_input_convention,
     fit_llm_output_convention,
 ):
+    
+    if (
+        "<INPUT>" in instruction and not "<None>" in input_mol_string
+    ):  # for LlaSMol whose input contains <INPUT>
         # name conversion tasks are included
+        # if you use LlaSMol instruction for M2T, replace <INPUT> with mol_string
+        llm_prompt = instruction.replace("<INPUT>", input_mol_string)
+    elif not "<None>" in input_mol_string:
+        llm_prompt = instruction + input_mol_string
+    else:
+        llm_prompt = instruction
+
+    llm_prompt = fit_llm_input_convention(llm_prompt)
 
     label = fit_llm_output_convention(label)
 
+    '''
     # NOTE: getting tensor is faster that getting list, but become problematic when using collate, due to different tensor size
     input_tokens = tokenizer(
         text=llm_prompt + label,
@@ -70,10 +82,17 @@ def prepare_tokenized_instance(
     prepared_instance = PairData(
         **data,
         input_text=llm_prompt + label,
-        target_text=target_text,
+        target_text=label,
         prompt_text=llm_prompt,
         task_subtask_pair=task_subtask_pair,
         input_ids=input_tokens.input_ids,
+    )
+    '''
+    prepared_instance = PairData(
+        **data,
+        prompt_text=llm_prompt,
+        target_text=label,
+        task_subtask_pair=task_subtask_pair,
     )
     return prepared_instance
 
