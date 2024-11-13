@@ -390,14 +390,15 @@ class Blip2OPT(Blip2Base):
         return predictions, labels
 
 
-    def inject_graph_embeds2input_embeds(self, input_embeds, input_tokens, batch):
-        if "additional_x" in batch.keys():
+    def inject_graph_embeds2input_embeds(self, input_embeds, input_tokens, graphs):
+        if "additional_x" in graphs.keys():
             mol_token_sequence = []
             for prefix in ["", "additional_"]:
-                mol_x = batch[f"{prefix}x"]
-                mol_edge_index = batch[f"{prefix}edge_index"]
-                mol_edge_attr = batch[f"{prefix}edge_attr"]
-                mol_batch = batch[f"{prefix}batch"]
+                mol_x = graphs[f"{prefix}x"]
+                mol_edge_index = graphs[f"{prefix}edge_index"]
+                mol_edge_attr = graphs[f"{prefix}edge_attr"]
+                mol_batch = graphs[f"{prefix}batch"]
+
                 mol_embeds, mol_masks = self.graph_encoder(
                     mol_x, mol_edge_index, mol_edge_attr, mol_batch
                 )
@@ -416,7 +417,7 @@ class Blip2OPT(Blip2Base):
             mol_tokens = torch.cat(mol_token_sequence, dim=1)
 
         else:
-            graph_embeds, graph_masks = self.graph_encoder(batch)
+            graph_embeds, graph_masks = self.graph_encoder(graphs)
             if not self.tune_gnn:
                 graph_embeds = graph_embeds.detach()
             graph_embeds = self.ln_graph(graph_embeds, graph_masks)
@@ -436,18 +437,15 @@ class Blip2OPT(Blip2Base):
             mol_token_indices = input_tokens.is_mol_token[data_idx]
             num_mol_tokens_in_prompt = mol_token_indices.sum().item()
             if num_mol_tokens_in_prompt:
-                # TODO: fix the bug that shapes are not matched.
-                input_embeds[data_idx, mol_token_indices, :] = mol_tokens[
-                    data_idx, :num_mol_tokens_in_prompt
-                ]
-            else:
-                pass
+                # inject as mant mol tokens as specified in prompt
+                input_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :num_mol_tokens_in_prompt]
+
         return input_embeds
 
     @torch.no_grad()
     def generate(
         self,
-        batch,
+        graphs,
         input_tokens,
         do_sample=False,
         num_beams=5,
@@ -478,7 +476,7 @@ class Blip2OPT(Blip2Base):
             input_embeds = self.inject_graph_embeds2input_embeds(
                 input_embeds=input_embeds,
                 input_tokens=input_tokens,
-                batch=batch,
+                graphs=graphs,
             )
 
         outputs = self.llm_model.generate(
