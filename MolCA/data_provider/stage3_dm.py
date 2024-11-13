@@ -96,47 +96,6 @@ def prepare_text_data(
     )
     return prepared_instance
 
-
-def prepare_llm_input(
-    mol_string,
-    instruction,
-    mol_ph,
-    mol_representation,
-    fit_llm_input_convention=None,
-):
-    if CUSTOM_SEQ_RE.match(mol_string) is None:
-        mol_string = added_tokens.SELFIES[0] + mol_string + added_tokens.SELFIES[1]
-
-    mol_ph = added_tokens.MOL_2D[0] + mol_ph + added_tokens.MOL_2D[1]
-
-    if mol_representation == "graph_only":
-        mol_string_converted = CUSTOM_SEQ_RE.sub(r"%s" % (mol_ph), mol_string)
-        # reagent prediction has reaction direction token and second molecule
-
-    elif mol_representation == "string_only":
-        mol_string_converted = CUSTOM_SEQ_RE.sub(r"\1\2\3", mol_string)
-
-    elif mol_representation == "string+graph":
-        mol_string_converted = CUSTOM_SEQ_RE.sub(r"\1\2\3%s" % (mol_ph), mol_string)
-    else:
-        raise NotImplementedError("mol_representation should be one of the options")
-
-    # for tasks whose input does not contain molecule string (such as text2mol), don't add mol_string
-    if (
-        "<INPUT>" in instruction and not "<None>" in mol_string
-    ):  # for LlaSMol whose input contains <INPUT>
-        # name conversion tasks are included
-        # if you use LlaSMol instruction for M2T, replace <INPUT> with mol_string
-        llm_prompt = instruction.replace("<INPUT>", mol_string_converted)
-    elif not "<None>" in mol_string:
-        llm_prompt = instruction + mol_string_converted
-    else:
-        llm_prompt = instruction
-
-    llm_prompt = fit_llm_input_convention(llm_prompt)
-    return llm_prompt
-
-
 def pack_data_points(data_list):
     # TODO: implement proper graph handling when graph training
     packed_x = data_list[0].x
@@ -260,6 +219,8 @@ class DataCollater:
         truncation,
         padding,
         mode,
+        mol_representation="string_only",
+        num_query_token=None,
         apply_sequence_packing=False,
     ):
         self.max_length = max_length
@@ -268,26 +229,50 @@ class DataCollater:
         self.truncation = bool(truncation)
         self.padding = padding
         self.mode = mode
+        self.mol_representation = mol_representation
         self.apply_sequence_packing = apply_sequence_packing
         self.tokenizer_name = self.tokenizer.__class__.__name__
+        self.input_mol_string_pattern = re.compile(
+            added_tokens.SELFIES[0] + ".*?" + added_tokens.SELFIES[1] + r"(?=.*\[/INST\])"
+        )
+        if num_query_token is not None:
+            self.graph_sequence = added_tokens.MOL_2D[0] + self.tokenizer.mol_token * num_query_token + added_tokens.MOL_2D[1]
 
     def __call__(self, batch):
-        target_texts = [instance.target_text for instance in batch]
-        input_texts = [instance.input_text for instance in batch]
+        def postfix_graph_sequence(match):
+            return match.group(0) + self.graph_sequence
+        
+        input_texts, prompt_texts, raw_target_texts = [], [], []
+        for instance in batch:
+            prompt_text = instance.prompt_text
+            target_text = instance.target_text
+            # TODO: this code is temporally needs for v5. when using v6, remove this code
+            if self.tokenizer.pad_token in target_text:
+                target_text = target_text.replace(self.tokenizer.pad_token, "")
 
-        self.tokenizer.padding_side = "left"
-
-        if self.mode == "eval":
-            prompt_texts = [instance.prompt_text for instance in batch]
-            prompt_tokens = self.tokenizer(
-                text=prompt_texts,
-                truncation=self.truncation,
-                padding=self.padding,
-                add_special_tokens=False,
-                max_length=self.max_length,
-                return_tensors="pt",
-                return_attention_mask=True,
-            )
+            if any([token not in prompt_text for token in added_tokens.DESCRIPTION]):
+                assert len(self.input_mol_string_pattern.findall(prompt_text)) > 0, "SELFIES is not found in the prompt text"
+            
+            # prepare prompt text with proper molecule representation
+            if self.mol_representation == "string_only":
+                pass
+            elif self.mol_representation == "graph_only":
+                prompt_text = self.input_mol_string_pattern.sub(
+                    self.graph_sequence, 
+                    prompt_text
+                    )
+            elif self.mol_representation == "string+graph":
+                prompt_text = self.input_mol_string_pattern.sub(
+                    postfix_graph_sequence, 
+                    prompt_text
+                    )
+            else:
+                raise NotImplementedError("mol_representation should be one of the options")
+            
+            input_text = prompt_text + target_text
+            input_texts.append(input_text)
+            prompt_texts.append(prompt_text)
+            raw_target_texts.append(target_text)
 
         if isinstance(batch[0], PairData):
             additional_batch = torch.tensor([], dtype=torch.int64)
@@ -305,6 +290,19 @@ class DataCollater:
         if isinstance(batch, PairData):
             batch.additional_batch = additional_batch
 
+        self.tokenizer.padding_side = "left"
+
+        prompt_tokens = self.tokenizer(
+            text=prompt_texts,
+            truncation=self.truncation,
+            padding=self.padding,
+            add_special_tokens=False,
+            max_length=self.max_length,
+            return_tensors="pt",
+            return_attention_mask=True,
+            return_length=True,
+        )
+
         input_tokens = self.tokenizer(
             text=input_texts,
             truncation=self.truncation,
@@ -315,6 +313,7 @@ class DataCollater:
             return_attention_mask=True,
             return_length=True,
         )
+
         input_tokens["is_mol_token"] = (
             input_tokens.input_ids == self.tokenizer.mol_token_id
         )
@@ -324,24 +323,29 @@ class DataCollater:
                 x=input_tokens.input_ids,
                 eos_token_id=self.tokenizer.eos_token_id,
             )
-            input_tokens["attention_mask"] = input_attention_mask
+            input_tokens["attention_mask"] = input_attention_mask   
 
-        # TODO: reduce duplicated tokenization
-        # use input_len and pad_token_id
-        target_tokens = self.tokenizer(
-            text=target_texts,
+        padded_target_texts = []
+        for i, target_text in enumerate(raw_target_texts):
+            prompt_len = prompt_tokens.length[i].item()
+            target_text = prompt_len * self.tokenizer.pad_token + target_text
+            padded_target_texts.append(target_text)
+
+        padded_target_tokens = self.tokenizer(
+            text=padded_target_texts,
             truncation=self.truncation,
             padding=self.padding,
             add_special_tokens=False,
             max_length=self.max_length,
             return_tensors="pt",
             return_attention_mask=True,
+            return_length=True,
         )
 
         if self.mode == "eval":
-            return batch, input_tokens, target_tokens, prompt_tokens
+            return batch, prompt_tokens, padded_target_tokens
         else:
-            return batch, input_tokens, target_tokens
+            return batch, input_tokens, padded_target_tokens
 
 
 def get_attention_mask_for_packed_sequence(x, eos_token_id, include_eos: bool = True):
@@ -502,6 +506,8 @@ class Stage3DM(LightningDataModule):
                 truncation=self.args.truncation,
                 padding=self.args.padding,
                 mode="train",
+                mol_representation=self.mol_representation,
+                num_query_token=self.args.num_query_token,
                 apply_sequence_packing=self.args.apply_sequence_packing,
             ),
         )
@@ -522,6 +528,8 @@ class Stage3DM(LightningDataModule):
                 truncation=self.args.truncation,
                 padding=self.args.padding,
                 mode="eval",
+                mol_representation=self.mol_representation,
+                num_query_token=self.args.num_query_token,
                 apply_sequence_packing=False,
             ),
         )
@@ -542,6 +550,8 @@ class Stage3DM(LightningDataModule):
                 truncation=self.args.truncation,
                 padding=self.args.padding,
                 mode="eval",
+                mol_representation=self.mol_representation,
+                num_query_token=self.args.num_query_token,
                 apply_sequence_packing=False,
             ),
         )
@@ -1475,7 +1485,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                         instance[4],
                     ]
 
-                data = prepare_tokenized_instance(
+                data = prepare_text_data(
                     data=PairData(
                         x=instance[0][0].x,
                         edge_index=instance[0][0].edge_index,
@@ -1488,7 +1498,6 @@ class Mol_LLM_Dataset(InMemoryDataset):
                     input_mol_string=instance[2],
                     task_subtask_pair=instance[3],
                     instruction=instance[4],
-                    tokenizer=self.tokenizer,
                     fit_llm_input_convention=self.fit_llm_input_convention,
                     fit_llm_output_convention=self.fit_llm_output_convention,
                 )
