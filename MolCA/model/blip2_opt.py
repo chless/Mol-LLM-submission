@@ -255,12 +255,7 @@ class Blip2OPT(Blip2Base):
         self.llm_tokenizer.add_tokens(additional_tokens)
 
         self.llm_tokenizer.mol_token = added_tokens.MOL_EMBEDDING[0]
-        self.llm_tokenizer.mol_ph_token = (
-            self.llm_tokenizer.mol_token * self.args.num_query_token
-        )
-        self.llm_tokenizer.mol_token_id = self.llm_tokenizer(
-            self.llm_tokenizer.mol_token, add_special_tokens=False
-        ).input_ids[0]
+        self.llm_tokenizer.mol_token_id = self.llm_tokenizer.convert_tokens_to_ids(self.llm_tokenizer.mol_token)
 
     def merge_and_initialize_lora(self):
         self.model.blip2model.llm_model.merge_and_unload(progressbar=True)
@@ -403,6 +398,7 @@ class Blip2OPT(Blip2Base):
                 mol_edge_index = graphs[f"{prefix}edge_index"]
                 mol_edge_attr = graphs[f"{prefix}edge_attr"]
                 mol_batch = graphs[f"{prefix}batch"]
+
                 mol_embeds, mol_masks = self.graph_encoder(
                     mol_x, mol_edge_index, mol_edge_attr, mol_batch
                 )
@@ -441,18 +437,16 @@ class Blip2OPT(Blip2Base):
             mol_token_indices = input_tokens.is_mol_token[data_idx]
             num_mol_tokens_in_prompt = mol_token_indices.sum().item()
             if num_mol_tokens_in_prompt:
-                # TODO: fix the bug that shapes are not matched.
-                input_embeds[data_idx, mol_token_indices, :] = mol_tokens[
-                    data_idx, :num_mol_tokens_in_prompt
-                ]
-            else:
-                pass
+                # inject as mant mol tokens as specified in prompt
+                input_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :num_mol_tokens_in_prompt]
+
         return input_embeds
 
     @torch.no_grad()
     def generate(
         self,
-        samples,
+        graphs,
+        input_tokens,
         do_sample=False,
         num_beams=5,
         max_length=128,
@@ -476,8 +470,6 @@ class Blip2OPT(Blip2Base):
         Returns:
             captions (list): A list of strings of length batch_size * num_captions.
         """
-        graphs = samples["graphs"]
-        input_tokens = samples["input_tokens"]
 
         input_embeds = self.llm_model.get_input_embeddings()(input_tokens.input_ids)
         if "graph" in self.args.mol_representation:

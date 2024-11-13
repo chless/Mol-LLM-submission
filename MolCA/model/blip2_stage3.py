@@ -327,24 +327,24 @@ class Blip2Stage3(pl.LightningModule):
         }
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
-        graphs, input_tokens, target_tokens, prompt_tokens = batch
+        graphs, prompt_tokens, target_tokens = batch
 
-        samples = {"graphs": graphs, "input_tokens": prompt_tokens}
         outputs = self.blip2model.generate(
-            samples,
+            graphs=graphs,
+            input_tokens=prompt_tokens,
             num_beams=self.num_beams,
             max_length=self.gen_max_len,
             min_length=self.min_len,
         )
         predictions = outputs.predictions
-        targets = self.blip2model.llm_tokenizer.batch_decode(target_tokens.input_ids)
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             prompt_tokens.input_ids, skip_special_tokens=False
         )
-
         predictions = [
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions
         ]
+
+        targets = self.blip2model.llm_tokenizer.batch_decode(target_tokens.input_ids)
         targets = [
             t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
         ]
@@ -362,7 +362,7 @@ class Blip2Stage3(pl.LightningModule):
 
         batch_size = prompt_tokens.input_ids.shape[0]
         # TODO: IMPORTANT! this loss calculateion should be fixed, with the change of data collater in eval mode
-        outputs = self.blip2model(batch[:-1])
+        outputs = self.blip2model(batch)
         ##============== Overall Loss ===================##
 
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)

@@ -1,7 +1,7 @@
 defaults:
-  - data: multi_task
+  - data: multi_task_extended-v5
   - gnn: moleculeSTM
-  - trainer: vram80gb
+  - trainer: mistral7b_80gb
 
 # General settings
 filename: debugging
