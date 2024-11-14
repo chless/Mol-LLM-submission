@@ -7,9 +7,7 @@ python3 MolCA/stage3.py \
 data=sider \
 trainer=mistral7b_80gb \
 ++trainer.mol_representation=string_only \
-++trainer.max_epochs=30 \
-++trainer.accumulate_grad_batches=1 \
+++trainer.max_epochs=20 \
+++trainer.accumulate_grad_batches=11 \
 ++trainer.warmup_steps=1 \
-++trainer.log_every_n_steps=10 \
-++trainer.init_lr=1e-3 \
-++trainer.min_lr=1e-4
+++trainer.log_every_n_steps=10

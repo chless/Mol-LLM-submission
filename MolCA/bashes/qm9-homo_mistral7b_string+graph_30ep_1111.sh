@@ -8,4 +8,5 @@ data=qm9_homo \
 trainer=mistral7b_80gb \
 ++trainer.mol_representation=string+graph \
 ++trainer.max_epochs=30 \
-++trainer.accumulate_grad_batches=1
+++trainer.accumulate_grad_batches=11 \
+++trainer.warmup_steps=1
