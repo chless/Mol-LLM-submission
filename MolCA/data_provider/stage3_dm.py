@@ -22,12 +22,6 @@ import model.added_tokens as added_tokens
 from pytorch_lightning import LightningDataModule
 import pandas as pd
 
-
-# we split individual characters inside special tokens like [START_DNA]
-# TODO: change this ugly I_SMILES things to regular special token, and add the special token to vocab whichever LLM
-# CUSTOM_SEQ_RE = re.compile(r"(\[START_(DNA|SMILES|I_SMILES|AMINO)])(.*?)(\[END_\2])")
-CUSTOM_SEQ_RE = re.compile(r"(<SELFIES>)(.*?)(</SELFIES>)")
-
 # token added to implement a custom sequence tokenization. This token is added at
 # corpus cleaning step and removed in pretokenization. The digits are added to increase the chance
 # that they do not occur in the corpus. The digits are escaped so that the token does not appear
@@ -43,7 +37,7 @@ def prepare_text_data(
     fit_llm_input_convention,
     fit_llm_output_convention,
 ):
-    
+
     if (
         "<INPUT>" in instruction and not "<None>" in input_mol_string
     ):  # for LlaSMol whose input contains <INPUT>
@@ -59,35 +53,6 @@ def prepare_text_data(
 
     label = fit_llm_output_convention(label)
 
-    '''
-    # NOTE: getting tensor is faster that getting list, but become problematic when using collate, due to different tensor size
-    input_tokens = tokenizer(
-        text=llm_prompt + label,
-        return_attention_mask=False,
-        return_length=True,
-        return_token_type_ids=False,
-    )
-    prompt_tokens = tokenizer(llm_prompt, return_length=True, add_special_tokens=False)
-
-    if isinstance(prompt_tokens.length, list):
-        prompt_tokens_length = prompt_tokens.length[0]
-    elif isinstance(prompt_tokens.length, int):
-        prompt_tokens_length = prompt_tokens.length
-    else:
-        raise NotImplementedError
-
-    target_text = prompt_tokens_length * tokenizer.pad_token + label
-
-    # TODO: later, when start training graph modality with sequence packing, change the PairData to PackedData
-    prepared_instance = PairData(
-        **data,
-        input_text=llm_prompt + label,
-        target_text=label,
-        prompt_text=llm_prompt,
-        task_subtask_pair=task_subtask_pair,
-        input_ids=input_tokens.input_ids,
-    )
-    '''
     prepared_instance = PairData(
         **data,
         prompt_text=llm_prompt,
@@ -95,6 +60,7 @@ def prepare_text_data(
         task_subtask_pair=task_subtask_pair,
     )
     return prepared_instance
+
 
 def pack_data_points(data_list):
     # TODO: implement proper graph handling when graph training
@@ -233,15 +199,22 @@ class DataCollater:
         self.apply_sequence_packing = apply_sequence_packing
         self.tokenizer_name = self.tokenizer.__class__.__name__
         self.input_mol_string_pattern = re.compile(
-            added_tokens.SELFIES[0] + ".*?" + added_tokens.SELFIES[1] + r"(?=.*\[/INST\])"
+            added_tokens.SELFIES[0]
+            + ".*?"
+            + added_tokens.SELFIES[1]
+            + r"(?=.*\[/INST\])"
         )
         if num_query_token is not None:
-            self.graph_sequence = added_tokens.MOL_2D[0] + self.tokenizer.mol_token * num_query_token + added_tokens.MOL_2D[1]
+            self.graph_sequence = (
+                added_tokens.MOL_2D[0]
+                + self.tokenizer.mol_token * num_query_token
+                + added_tokens.MOL_2D[1]
+            )
 
     def __call__(self, batch):
         def postfix_graph_sequence(match):
             return match.group(0) + self.graph_sequence
-        
+
         input_texts, prompt_texts, raw_target_texts = [], [], []
         for instance in batch:
             prompt_text = instance.prompt_text
@@ -251,24 +224,26 @@ class DataCollater:
                 target_text = target_text.replace(self.tokenizer.pad_token, "")
 
             if any([token not in prompt_text for token in added_tokens.DESCRIPTION]):
-                assert len(self.input_mol_string_pattern.findall(prompt_text)) > 0, "SELFIES is not found in the prompt text"
-            
+                assert (
+                    len(self.input_mol_string_pattern.findall(prompt_text)) > 0
+                ), "SELFIES is not found in the prompt text"
+
             # prepare prompt text with proper molecule representation
             if self.mol_representation == "string_only":
                 pass
             elif self.mol_representation == "graph_only":
                 prompt_text = self.input_mol_string_pattern.sub(
-                    self.graph_sequence, 
-                    prompt_text
-                    )
+                    self.graph_sequence, prompt_text
+                )
             elif self.mol_representation == "string+graph":
                 prompt_text = self.input_mol_string_pattern.sub(
-                    postfix_graph_sequence, 
-                    prompt_text
-                    )
+                    postfix_graph_sequence, prompt_text
+                )
             else:
-                raise NotImplementedError("mol_representation should be one of the options")
-            
+                raise NotImplementedError(
+                    "mol_representation should be one of the options"
+                )
+
             input_text = prompt_text + target_text
             input_texts.append(input_text)
             prompt_texts.append(prompt_text)
@@ -326,7 +301,7 @@ class DataCollater:
                 x=input_tokens.input_ids,
                 eos_token_id=self.tokenizer.eos_token_id,
             )
-            input_tokens["attention_mask"] = input_attention_mask   
+            input_tokens["attention_mask"] = input_attention_mask
 
         padded_target_texts = []
         for i, target_text in enumerate(raw_target_texts):
@@ -576,10 +551,19 @@ def wrap_label(label, task):
         raise NotImplementedError
 
     if task in CLASSIFICATION_BENCHMARKS:
-        if label:
-            return label_tokens[0] + "True" + label_tokens[1]
+        if isinstance(label, str):
+            if "true" in label.lower() or "yes" in label.lower():
+                label = "True"
+            elif "false" in label.lower() or "no" in label.lower():
+                label = "False"
+            else:
+                raise NotImplementedError(
+                    f"Label: {label} is not supported in classification task"
+                )
         else:
-            return label_tokens[0] + "False" + label_tokens[1]
+            label = "True" if label else "False"
+        label = label_tokens[0] + label + label_tokens[1]
+        return label
     elif task in REGRESSION_BENCHMARKS:
         if isinstance(label, float):
             label = "{:.10f}".format(label)
@@ -815,9 +799,13 @@ class ChEBIDataset(Dataset):
         self.description_list = self.data["description"]
         self.selfies_list = self.data["SELFIES"]
         if "mol2text" in self.task:
-            self.instruction_templates = getattr(instructions_smol, "molecule_captioning")
+            self.instruction_templates = getattr(
+                instructions_smol, "molecule_captioning"
+            )
         elif "text2mol" in self.task:
-            self.instruction_templates = getattr(instructions_smol, "molecule_generation")
+            self.instruction_templates = getattr(
+                instructions_smol, "molecule_generation"
+            )
         else:
             raise NotImplementedError
 
@@ -859,12 +847,12 @@ class ChEBIDataset(Dataset):
         if self.task in TEXT2MOL_BENCHMARKS:
             label = selfies
             description = (
-                added_tokens.DESCRIPTION[0]
-                + descriptiopn
-                + added_tokens.DESCRIPTION[1]
+                added_tokens.DESCRIPTION[0] + descriptiopn + added_tokens.DESCRIPTION[1]
             )
             instruction = instruction.replace("<INPUT>", description)
-            graph = smiles2data("CC")  # null smiles, just input dummy graph for batch processing
+            graph = smiles2data(
+                "CC"
+            )  # null smiles, just input dummy graph for batch processing
             input_mol_string = "<None>"
         elif self.task in MOL2TEXT_BENCHMARKS:
             label = descriptiopn
@@ -893,9 +881,13 @@ class SMolInstructDataset(Dataset):
         self.task_subtask_pair = task_subtask_pair
         self.task, self.subtask = task_subtask_pair.split("/")
         if "forward_synthesis" in self.task:
-            self.instruction_templates = getattr(instructions_smol, "forward_reaction_prediction")
+            self.instruction_templates = getattr(
+                instructions_smol, "forward_reaction_prediction"
+            )
         else:
-            self.instruction_templates = getattr(instructions_smol, self.task.replace("smol-", "").replace("-", "_"))
+            self.instruction_templates = getattr(
+                instructions_smol, self.task.replace("smol-", "").replace("-", "_")
+            )
         self.set_necesary_data()
 
     def set_necesary_data(self):
@@ -920,7 +912,9 @@ class SMolInstructDataset(Dataset):
 
         for i in iter_bar:
             try:
-                graph, label, input_mol_string, instruction = self.get_necessary_data(i, raw_inputs[i], raw_outputs[i])
+                graph, label, input_mol_string, instruction = self.get_necessary_data(
+                    i, raw_inputs[i], raw_outputs[i]
+                )
                 self.graph_list.append(graph)
                 self.label_list.append(label)
                 self.input_mol_string_list.append(input_mol_string)
@@ -948,16 +942,13 @@ class SMolInstructDataset(Dataset):
         if self.task in TEXT2MOL_BENCHMARKS:
             s_token, e_token = (
                 added_tokens.IUPAC
-                if self.task
-                in ["smol-name_conversion-i2s", "smol-name_conversion-i2f"]
+                if self.task in ["smol-name_conversion-i2s", "smol-name_conversion-i2f"]
                 else added_tokens.DESCRIPTION
             )
             description = raw_input
             description = s_token + description + e_token
             instruction = np.random.choice(self.instruction_templates)
-            instruction = instruction.replace(
-                "<INPUT>", description
-            )
+            instruction = instruction.replace("<INPUT>", description)
             graph = smiles2data(
                 "CC"
             )  # null smiles, just input dummy graph for batch processing
@@ -969,8 +960,8 @@ class SMolInstructDataset(Dataset):
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
         # multi labeled property prediction datasets
-        elif self.task in ['smol-property_prediction-sider']:
-            instance_input = self.data[index]['input']
+        elif self.task in ["smol-property_prediction-sider"]:
+            instance_input = self.data[index]["input"]
             assert re.search(r"\[.*\]", instance_input) is not None
             instruction = re.sub(r"\[.*\]", "<INPUT>", instance_input)
 
@@ -978,19 +969,15 @@ class SMolInstructDataset(Dataset):
             input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
-        elif self.task in MOL2TEXT_BENCHMARKS + CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS:
+        elif (
+            self.task
+            in MOL2TEXT_BENCHMARKS + CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS
+        ):
             instruction = np.random.choice(self.instruction_templates)
             # use re sub to replace ";" with "."
             input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
-            if self.task in CLASSIFICATION_BENCHMARKS:
-                if label.lower() == "true" or label.lower() == "yes":
-                    label = True
-                elif label.lower() == "false" or label.lower() == "no":
-                    label = False
-                else:
-                    raise NotImplementedError(f"Label: {label} is not supported")
         else:
             raise NotImplementedError(f"Task: {self.task} is not supported")
 
@@ -1077,7 +1064,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
         print(f"loading dataset {self.processed_file_names}")
         self.load(self.processed_paths[0])
         print(
-            f"loaded dataset {self.processed_file_names}| data length: {len(self._data.input_ids)}"
+            f"loaded dataset {self.processed_file_names}| data length: {len(self._data.target_text)}"
         )
 
         if mode == "test":
@@ -1120,7 +1107,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
     # access data instance only via self.indices, which ensure fast shuffling for every training epoch
     def set_data_indices(self):
-        self.data_len = len(self._data.input_ids)
+        self.data_len = len(self._data.target_text)
         self.indices = list(range(self.data_len))
 
     # shuffle only the indices for fast shuffling
@@ -1241,7 +1228,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
             if "qm9_" in task_name:
                 dataset = mol_instruction_dataset["property_prediction"]
                 subtask_name = task_name.split("_")[1]
-                subtask_instruction_templates = getattr(instructions_smol, "filtering_template_" + subtask_name)
+                subtask_instruction_templates = getattr(
+                    instructions_smol, "filtering_template_" + subtask_name
+                )
                 dataset = dataset.filter(
                     lambda x: x["instruction"] in subtask_instruction_templates
                 )
@@ -1284,7 +1273,14 @@ class Mol_LLM_Dataset(InMemoryDataset):
         for task_subtask_pair in self.task_subtask_pairs:
             task, subtask_idx = task_subtask_pair
             if os.path.exists(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_train.pth"):
-                if "qm9_additional" in task or (os.path.exists(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_val.pth") and os.path.exists(f"{self.raw_dir}/{task}_subtask-{subtask_idx}_test.pth")):
+                if "qm9_additional" in task or (
+                    os.path.exists(
+                        f"{self.raw_dir}/{task}_subtask-{subtask_idx}_val.pth"
+                    )
+                    and os.path.exists(
+                        f"{self.raw_dir}/{task}_subtask-{subtask_idx}_test.pth"
+                    )
+                ):
                     print(f"{task}_{subtask_idx} already exists")
                 else:
                     downloading_task_subtask_pairs.append(task_subtask_pair)
@@ -1331,7 +1327,7 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 "qm9_homo",
                 "qm9_lumo",
                 "qm9_homo_lumo_gap",
-                "bace"
+                "bace",
             ]:
                 dataset = MolInstructionDatset
 
@@ -1353,7 +1349,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
             if task_name in "qm9_additional_label":
                 # concat datasets using torch ConcatDataset
-                concat_dataset = ConcatDataset([valid_dataset, test_dataset, train_dataset])
+                concat_dataset = ConcatDataset(
+                    [valid_dataset, test_dataset, train_dataset]
+                )
                 torch.save(
                     concat_dataset,
                     f"{self.raw_dir}/{task_name}_subtask-{subtask_idx}_train.pth",
@@ -1379,8 +1377,10 @@ class Mol_LLM_Dataset(InMemoryDataset):
             desc="Loading raw data",
             total=len(self.task_subtask_pairs),
         )
-        duplication_subjects = [item['subject'] for item in self.args.duplication_check]
-        duplication_reference = {item['subject']: item['reference'] for item in self.args.duplication_check}
+        duplication_subjects = [item["subject"] for item in self.args.duplication_check]
+        duplication_reference = {
+            item["subject"]: item["reference"] for item in self.args.duplication_check
+        }
         for i in iter_bar:
             task, subtask_idx = self.task_subtask_pairs[i]
             raw_file_name = f"{task}_subtask-{subtask_idx}_{self.split}"
@@ -1398,10 +1398,10 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 and raw_file_name in duplication_subjects
             ):
                 if os.path.isfile(f"{self.raw_dir}/{raw_file_name}_dup_checked.pth"):
-                    iter_bar.set_description(
-                        f"Loading {raw_file_name}_dup_checked"
+                    iter_bar.set_description(f"Loading {raw_file_name}_dup_checked")
+                    raw_data = list(
+                        torch.load(f"{self.raw_dir}/{raw_file_name}_dup_checked.pth")
                     )
-                    raw_data = list(torch.load(f"{self.raw_dir}/{raw_file_name}_dup_checked.pth"))
                 else:
 
                     # find train task idx in duplication_check_train
@@ -1424,31 +1424,36 @@ class Mol_LLM_Dataset(InMemoryDataset):
                         subject_list = [i[2] for i in subject_data]
                         reference_list = [i[2] for i in reference_data]
                     if task in REGRESSION_BENCHMARKS:
-                        reference_list = [i.replace("<SELFIES>", "").replace("</SELFIES>", "") for i in reference_list]
+                        reference_list = [
+                            i.replace("<SELFIES>", "").replace("</SELFIES>", "")
+                            for i in reference_list
+                        ]
                         reference_list = [sf.decoder(i) for i in reference_list]
-                        reference_list = [get_canonical_smiles(i) for i in reference_list]
-                        subject_list = [i.replace("<SELFIES>", "").replace("</SELFIES>", "") for i in subject_list]
+                        reference_list = [
+                            get_canonical_smiles(i) for i in reference_list
+                        ]
+                        subject_list = [
+                            i.replace("<SELFIES>", "").replace("</SELFIES>", "")
+                            for i in subject_list
+                        ]
                         subject_list = [sf.decoder(i) for i in subject_list]
                         subject_list = [get_canonical_smiles(i) for i in subject_list]
                     raw_data = filter_duplication(
-                        subject_dataset=subject_data, 
-                        subject_list=subject_list, 
+                        subject_dataset=subject_data,
+                        subject_list=subject_list,
                         reference_list=reference_list,
-                        num_procs=50)
+                        num_procs=50,
+                    )
                     print(
                         f"{raw_file_name}: No_left/No_removed/No_original for duplication: {len(raw_data)}/{before_len - len(raw_data)}/{before_len}"
                     )
-                    torch.save(raw_data, f"{self.raw_dir}/{raw_file_name}_dup_checked.pth")
+                    torch.save(
+                        raw_data, f"{self.raw_dir}/{raw_file_name}_dup_checked.pth"
+                    )
                     print(f"Saved {raw_file_name}_dup_checked.pth")
             else:
-                iter_bar.set_description(
-                    f"Loading {raw_file_name}"
-                )
-                raw_data = list(
-                    torch.load(
-                        f"{self.raw_dir}/{raw_file_name}.pth"
-                    )
-                )
+                iter_bar.set_description(f"Loading {raw_file_name}")
+                raw_data = list(torch.load(f"{self.raw_dir}/{raw_file_name}.pth"))
             assert len(raw_data) > 0, f"len(raw_data) = {len(raw_data)}"
             raw_data_list.extend(raw_data)
             iter_bar.set_description(
@@ -1461,6 +1466,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
 
         iter_bar = tqdm(range(len(raw_data_list)))
         for i in iter_bar:
+            assert (
+                count_failed_conversion / (i + 1) < 0.2
+            ), f"Failed conversion ratio is too high: {count_failed_conversion/(i+1)}"
             iter_bar.set_description(
                 f"{self.llm_model_name}-{self.split}|Num fail: {count_failed_conversion}|Ratio fail: {count_failed_conversion/(i+1)}"
             )
@@ -1472,27 +1480,21 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 # input string: reactant>>product / output string: reagent
                 # maps reactant: first graph, product: second graph
                 if isinstance(instance[0], list):
-                    pass
+                    graph_data = instance[0]
                 # for other tasks, the input is a single graph, but convert the single graph to a pair of graphs
                 # wit dummy graph corresponding to 'CC' for uniform data structure with reagent prediction
                 else:
                     dummy_graph = smiles2data("CC")
-                    instance = [
-                        [instance[0], dummy_graph],
-                        instance[1],
-                        instance[2],
-                        instance[3],
-                        instance[4],
-                    ]
+                    graph_data = [instance[0], dummy_graph]
 
                 data = prepare_text_data(
                     data=PairData(
-                        x=instance[0][0].x,
-                        edge_index=instance[0][0].edge_index,
-                        edge_attr=instance[0][0].edge_attr,
-                        additional_x=instance[0][1].x,
-                        additional_edge_index=instance[0][1].edge_index,
-                        additional_edge_attr=instance[0][1].edge_attr,
+                        x=graph_data[0].x,
+                        edge_index=graph_data[0].edge_index,
+                        edge_attr=graph_data[0].edge_attr,
+                        additional_x=graph_data[1].x,
+                        additional_edge_index=graph_data[1].edge_index,
+                        additional_edge_attr=graph_data[1].edge_attr,
                     ),
                     label=instance[1],
                     input_mol_string=instance[2],
@@ -1515,7 +1517,9 @@ class Mol_LLM_Dataset(InMemoryDataset):
             ),
         )
 
+
 from rdkit import Chem
+
 
 def get_canonical_smiles(smiles):
     mol = Chem.MolFromSmiles(smiles)
@@ -1523,6 +1527,7 @@ def get_canonical_smiles(smiles):
         return Chem.MolToSmiles(mol)
     else:
         return None
+
 
 if __name__ == "__main__":
     dm = Stage3DM(

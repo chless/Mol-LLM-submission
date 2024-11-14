@@ -415,20 +415,8 @@ class Blip2OPT(Blip2Base):
                 mol_tokens = self.opt_proj(query_output.last_hidden_state)
                 mol_token_sequence.append(mol_tokens)
             mol_tokens = torch.cat(mol_token_sequence, dim=1)
-
         else:
-            graph_embeds, graph_masks = self.graph_encoder(graphs)
-            if not self.tune_gnn:
-                graph_embeds = graph_embeds.detach()
-            graph_embeds = self.ln_graph(graph_embeds, graph_masks)
-            query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=graph_embeds,
-                encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
-                return_dict=True,
-            )
-            mol_tokens = self.opt_proj(query_output.last_hidden_state)
+            raise NotImplementedError()
 
         # [Batch_size, Sequence_length, Hidden_size]
         # data_idx over Batch_size, query_idx over Sequence_length
