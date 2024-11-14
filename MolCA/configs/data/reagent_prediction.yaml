@@ -1,0 +1,89 @@
+raw_data_root: "/home/chanhui-lee/text-mol/MolCA/data/multi_task_0927"
+data_tag: "reagent"
+
+target_benchmarks:
+  - reagent_prediction
+
+ignore_eval:
+  - smol-name_conversion-s2f
+  - smol-name_conversion-s2i
+  - smol-name_conversion-i2s
+  - smol-name_conversion-i2f
+  - qm9_additional_label
+
+duplication_check:
+  - subject: smol-forward_synthesis_subtask-0_train
+    reference: 
+      - forward_reaction_prediction_subtask-0_test
+
+  - subject: smol-retrosynthesis_subtask-0_train
+    reference: 
+      - retrosynthesis_subtask-0_test
+
+  - subject: smol-molecule_captioning_subtask-0_train
+    reference: 
+      - chebi-20-mol2text_subtask-0_test
+  
+  - subject: smol-molecule_generation_subtask-0_train
+    reference: 
+      - chebi-20-text2mol_subtask-0_test
+
+  - subject: forward_reaction_prediction_subtask-0_train
+    reference: 
+      - smol-forward_synthesis_subtask-0_train
+      - smol-forward_synthesis_subtask-0_test
+
+  - subject: retrosynthesis_subtask-0_train
+    reference: 
+      - smol-retrosynthesis_subtask-0_train
+      - smol-retrosynthesis_subtask-0_test
+
+  - subject: chebi-20-mol2text_subtask-0_train
+    reference: 
+      - smol-molecule_captioning_subtask-0_train
+      - smol-molecule_captioning_subtask-0_test
+
+  - subject: chebi-20-text2mol_subtask-0_train
+    reference: 
+      - smol-molecule_generation_subtask-0_train
+      - smol-molecule_generation_subtask-0_test
+
+  - subject: qm9_additional_label_subtask-0_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-1_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-5_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-6_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-7_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-9_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-10_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
+
+  - subject: qm9_additional_label_subtask-11_train
+    reference: 
+      - qm9_homo_subtask-0_test
+      - qm9_homo_subtask-0_val
