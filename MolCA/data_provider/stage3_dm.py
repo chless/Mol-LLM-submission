@@ -22,12 +22,6 @@ import model.added_tokens as added_tokens
 from pytorch_lightning import LightningDataModule
 import pandas as pd
 
-
-# we split individual characters inside special tokens like [START_DNA]
-# TODO: change this ugly I_SMILES things to regular special token, and add the special token to vocab whichever LLM
-# CUSTOM_SEQ_RE = re.compile(r"(\[START_(DNA|SMILES|I_SMILES|AMINO)])(.*?)(\[END_\2])")
-CUSTOM_SEQ_RE = re.compile(r"(<SELFIES>)(.*?)(</SELFIES>)")
-
 # token added to implement a custom sequence tokenization. This token is added at
 # corpus cleaning step and removed in pretokenization. The digits are added to increase the chance
 # that they do not occur in the corpus. The digits are escaped so that the token does not appear
@@ -59,35 +53,6 @@ def prepare_text_data(
 
     label = fit_llm_output_convention(label)
 
-    """
-    # NOTE: getting tensor is faster that getting list, but become problematic when using collate, due to different tensor size
-    input_tokens = tokenizer(
-        text=llm_prompt + label,
-        return_attention_mask=False,
-        return_length=True,
-        return_token_type_ids=False,
-    )
-    prompt_tokens = tokenizer(llm_prompt, return_length=True, add_special_tokens=False)
-
-    if isinstance(prompt_tokens.length, list):
-        prompt_tokens_length = prompt_tokens.length[0]
-    elif isinstance(prompt_tokens.length, int):
-        prompt_tokens_length = prompt_tokens.length
-    else:
-        raise NotImplementedError
-
-    target_text = prompt_tokens_length * tokenizer.pad_token + label
-
-    # TODO: later, when start training graph modality with sequence packing, change the PairData to PackedData
-    prepared_instance = PairData(
-        **data,
-        input_text=llm_prompt + label,
-        target_text=label,
-        prompt_text=llm_prompt,
-        task_subtask_pair=task_subtask_pair,
-        input_ids=input_tokens.input_ids,
-    )
-    """
     prepared_instance = PairData(
         **data,
         prompt_text=llm_prompt,
@@ -1515,27 +1480,21 @@ class Mol_LLM_Dataset(InMemoryDataset):
                 # input string: reactant>>product / output string: reagent
                 # maps reactant: first graph, product: second graph
                 if isinstance(instance[0], list):
-                    pass
+                    graph_data = instance[0]
                 # for other tasks, the input is a single graph, but convert the single graph to a pair of graphs
                 # wit dummy graph corresponding to 'CC' for uniform data structure with reagent prediction
                 else:
                     dummy_graph = smiles2data("CC")
-                    instance = [
-                        [instance[0], dummy_graph],
-                        instance[1],
-                        instance[2],
-                        instance[3],
-                        instance[4],
-                    ]
+                    graph_data = [instance[0], dummy_graph]
 
                 data = prepare_text_data(
                     data=PairData(
-                        x=instance[0][0].x,
-                        edge_index=instance[0][0].edge_index,
-                        edge_attr=instance[0][0].edge_attr,
-                        additional_x=instance[0][1].x,
-                        additional_edge_index=instance[0][1].edge_index,
-                        additional_edge_attr=instance[0][1].edge_attr,
+                        x=graph_data[0].x,
+                        edge_index=graph_data[0].edge_index,
+                        edge_attr=graph_data[0].edge_attr,
+                        additional_x=graph_data[1].x,
+                        additional_edge_index=graph_data[1].edge_index,
+                        additional_edge_attr=graph_data[1].edge_attr,
                     ),
                     label=instance[1],
                     input_mol_string=instance[2],
