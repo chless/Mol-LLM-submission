@@ -15,7 +15,6 @@ class CustomDataCollator(DataCollatorForSeq2Seq):
     def __init__(self, tokenizer, padding=True, pad_to_multiple_of=None, return_tensors=None, use_graph=False):
         super().__init__(tokenizer, padding=padding, pad_to_multiple_of=pad_to_multiple_of, return_tensors=return_tensors)
         self.use_graph = use_graph
-        # self.tokenizer = tokenizer
         
         if self.use_graph:
             # Collater with no special follow_batch or exclude_keys
@@ -28,8 +27,7 @@ class CustomDataCollator(DataCollatorForSeq2Seq):
         input_ids = [sample['input_ids'] for sample in batch]
         attention_mask = [sample['attention_mask'] for sample in batch]
         labels = [sample.pop('labels') for sample in batch]
-        tasks = [task2id(sample.pop('task')) for sample in batch]
-        
+        tasks = [task2id(sample.pop('task')) for sample in batch]  # task id
         
         if self.use_graph:
             graphs = [
@@ -37,15 +35,13 @@ class CustomDataCollator(DataCollatorForSeq2Seq):
                      edge_index=torch.tensor(sample['edge_index'], dtype=torch.int64),
                      edge_attr=torch.tensor(sample['edge_attr'], dtype=torch.int64)
                      ) for sample in batch]
+            # for reagent prediction
             additional_graphs = [
                 Data(x=torch.tensor(sample['additional_x'], dtype=torch.int64),
                      edge_index=torch.tensor(sample['additional_edge_index'], dtype=torch.int64),
                      edge_attr=torch.tensor(sample['additional_edge_attr'], dtype=torch.int64)
                      ) for sample in batch]
             
-
-        import time
-        start_time = time.time()
         features = self.tokenizer.pad(
             {'input_ids': input_ids, 'attention_mask': attention_mask},
             
@@ -142,7 +138,6 @@ molecule captioning, molecule generation. \n\n'
         'labels': labels,  
         
     }
-    
     return tokenized_result
 
 
@@ -192,9 +187,11 @@ tasks = [
 
 
 def task2id(task):
+    # task name to task id 
     task2id = {k: i for i, k in enumerate(tasks)}
     return task2id[task]
 
 def id2task(task_id):
+    # task id to task name
     id2task = {i: k for i, k in enumerate(tasks)}
     return id2task[task_id]

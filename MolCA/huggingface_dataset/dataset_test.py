@@ -92,24 +92,28 @@ def train(
     if 'graph' in mol_representation:  # TODO can be removed
         remove_keys -= {'x', 'edge_index', 'edge_attr', 'additional_x', 'additional_edge_index', 'additional_edge_attr'}
     
-    if 'graph' in mol_representation:
-        preprocessed_data_path = os.path.join(data_path, f"preprocessd_{base_model.replace('/', '-')}_{train_split}_{mol_representation}_{num_query_token}")
-    else:
-        preprocessed_data_path = os.path.join(data_path, f"preprocessd_{base_model.replace('/', '-')}_{train_split}_{mol_representation}")
     
     
+    
+    # it can be replaced with argparse later
     args = {
         'cutoff_len': cutoff_len,
         'num_query_token': num_query_token,
         'mol_representation': mol_representation,
     }
-    
     args = EasyDict(args)
     
     
+    # to avoid re-generating
+    if 'graph' in mol_representation:
+        preprocessed_data_path = os.path.join(data_path, f"preprocessd_{base_model.replace('/', '-')}_{train_split}_{mol_representation}_{num_query_token}")
+    else:
+        preprocessed_data_path = os.path.join(data_path, f"preprocessd_{base_model.replace('/', '-')}_{train_split}_{mol_representation}")
+        
     if os.path.exists(preprocessed_data_path):
         train_data = load_from_disk(preprocessed_data_path)
     else:
+        # preprocess data
         train_data = train_data.shuffle().map(generate_and_tokenize_prompt,
                                             remove_columns=remove_keys,
                                             fn_kwargs={
@@ -145,18 +149,18 @@ def train(
         )
     
     
-    for batch in tqdm(data_loader):
-        """
-        batch have the following:
-            input_ids
-            attention_mask
-            labels
-            task
-        task is task_id, if you want to convert it to task name, use id2task
-        [id2task(task_id) for task_id in batch.task]
-        """
+    # for batch in tqdm(data_loader):
+    #     """
+    #     batch have the following:
+    #         input_ids
+    #         attention_mask
+    #         labels
+    #         task
+    #     task is task_id, if you want to convert it to task name, use id2task
+    #     [id2task(task_id) for task_id in batch.task]
+    #     """
         
-        pass
+    #     pass
     
     # Trainer with DDP
     trainer = pl.Trainer(
