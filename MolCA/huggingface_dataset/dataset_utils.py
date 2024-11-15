@@ -32,11 +32,17 @@ class CustomDataCollator(DataCollatorForSeq2Seq):
         
         
         if self.use_graph:
-            graph_data_list = [
+            graphs = [
                 Data(x=torch.tensor(sample['x'], dtype=torch.int64),
                      edge_index=torch.tensor(sample['edge_index'], dtype=torch.int64),
                      edge_attr=torch.tensor(sample['edge_attr'], dtype=torch.int64)
                      ) for sample in batch]
+            additional_graphs = [
+                Data(x=torch.tensor(sample['additional_x'], dtype=torch.int64),
+                     edge_index=torch.tensor(sample['additional_edge_index'], dtype=torch.int64),
+                     edge_attr=torch.tensor(sample['additional_edge_attr'], dtype=torch.int64)
+                     ) for sample in batch]
+            
 
         import time
         start_time = time.time()
@@ -62,11 +68,12 @@ class CustomDataCollator(DataCollatorForSeq2Seq):
         
         features['labels'] = torch.tensor(padded_labels, dtype=torch.int64)
         
-        # features['task'] = torch.tensor(tasks, dtype=torch.int8)
         features['task'] = tasks
         if self.use_graph:
-            graphs = self.graph_collator(graph_data_list)
+            graphs = self.graph_collator(graphs)
+            additional_graphs = self.graph_collator(additional_graphs)
             features['graphs'] = graphs
+            features['additional_graphs'] = additional_graphs
             features['is_mol_token'] = (torch.tensor(features['input_ids']) == self.tokenizer.mol_token_id)
         return features
 
