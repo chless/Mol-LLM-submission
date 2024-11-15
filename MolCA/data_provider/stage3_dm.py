@@ -219,14 +219,6 @@ class DataCollater:
         for instance in batch:
             prompt_text = instance.prompt_text
             target_text = instance.target_text
-            # TODO: this code is temporally needs for v5. when using v6, remove this code
-            if self.tokenizer.pad_token in target_text:
-                target_text = target_text.replace(self.tokenizer.pad_token, "")
-
-            if any([token not in prompt_text for token in added_tokens.DESCRIPTION]):
-                assert (
-                    len(self.input_mol_string_pattern.findall(prompt_text)) > 0
-                ), "SELFIES is not found in the prompt text"
 
             # prepare prompt text with proper molecule representation
             if self.mol_representation == "string_only":
