@@ -147,94 +147,54 @@ molecule captioning, molecule generation. \n\n'
 
 
 
+tasks = [
+    # name conversion
+    'smol-name_conversion-i2s',
+    'smol-name_conversion-i2f',
+    'smol-name_conversion-s2f',
+    'smol-name_conversion-s2i',
+    
+    # propertry classification
+    'smol-property_prediction-bbbp',
+    'smol-property_prediction-clintox',
+    'smol-property_prediction-hiv',
+    'smol-property_prediction-sider',
+    'bace',
+    'tox21',
+    'toxcast',
+    
+    # propertry regression
+    'smol-property_prediction-esol',
+    'smol-property_prediction-lipo',
+    'qm9_homo',
+    'qm9_lumo',
+    'qm9_homo_lumo_gap',
+    'qm9_dipole_moment',
+    'qm9_isotropic_polarizability',
+    'qm9_electronic_spatial_extent',
+    'qm9_zero_point_vibrational_energy',
+    'qm9_heat_capacity_298K',
+    'qm9_internal_energy_298K',
+    'qm9_enthalpy_298K',
+    'qm9_free_energy_298K',
+    
+    'forward_reaction_prediction',
+    'smol-forward_synthesis',
+    'retrosynthesis',
+    'smol-retrosynthesis',
+    'reagent_prediction',
+    
+    'chebi-20-text2mol',
+    'smol-molecule_generation',
+    'chebi-20-mol2text',
+    'smol-molecule_captioning',
+]
+
+
 def task2id(task):
-    task2id = {
-            # name conversion
-            'smol-name_conversion-i2s': 0,
-            'smol-name_conversion-i2f': 1,
-            'smol-name_conversion-s2f': 2,
-            'smol-name_conversion-s2i': 3,
-            
-            # propertry classification
-            'smol-property_prediction-bbbp': 4,
-            'smol-property_prediction-clintox': 5,
-            'smol-property_prediction-hiv': 6,
-            'smol-property_prediction-sider': 7,
-            'bace': 8,
-            'tox21': 9,
-            'toxcast': 10,
-            
-            # propertry regression
-            'smol-property_prediction-esol': 11,
-            'smol-property_prediction-lipo': 12,
-            'qm9_homo': 13,
-            'qm9_lumo': 14,
-            'qm9_homo_lumo_gap': 15,
-            'qm9_dipole_moment': 16,
-            'qm9_isotropic_polarizability': 17,
-            'qm9_electronic_spatial_extent': 18,
-            'qm9_zero_point_vibrational_energy': 19,
-            'qm9_heat_capacity_298K': 20,
-            'qm9_internal_energy_298K': 21,
-            'qm9_enthalpy_298K': 22,
-            'qm9_free_energy_298K': 23,
-            
-            'forward_reaction_prediction': 24,
-            'smol-forward_synthesis': 25,
-            'retrosynthesis': 26,
-            'smol-retrosynthesis': 27,
-            'reagent_prediction': 28,
-            
-            'chebi-20-text2mol': 29,
-            'smol-molecule_generation': 30,
-            'chebi-20-mol2text': 31,
-            'smol-molecule_captioning': 32,
-    }
+    task2id = {k: i for i, k in enumerate(tasks)}
     return task2id[task]
 
 def id2task(task_id):
-    # task id to task name
-    id2task = {
-        # name conversion
-        0: 'smol-name_conversion-i2s',
-        1: 'smol-name_conversion-i2f',
-        2: 'smol-name_conversion-s2f',
-        3: 'smol-name_conversion-s2i',
-    
-        # propertry classification
-        4: 'smol-property_prediction-bbbp',
-        5: 'smol-property_prediction-clintox',
-        6: 'smol-property_prediction-hiv',
-        7: 'smol-property_prediction-sider',
-        8: 'bace',
-        9: 'tox21',
-        10: 'toxcast',
-    
-        # propertry regression
-        11: 'smol-property_prediction-esol',
-        12: 'smol-property_prediction-lipo',
-        13: 'qm9_homo',
-        14: 'qm9_lumo',
-        15: 'qm9_homo_lumo_gap',
-        16: 'qm9_dipole_moment',
-        17: 'qm9_isotropic_polarizability',
-        18: 'qm9_electronic_spatial_extent',
-        19: 'qm9_zero_point_vibrational_energy',
-        20: 'qm9_heat_capacity_298K',
-        21: 'qm9_internal_energy_298K',
-        22: 'qm9_enthalpy_298K',
-        23: 'qm9_free_energy_298K',
-    
-        24: 'forward_reaction_prediction',
-        25: 'smol-forward_synthesis',
-        26: 'retrosynthesis',
-        27: 'smol-retrosynthesis',
-        28: 'reagent_prediction',
-        
-        29: 'chebi-20-text2mol',
-        30: 'smol-molecule_generation',
-        31: 'chebi-20-mol2text',
-        32: 'smol-molecule_captioning',
-            
-        }
+    id2task = {i: k for i, k in enumerate(tasks)}
     return id2task[task_id]

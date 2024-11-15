@@ -145,18 +145,18 @@ def train(
         )
     
     
-    # for batch in tqdm(data_loader):
-    #     """
-    #     batch have the following:
-    #         input_ids
-    #         attention_mask
-    #         labels
-    #         task
-    #     task is task_id, if you want to convert it to task name, use id2task
-    #     [id2task(task_id) for task_id in batch.task]
+    for batch in tqdm(data_loader):
+        """
+        batch have the following:
+            input_ids
+            attention_mask
+            labels
+            task
+        task is task_id, if you want to convert it to task name, use id2task
+        [id2task(task_id) for task_id in batch.task]
+        """
         
-    #     """
-    #     pass
+        pass
     
     # Trainer with DDP
     trainer = pl.Trainer(
