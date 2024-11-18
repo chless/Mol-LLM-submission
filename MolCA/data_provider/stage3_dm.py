@@ -270,7 +270,7 @@ class DataCollater:
             return_length=True,
         )
 
-        if self.mode != "eval":
+        if self.mode == "eval":
             input_tokens = prompt_tokens
         else:
             input_tokens = self.tokenizer(
