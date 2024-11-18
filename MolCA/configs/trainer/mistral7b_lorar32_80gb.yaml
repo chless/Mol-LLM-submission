@@ -37,9 +37,9 @@ llava_style: 0
 num_workers: 0
 skip_sanity_check: false
 
-accumulate_grad_batches: 11
-batch_size: 12
-inference_batch_size: 86
+accumulate_grad_batches: 9
+batch_size: 14
+inference_batch_size: 14
 
 truncation: 1
 padding: max_length
@@ -53,8 +53,8 @@ apply_sequence_packing: false
 max_packing_size: -1
 
 weight_decay: 0.05
-min_lr: 0.00001
-init_lr: 0.0001
+min_lr: 0.0001
+init_lr: 0.001
 warmup_lr: 0.00001
 warmup_steps: 100
 scheduler: linear_warmup_cosine_lr
