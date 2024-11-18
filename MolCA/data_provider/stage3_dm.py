@@ -219,14 +219,6 @@ class DataCollater:
         for instance in batch:
             prompt_text = instance.prompt_text
             target_text = instance.target_text
-            # TODO: this code is temporally needs for v5. when using v6, remove this code
-            if self.tokenizer.pad_token in target_text:
-                target_text = target_text.replace(self.tokenizer.pad_token, "")
-
-            if any([token not in prompt_text for token in added_tokens.DESCRIPTION]):
-                assert (
-                    len(self.input_mol_string_pattern.findall(prompt_text)) > 0
-                ), "SELFIES is not found in the prompt text"
 
             # prepare prompt text with proper molecule representation
             if self.mol_representation == "string_only":
@@ -244,8 +236,7 @@ class DataCollater:
                     "mol_representation should be one of the options"
                 )
 
-            input_text = prompt_text + target_text
-            input_texts.append(input_text)
+            input_texts.append(prompt_text + target_text)
             prompt_texts.append(prompt_text)
             raw_target_texts.append(target_text)
 
@@ -278,8 +269,9 @@ class DataCollater:
             return_length=True,
         )
 
-        if self.mode != "eval":
+        if self.mode == "eval":
             input_tokens = prompt_tokens
+            target_texts = raw_target_texts
         else:
             input_tokens = self.tokenizer(
                 text=input_texts,
@@ -291,6 +283,12 @@ class DataCollater:
                 return_attention_mask=True,
                 return_length=True,
             )
+            padded_target_texts = []
+            for i, target_text in enumerate(raw_target_texts):
+                prompt_len = prompt_tokens.length[i].item()
+                target_text = prompt_len * self.tokenizer.pad_token + target_text
+                padded_target_texts.append(target_text)
+            target_texts = padded_target_texts
 
         input_tokens["is_mol_token"] = (
             input_tokens.input_ids == self.tokenizer.mol_token_id
@@ -303,14 +301,8 @@ class DataCollater:
             )
             input_tokens["attention_mask"] = input_attention_mask
 
-        padded_target_texts = []
-        for i, target_text in enumerate(raw_target_texts):
-            prompt_len = prompt_tokens.length[i].item()
-            target_text = prompt_len * self.tokenizer.pad_token + target_text
-            padded_target_texts.append(target_text)
-
-        padded_target_tokens = self.tokenizer(
-            text=padded_target_texts,
+        target_tokens = self.tokenizer(
+            text=target_texts,
             truncation=self.truncation,
             padding=self.padding,
             add_special_tokens=False,
@@ -320,7 +312,7 @@ class DataCollater:
             return_length=True,
         )
 
-        return batch, input_tokens, padded_target_tokens
+        return batch, input_tokens, target_tokens
 
 
 def get_attention_mask_for_packed_sequence(x, eos_token_id, include_eos: bool = True):
