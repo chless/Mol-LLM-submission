@@ -552,9 +552,14 @@ def wrap_label(label, task):
                 raise NotImplementedError(
                     f"Label: {label} is not supported in classification task"
                 )
+            label = label_tokens[0] + label + label_tokens[1]
+        elif isinstance(label, list):
+            label_language = ", ".join(label)
+            label_boolean = "True" * len(label)
+            label = label_language + label_tokens[0] + label_boolean + label_tokens[1]
         else:
             label = "True" if label else "False"
-        label = label_tokens[0] + label + label_tokens[1]
+            label = label_tokens[0] + label + label_tokens[1]
         return label
     elif task in REGRESSION_BENCHMARKS:
         if isinstance(label, float):
@@ -617,22 +622,53 @@ class MoleculeNetDatasetDeepChem(Dataset):
         self.set_necessary_data()
 
     def get_necessary_data(self, index):
+        instruction = np.random.choice(self.instruction_templates)
         smiles = self.smiles_list[index]
         # set molecule string representation as selfies
         input_mol_string = sf.encoder(smiles)
         input_mol_string = (
             added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
         )
-        label = self.raw_outputs[index]
-        label = wrap_label(label, self.task)
+        if self.subtask_idx == "multi_label_classification":
+            label = self.raw_outputs[index]
+            label = [self.label_full_name[i] for i in range(len(label)) if label[i]]
+            if len(label) == 0:
+                label = "No toxicity identified. " + wrap_label("False", self.task)
+            else:
+                label = wrap_label(label, self.task)
+        else:
+            label = self.raw_outputs[index]
+            label = wrap_label(label, self.task)
+
         graph = smiles2data(smiles)
         # randomly select one instruction from list
-        instruction = np.random.choice(self.instruction_templates)
         return graph, label, input_mol_string, instruction
+    
+    def set_label_fullname(self):
+        self.label_full_name = None
+        if self.task == "tox21":
+            self.label_full_name = [
+                "androgen receptor, full (AR, full)", # AR
+                "androgen receptor, LBD (AR, LBD)", # AR, LBD
+                "aryl hydrocarbon receptor (AhR)", # AhR
+                "aromatase",
+                "estrogen receptor alpha, full (ER, full)", # ER
+                "estrogen receptor alpha, LBD (ER, LBD)", # ER, LBD
+                "peroxisome proliferator-activated receptor gamma (PPAR-gamma)", # PPAR-gamma
+                "nuclear factor (erythroid-derived 2)-like 2/antioxidant responsive element (Nrf2/ARE)",
+                "ATPase family AAA domain containing 5 (ATAD5)",
+                "heat shock factor response element (HSE)", # HSE
+                "mitochondrial membrane potential (MMP)", # MMP
+                "tumor suppressor protein p53",
+            ]
 
     def set_necessary_data(self):
         self.raw_inputs = self.data.X
-        self.raw_outputs = self.data.y[:, self.subtask_idx]
+        if self.subtask_idx == "multi_label_classification":
+            self.set_label_fullname()
+            self.raw_outputs = self.data.y
+        else:
+            self.raw_outputs = self.data.y[:, self.subtask_idx]
 
         self.smiles_list = []
         for mol in self.raw_inputs:
@@ -1294,7 +1330,10 @@ class Mol_LLM_Dataset(InMemoryDataset):
             task_name = task_subtask_pair[0]
             subtasks = multi_task_datasets[task_name][0]
             subtask_idx = task_subtask_pair[1]
-            task_subtask_pair = f"{task_name}/{subtasks[subtask_idx]}"
+            if subtask_idx == "multi_label_classification":
+                task_subtask_pair = f"{task_name}/{subtask_idx}"
+            else:
+                task_subtask_pair = f"{task_name}/{subtasks[subtask_idx]}"
 
             data_split = multi_task_datasets[task_name][
                 1:

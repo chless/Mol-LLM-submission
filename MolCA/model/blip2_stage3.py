@@ -14,6 +14,7 @@ from model.help_funcs import (
     total_device_evaluate,
     AttrDict,
     convert_logit2binary_prob,
+    convert_logit2binary_prob_wo_rulebased
 )
 from transformers import Adafactor
 import json
@@ -344,12 +345,13 @@ class Blip2Stage3(pl.LightningModule):
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions
         ]
 
-        targets = self.blip2model.llm_tokenizer.batch_decode(target_tokens.input_ids)
+        targets = self.blip2model.llm_tokenizer.batch_decode(target_tokens.input_ids,
+                                                             skip_special_tokens=True)
         targets = [
             t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
         ]
         tasks = graphs.task_subtask_pair
-        probs = convert_logit2binary_prob(outputs.logits, self.blip2model.llm_tokenizer)
+        probs = convert_logit2binary_prob_wo_rulebased(outputs.logits, self.blip2model.llm_tokenizer)
         prompts = [
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
         ]
@@ -448,9 +450,9 @@ class Blip2Stage3(pl.LightningModule):
             idx: task_subtask_pair
             for task_subtask_pair, idx in self.cls_task_subtask_name_pair_dict.items()
         }
-        self.num_per_device_cls = 10000
+        self.num_per_device_cls = 40000
         self.per_device_cls_tensor = torch.zeros(
-            size=(self.num_per_device_cls, 4), device=self.device, dtype=torch.float
+            size=(self.num_per_device_cls, len(self.list_logs["probs"][0]), 2), device=self.device, dtype=torch.float
         )
         non_zero_count = 0
         cls_idx = 0
@@ -458,9 +460,10 @@ class Blip2Stage3(pl.LightningModule):
             task_subtask_pair = self.list_logs["tasks"][i]
             if task_subtask_pair in self.cls_task_subtask_name_pair_dict.keys():
                 probs = self.list_logs["probs"][i]
+                # TODO: implement this
+                '''
                 label = int(
                     "True" in self.list_logs["targets"][i]
-                    or "true" in self.list_logs["targets"][i]
                 )
                 pair_ids = self.cls_task_subtask_name_pair_dict[task_subtask_pair]
                 self.per_device_cls_tensor[cls_idx] = torch.tensor(
@@ -470,6 +473,7 @@ class Blip2Stage3(pl.LightningModule):
                 )
                 non_zero_count += 1
                 cls_idx += 1
+                '''
 
         # evaluate the other tasks
         flattened_metric_keys = []
@@ -550,16 +554,17 @@ class Blip2Stage3(pl.LightningModule):
                 :, :, 1
             ].sum(dim=0)
 
-            gathered_cls_tensor = self.all_gather(self.per_device_cls_tensor)
-            uniform_cls_tensor = torch.cat(
-                [cls_tensor for cls_tensor in gathered_cls_tensor], dim=0
-            )
+            # TODO
+            #gathered_cls_tensor = self.all_gather(self.per_device_cls_tensor)
+            #uniform_cls_tensor = torch.cat(
+            #    [cls_tensor for cls_tensor in gathered_cls_tensor], dim=0
+            #)
         else:
             scaled_flattened_metric_tensors = flattened_metric_tensors[:, 0]
             total_instance_count = flattened_metric_tensors[:, 1]
             total_instance_count_include_nan = total_instance_count
 
-            uniform_cls_tensor = self.per_device_cls_tensor
+            #uniform_cls_tensor = self.per_device_cls_tensor
 
         # if total_instance_count is 0, set the metric to null value
         averaged_flattened_metric_tensors = torch.where(
@@ -569,7 +574,7 @@ class Blip2Stage3(pl.LightningModule):
         )
 
         # evaluate classification tasks
-        # get total_cls_tensor only where total_cls_tensor[:, :2].sum(-1) > 0
+        '''
         actual_cls_tensor = uniform_cls_tensor[uniform_cls_tensor[:, :2].sum(-1) > 0]
 
         total_probs = actual_cls_tensor[:, :2].cpu()
@@ -666,3 +671,4 @@ class Blip2Stage3(pl.LightningModule):
             json.dump(flattened_metric_keys, f, ensure_ascii=False, indent=4)
 
         print(f"\nDevice {self.device} on_evaluation_epoch_end end")
+        '''
