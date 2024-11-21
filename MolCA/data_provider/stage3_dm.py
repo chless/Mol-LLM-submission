@@ -268,38 +268,30 @@ class DataCollater:
             return_attention_mask=True,
             return_length=True,
         )
+        prompt_tokens["is_mol_token"] = (
+            prompt_tokens.input_ids == self.tokenizer.mol_token_id
+        )
 
-        if self.mode == "eval":
-            input_tokens = prompt_tokens
-            target_texts = raw_target_texts
-        else:
-            input_tokens = self.tokenizer(
-                text=input_texts,
-                truncation=self.truncation,
-                padding=self.padding,
-                add_special_tokens=False,
-                max_length=self.max_length,
-                return_tensors="pt",
-                return_attention_mask=True,
-                return_length=True,
-            )
-            padded_target_texts = []
-            for i, target_text in enumerate(raw_target_texts):
-                prompt_len = prompt_tokens.length[i].item()
-                target_text = prompt_len * self.tokenizer.pad_token + target_text
-                padded_target_texts.append(target_text)
-            target_texts = padded_target_texts
-
+        input_tokens = self.tokenizer(
+            text=input_texts,
+            truncation=self.truncation,
+            padding=self.padding,
+            add_special_tokens=False,
+            max_length=self.max_length,
+            return_tensors="pt",
+            return_attention_mask=True,
+            return_length=True,
+        )
         input_tokens["is_mol_token"] = (
             input_tokens.input_ids == self.tokenizer.mol_token_id
         )
 
-        if self.apply_sequence_packing:
-            input_attention_mask = get_attention_mask_for_packed_sequence(
-                x=input_tokens.input_ids,
-                eos_token_id=self.tokenizer.eos_token_id,
-            )
-            input_tokens["attention_mask"] = input_attention_mask
+        padded_target_texts = []
+        for i, target_text in enumerate(raw_target_texts):
+            prompt_len = prompt_tokens.length[i].item()
+            target_text = prompt_len * self.tokenizer.pad_token + target_text
+            padded_target_texts.append(target_text)
+        target_texts = padded_target_texts
 
         target_tokens = self.tokenizer(
             text=target_texts,
@@ -312,7 +304,10 @@ class DataCollater:
             return_length=True,
         )
 
-        return batch, input_tokens, target_tokens
+        if self.mode == "eval":
+            return batch, input_tokens, target_tokens, prompt_tokens
+        else:
+            return batch, input_tokens, target_tokens
 
 
 def get_attention_mask_for_packed_sequence(x, eos_token_id, include_eos: bool = True):
