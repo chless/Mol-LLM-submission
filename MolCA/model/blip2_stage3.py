@@ -365,7 +365,7 @@ class Blip2Stage3(pl.LightningModule):
 
         batch_size = prompt_tokens.input_ids.shape[0]
 
-        outputs = self.blip2model(batch[:-1])
+        outputs = self.blip2model([graphs, input_tokens, target_tokens])
         ##============== Overall Loss ===================##
 
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
