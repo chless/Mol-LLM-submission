@@ -544,6 +544,18 @@ def convert_logit2binary_prob(logits, tokenizer):
     total_probs = [p.tolist() for p in total_probs]
     return total_probs
 
+def convert_logit2binary_prob_wo_rulebased(logits, tokenizer):
+    True_token_id = tokenizer.convert_tokens_to_ids(["True"])[0]
+    False_token_id = tokenizer.convert_tokens_to_ids(["False"])[0]
+
+    total_probs = torch.zeros(logits.shape[0], logits.shape[1], 2)
+    probs = logits.softmax(dim=-1)
+    true_prob = probs[:, :, True_token_id]
+    false_prob = probs[:, :, False_token_id]
+    renormalized_probs = torch.stack([false_prob, true_prob], dim=-1).softmax(-1)
+    # convert to list of list of list
+    total_probs = renormalized_probs.tolist()
+    return total_probs
 
 def regression_evaluate(predictions, targets, prompts):
 

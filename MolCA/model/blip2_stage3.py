@@ -14,6 +14,7 @@ from model.help_funcs import (
     total_device_evaluate,
     AttrDict,
     convert_logit2binary_prob,
+    convert_logit2binary_prob_wo_rulebased,
 )
 from transformers import Adafactor
 import json
@@ -327,7 +328,7 @@ class Blip2Stage3(pl.LightningModule):
         }
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
-        graphs, prompt_tokens, target_tokens = batch
+        graphs, input_tokens, target_tokens, prompt_tokens = batch
 
         outputs = self.blip2model.generate(
             graphs=graphs,
@@ -344,7 +345,9 @@ class Blip2Stage3(pl.LightningModule):
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions
         ]
 
-        targets = self.blip2model.llm_tokenizer.batch_decode(target_tokens.input_ids)
+        targets = self.blip2model.llm_tokenizer.batch_decode(
+            target_tokens.input_ids, skip_special_tokens=True
+        )
         targets = [
             t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
         ]
@@ -361,8 +364,8 @@ class Blip2Stage3(pl.LightningModule):
         self.list_logs["prompts"].extend(prompts)
 
         batch_size = prompt_tokens.input_ids.shape[0]
-        # TODO: IMPORTANT! this loss calculateion should be fixed, with the change of data collater in eval mode
-        outputs = self.blip2model(batch)
+
+        outputs = self.blip2model([graphs, input_tokens, target_tokens])
         ##============== Overall Loss ===================##
 
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
@@ -407,8 +410,6 @@ class Blip2Stage3(pl.LightningModule):
             prompts=self.list_logs["prompts"],
             filename=(
                 f"{self.args.mode}-step{self.global_step}-{self.global_rank}-outputs.json"
-                if self.args.mode == "val"
-                else f"{self.args.mode}-{self.global_rank}-outputs.json"
             ),
         )
 
@@ -419,8 +420,6 @@ class Blip2Stage3(pl.LightningModule):
             prompts=failed_cases["prompts"],
             filename=(
                 f"{self.args.mode}-step{self.global_step}-{self.global_rank}-failed_cases.json"
-                if self.args.mode == "val"
-                else f"{self.args.mode}-{self.global_rank}-failed_cases.json"
             ),
         )
 
@@ -458,10 +457,8 @@ class Blip2Stage3(pl.LightningModule):
             task_subtask_pair = self.list_logs["tasks"][i]
             if task_subtask_pair in self.cls_task_subtask_name_pair_dict.keys():
                 probs = self.list_logs["probs"][i]
-                label = int(
-                    "True" in self.list_logs["targets"][i]
-                    or "true" in self.list_logs["targets"][i]
-                )
+
+                label = int("True" in self.list_logs["targets"][i])
                 pair_ids = self.cls_task_subtask_name_pair_dict[task_subtask_pair]
                 self.per_device_cls_tensor[cls_idx] = torch.tensor(
                     [probs[0], probs[1], pair_ids, label],
@@ -569,7 +566,6 @@ class Blip2Stage3(pl.LightningModule):
         )
 
         # evaluate classification tasks
-        # get total_cls_tensor only where total_cls_tensor[:, :2].sum(-1) > 0
         actual_cls_tensor = uniform_cls_tensor[uniform_cls_tensor[:, :2].sum(-1) > 0]
 
         total_probs = actual_cls_tensor[:, :2].cpu()
@@ -654,15 +650,5 @@ class Blip2Stage3(pl.LightningModule):
         # save result_dict in result_path
         with open(result_path, "w") as f:
             json.dump(result_dict, f, ensure_ascii=False, indent=4)
-
-        # save flattend_metric_keys
-        with open(
-            os.path.join(
-                self.logger.log_dir,
-                f"{mode}-step{self.global_step}-{self.global_rank}-keys.json",
-            ),
-            "w",
-        ) as f:
-            json.dump(flattened_metric_keys, f, ensure_ascii=False, indent=4)
 
         print(f"\nDevice {self.device} on_evaluation_epoch_end end")

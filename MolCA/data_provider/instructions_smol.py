@@ -583,19 +583,17 @@ toxcast = [
 ]
 
 tox21 = [
-    "<INPUT> Based on the molecule given above, suggest if it is toxic based on nuclear receptor signaling bioassays.",
-    "Based on the given molecule: <INPUT>, what is the toxicity status according to nuclear receptor signaling bioassays?",
-    "Given the following molecule, please provide its toxicity information from nuclear receptor signaling bioassays. <INPUT>",
-    "<INPUT> Given the above molecule, what could be the probable toxicity result in nuclear receptor signaling bioassays?",
-    "Please provide the toxicity status for this molecule based on nuclear receptor signaling bioassays: <INPUT>.",
-    "Consider that for this molecule, if <INPUT> is given, what is its toxicity status according to nuclear receptor signaling bioassays?",
-    "Propose the toxicity status given this molecule in nuclear receptor signaling bioassays. <INPUT>",
-    "Predict the toxicity of the molecule <INPUT> in nuclear receptor signaling bioassays.",
-    "Can you tell me the toxicity status of the molecule that uses <INPUT> in nuclear receptor signaling bioassays?",
-    "Using <INPUT> as the molecule, tell me the toxicity status in nuclear receptor signaling bioassays.",
-    "Predict the possible toxicity for the listed molecule in nuclear receptor signaling bioassays. <INPUT>",
-    "<INPUT> Considering the given molecule, what might be the toxicity result in nuclear receptor signaling bioassays?",
-    "A molecule <INPUT> is given; what could be the toxicity status in nuclear receptor signaling bioassays?"
+    "For the molecule <INPUT>, assess its potential toxicity through interactions or inhibitions.",
+    "With the molecule <INPUT> provided, determine its toxicity concerning interactions with other substances.",
+    "Considering the molecule <INPUT>, what is the likely toxicity from its inhibitory interactions?",
+    "Evaluate the toxicity of this molecule <INPUT> based on its effects on other molecules.",
+    "If the molecule <INPUT> is given, what is its toxicity due to interactions with other compounds?",
+    "Assess the toxicity for this molecule <INPUT> given its interactions with others.",
+    "Estimate the toxicity of molecule <INPUT> considering its interactions or inhibitory effects.",
+    "What is the toxicity of the molecule <INPUT> caused by its interactions or inhibitions?",
+    "Determine the toxicity potential for this molecule <INPUT>, considering its interactions.",
+    "Given the molecule <INPUT>, what associated toxicity might arise from its interactions or inhibitions?",
+    "For the molecule <INPUT>, what toxicity status could be induced from its interactions or inhibitions?"
 ]
 
 property_prediction_hiv = [
