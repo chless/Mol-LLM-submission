@@ -7,4 +7,3 @@ python3 MolCA/stage3.py \
 data=multi_task_extended-v6 \
 trainer=mistral7b_lorar32_80gb \
 ++trainer.mol_representation=string+graph
-++trainer.
