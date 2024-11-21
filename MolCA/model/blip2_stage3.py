@@ -352,9 +352,7 @@ class Blip2Stage3(pl.LightningModule):
             t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
         ]
         tasks = graphs.task_subtask_pair
-        probs = convert_logit2binary_prob_wo_rulebased(
-            outputs.logits, self.blip2model.llm_tokenizer
-        )
+        probs = convert_logit2binary_prob(outputs.logits, self.blip2model.llm_tokenizer)
         prompts = [
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
         ]
@@ -449,11 +447,9 @@ class Blip2Stage3(pl.LightningModule):
             idx: task_subtask_pair
             for task_subtask_pair, idx in self.cls_task_subtask_name_pair_dict.items()
         }
-        self.num_per_device_cls = 40000
+        self.num_per_device_cls = 10000
         self.per_device_cls_tensor = torch.zeros(
-            size=(self.num_per_device_cls, len(self.list_logs["probs"][0]), 2),
-            device=self.device,
-            dtype=torch.float,
+            size=(self.num_per_device_cls, 4), device=self.device, dtype=torch.float
         )
         non_zero_count = 0
         cls_idx = 0
@@ -560,7 +556,7 @@ class Blip2Stage3(pl.LightningModule):
             total_instance_count = flattened_metric_tensors[:, 1]
             total_instance_count_include_nan = total_instance_count
 
-            # uniform_cls_tensor = self.per_device_cls_tensor
+            uniform_cls_tensor = self.per_device_cls_tensor
 
         # if total_instance_count is 0, set the metric to null value
         averaged_flattened_metric_tensors = torch.where(
