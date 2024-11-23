@@ -1,0 +1,7 @@
+gin_hidden_dim: 300
+gin_num_layers: 5
+drop_ratio: 0.0
+tune_gnn: true
+used_gnn_layer: -1
+gnn_jk: last
+graph_encoder_ckpt: "your gnn model path"
