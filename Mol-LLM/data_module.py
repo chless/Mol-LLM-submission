@@ -115,23 +115,6 @@ def get_dataset(split, tokenizer, args):
     else:
         tasks = args.tasks
     
-    dataset = load_dataset(
-        path=os.path.join(data_path, 'InstructGraph.py'),
-        split=split, 
-        tasks=tasks,
-        cache_dir=os.path.join(data_path, 'cache'),
-        )
-    
-    # when you debug, you can use this line to reduce the dataset size
-    # dataset = dataset.select(torch.randperm(len(dataset))[:1000])
-    
-    remove_keys = set(dataset.column_names)
-    remove_keys -= {
-            'task', 
-            'x', 'edge_index', 'edge_attr', 
-            'additional_x', 'additional_edge_index', 'additional_edge_attr'
-        }
-    
     # to avoid re-generating
     if 'graph' in mol_representation:
         preprocessed_data_path = os.path.join(data_path, f"preprocessd_{base_model}_{split}_{mol_representation}_{num_query_token}")
@@ -142,6 +125,23 @@ def get_dataset(split, tokenizer, args):
     if os.path.exists(preprocessed_data_path):
         dataset = load_from_disk(preprocessed_data_path)
     else:  # preprocess data
+        
+        dataset = load_dataset(
+            path=os.path.join(data_path, 'InstructGraph.py'),
+            split=split, 
+            tasks=tasks,
+            cache_dir=os.path.join(data_path, 'cache'),
+            )
+        
+        # when you debug, you can use this line to reduce the dataset size
+        # dataset = dataset.select(torch.randperm(len(dataset))[:1000])
+        
+        remove_keys = set(dataset.column_names)
+        remove_keys -= {
+                'task', 
+                'x', 'edge_index', 'edge_attr', 
+                'additional_x', 'additional_edge_index', 'additional_edge_attr'
+            }
         dataset = dataset.shuffle().map(
                         generate_and_tokenize_prompt,
                         remove_columns=remove_keys,
