@@ -1,5 +1,5 @@
 export TOKENIZERS_PARALLELISM=false;
-ckpt_path=/data/yuheon/logging
+ckpt_path=/data/Mol-LLM-v6/logging_s
 file_name='hug_test_s'
 gpus="'0,1,2,3'"
 
