@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.2.2-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:12.2.2-cudnn8-devel-ubuntu22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.10
@@ -32,8 +32,14 @@ RUN curl -LO https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.
     rm Miniconda3-latest-Linux-x86_64.sh && \
     conda update -y conda
 
+
 RUN conda install --quiet --yes python=${PYTHON_VERSION} && \
     conda clean --yes --all
+
+
+# RUN conda install -y pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia && \
+    # conda install -y pyg=*=*cu* -c pyg && \
+    # conda clean -y --all
 
 # Upgrade pip, install py libs
 RUN pip install --upgrade pip
@@ -45,6 +51,7 @@ COPY . .
 
 # PyTorch
 RUN pip install torch torchvision torchaudio
+RUN pip install --upgrade numpy thinc spacy opencv-python
 
 
 RUN printf "\nexport PATH=/miniconda/bin:${PATH}" >> /root/.zshrc
