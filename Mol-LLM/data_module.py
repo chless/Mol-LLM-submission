@@ -109,11 +109,8 @@ def get_dataset(split, tokenizer, args):
     num_query_token = args.num_query_token
     base_model = args.llm_model.replace('/', '-')
     
-    # TODO add filtering specific tasks
-    if args.tasks is not None and len(args.tasks) == 0:
-        tasks = None
-    else:
-        tasks = args.tasks
+    
+    tasks = None
     
     # to avoid re-generating
     if 'graph' in mol_representation:
@@ -156,4 +153,10 @@ def get_dataset(split, tokenizer, args):
         # save preprocessd data
         dataset.save_to_disk(preprocessed_data_path)
     
+    
+    # filter tasks 
+    if args.tasks is not None:
+        dataset = dataset.filter(lambda x: x['task'] in args.tasks)
+        # you can save the filtered dataset
+        
     return dataset
