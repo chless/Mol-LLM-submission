@@ -1,20 +1,19 @@
 ENV_NAME=molca-debug
-init-env:
-	conda create -n ${ENV_NAME} python=3.10 -y
-	conda activate ${ENV_NAME}
-	conda install pytorch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 pytorch-cuda=12.1 -c pytorch -c nvidia
+REPO_PATH=/home/user/text-mol
+CACHE_PATH=/home/user/.cache
+DATA_PATH=/data
+IMAGE_NAME_TAG=user/mol-llm:v1
 
-	pip install git+https://github.com/thunlp/OpenDelta.git
-	pip install rouge_score nltk ogb peft rdkit salesforce-lavis selfies deepchem Levenshtein evaluate memory_profiler
-	pip install -U transformers==4.44.2 pytorch-lightning
-	pip install transformers --upgrade
-	pip install deepspeed
-	pip install torch_geometric
-	pip install -U tensorboardX tensorboard
-	pip install wandb
-	pip install hydra-core --upgrade
+build-image:
+	docker build -t $(IMAGE_NAME_TAG) .
 
-debug:
-	conda create -n ${ENV_NAME} python=3.10 -y
-	conda init bash
-	conda activate ${ENV_NAME}
+init-container:
+	docker run -it \
+	--gpus all \
+	-v $(REPO_PATH):/text-mol \
+	-v $(DATA_PATH):/data \
+	-v $(CACHE_PATH):/root/.cache/ \
+	--shm-size=32g \
+	--name mol-llm \
+	$(IMAGE_NAME_TAG) \
+	/bin/bash
