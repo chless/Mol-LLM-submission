@@ -676,14 +676,5 @@ class Blip2Stage3(pl.LightningModule):
         with open(result_path, "w") as f:
             json.dump(result_dict, f, ensure_ascii=False, indent=4)
 
-        # save flattend_metric_keys
-        with open(
-            os.path.join(
-                self.logger.log_dir,
-                f"{mode}-step{self.global_step}-{self.global_rank}-keys.json",
-            ),
-            "w",
-        ) as f:
-            json.dump(flattened_metric_keys, f, ensure_ascii=False, indent=4)
 
         print(f"\nDevice {self.device} on_evaluation_epoch_end end")
