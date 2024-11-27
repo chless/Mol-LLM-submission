@@ -6,7 +6,7 @@ ENV PATH=/miniconda/bin:${PATH}
 
 # Install dependencies
 RUN apt-get update \
-    && apt-get install -y python3-pip python3-dev golang-1.18 git wget curl zsh tmux vim \
+    && apt-get install -y python3-pip python3-dev golang-1.18 git wget curl zsh tmux vim htop \
     && rm -rf /var/lib/apt/lists/*
 RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
