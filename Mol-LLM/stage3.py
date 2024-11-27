@@ -7,7 +7,7 @@ from pytorch_lightning import Trainer, strategies
 from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger, WandbLogger, TensorBoardLogger
 from data_module import Stage3DM
-    
+
 from model.blip2_stage3 import Blip2Stage3
 import json
 import hydra
@@ -68,13 +68,13 @@ def main(cfg):
     )
 
     # train_loader = dm.train_dataloader()
-    
+
     # from tqdm import tqdm
     # for batch in tqdm(train_loader):
     #     # print(batch)
     #     # break
     #     pass
-    
+
     # callbacks to save model parameters
     callbacks = []
 
@@ -122,10 +122,10 @@ def main(cfg):
     )
 
     # profiler = AdvancedProfiler(
-    #     dirpath="./profiler_logs", 
+    #     dirpath="./profiler_logs",
     #     filename="profiler_output.txt",
     #     )
-
+    # TODO: allow single device
     world_size = len(cfg.devices.split(",")) if len(cfg.devices.split(",")) > 1 else 1
     cfg.accumulate_grad_batches = cfg.total_batch_size // cfg.batch_size // world_size
     print("accumulate_grad_batches:", cfg.accumulate_grad_batches)
@@ -135,17 +135,13 @@ def main(cfg):
         "precision": cfg.precision,
         "callbacks": callbacks,
         "strategy": strategy,
-        "logger": [logger, 
-                   wandb_logger, 
-                   tb_logger],
+        "logger": [logger, wandb_logger, tb_logger],
         "max_steps": cfg.max_steps,
         "max_epochs": cfg.max_epochs,
         "val_check_interval": cfg.val_check_interval,
         "check_val_every_n_epoch": cfg.check_val_every_n_epoch,
         "accumulate_grad_batches": cfg.accumulate_grad_batches,
         "log_every_n_steps": cfg.log_every_n_steps,
-        
-        
         # "num_sanity_val_steps": 0,
         # "profiler": profiler,
     }
@@ -159,7 +155,7 @@ def main(cfg):
     if cfg.mode in {"pretrain", "ft", "multi_task"}:
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         outputs = trainer.test(model, datamodule=dm)
-        
+
         # wandb_logger.experiment.save("./wandb_profiling_logs/profiler_trace.json")
         # profiler_summary = profiler.summary()
         # wandb_logger.log_metrics({"Profiler Summary": profiler_summary})
