@@ -5,6 +5,8 @@ ARG PYTHON_VERSION=3.10
 ENV PATH=/miniconda/bin:${PATH}
 
 # Install dependencies
+RUN apt-get update && apt-get install locales -y
+RUN locale-gen en_US.UTF-8
 RUN apt-get update \
     && apt-get install -y python3-pip python3-dev golang-1.18 git wget curl zsh tmux vim \
     && rm -rf /var/lib/apt/lists/*
