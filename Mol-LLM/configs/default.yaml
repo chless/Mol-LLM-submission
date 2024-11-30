@@ -1,6 +1,6 @@
 defaults:
   - data: multi_task_extended-v6
-  - gnn: moleculeSTM
+  - gnn: moleculeSTM_freeze
   - trainer: mistral7b_80gb
 
 # General settings
