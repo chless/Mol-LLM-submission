@@ -166,7 +166,7 @@ class Blip2OPT(Blip2Base):
                     param.requires_grad = False
                 self.graph_encoder = self.graph_encoder.eval()
                 self.graph_encoder.train = disabled_train
-                logging.info("freeze graph encoder")
+                print("freeze graph encoder")
 
             self.num_query_token = num_query_token
             self.Qformer, self.query_tokens = self.init_Qformer(
