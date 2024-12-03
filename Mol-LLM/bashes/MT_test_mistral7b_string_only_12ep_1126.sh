@@ -9,4 +9,6 @@ data.raw_data_root=/data/data/Mol-LLM-v6 \
 gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
 trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
+ckpt_path="'/data/all_checkpoints/MT_mistral7b_string_only_12ep_1126/last.ckpt'" \
+mode=test
 
