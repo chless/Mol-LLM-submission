@@ -112,7 +112,7 @@ def main(cfg):
         name=cfg.filename,
     )
 
-    world_size = len(cfg.devices.split(",")) if "," in cfg.devices > 1 else 1
+    world_size = len(cfg.devices.split(",")) if "," in cfg.devices else 1
     cfg.accumulate_grad_batches = cfg.total_batch_size // cfg.batch_size // world_size
     print("accumulate_grad_batches:", cfg.accumulate_grad_batches)
     trainer_args = {
