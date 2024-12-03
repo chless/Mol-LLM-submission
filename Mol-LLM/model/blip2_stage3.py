@@ -367,7 +367,7 @@ class Blip2Stage3(pl.LightningModule):
         # tasks = graphs.task_subtask_pair
         tasks = [id2task(task_id.item()) for task_id in batch.tasks]
         
-        probs = convert_logit2binary_prob(outputs.logits, self.blip2model.llm_tokenizer)
+        probs = convert_logit2binary_prob(logits=outputs.logits, predictions=predictions, tokenizer=self.blip2model.llm_tokenizer)
         prompts = [
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
         ]

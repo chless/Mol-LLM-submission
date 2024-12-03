@@ -525,22 +525,44 @@ from sklearn.metrics import (
 )
 
 
-def convert_logit2binary_prob(logits, tokenizer):
-    true_token_id = tokenizer.convert_tokens_to_ids(["true"])[0]
+def convert_logit2binary_prob(logits, predictions, tokenizer):
     True_token_id = tokenizer.convert_tokens_to_ids(["True"])[0]
-    false_token_id = tokenizer.convert_tokens_to_ids(["false"])[0]
     False_token_id = tokenizer.convert_tokens_to_ids(["False"])[0]
 
-    total_probs = torch.zeros(len(logits), 2)
-    for i, logit in enumerate(logits):
-        probs = logit.softmax(dim=-1)
-        # in generated answer, 0 th token is <BOOLEAN> and 1 is the prediction, and 2 is </BOOLEAN>
-        true_prob = probs[1, true_token_id] + probs[1, True_token_id]
-        false_prob = probs[1, false_token_id] + probs[1, False_token_id]
-        # normalize the probability for binary answer
-        total_probs[i] = torch.cat(
-            [false_prob.unsqueeze(0), true_prob.unsqueeze(0)], dim=0
-        ).softmax(-1)
+    bos_token, eos_token = added_tokens.BOOL
+    boolean_bos_id = tokenizer.convert_tokens_to_ids(bos_token)
+
+    prediction_position_ids = torch.zeros(logits.shape[:-1], dtype=torch.bool)
+    is_using_prediction_position_ids = torch.zeros((logits.shape[0], 2), dtype=torch.bool).to(logits.device)
+
+    for idx, pred in enumerate(predictions):
+        # first, inspect that pred includes boolean tokens
+        # second, inspect that there is only one token between boolean tokens
+        # third, get position id of the prediction token between the boolean tokens
+        pred_token_ids = tokenizer.encode(pred, add_special_tokens=False)
+        try:
+            assert re.search(f"{bos_token}.+{eos_token}", pred).group(), f"pred should be searched by re pattern {bos_token}.+{eos_token}"
+            boolean_bos_position = pred_token_ids.index(boolean_bos_id)
+            prediction_position_ids[idx, boolean_bos_position + 1] = True
+            is_using_prediction_position_ids[idx, :] = True
+        except:
+            prediction_position_ids[idx, 0] = True
+            is_using_prediction_position_ids[idx, :] = False
+
+    true_logits = logits[prediction_position_ids][:, True_token_id]
+    false_logits = logits[prediction_position_ids][:, False_token_id]
+
+    total_logits = torch.cat(
+        [false_logits.unsqueeze(1), true_logits.unsqueeze(1)], dim=-1
+    )
+    total_probs = total_logits.softmax(-1)
+
+    total_probs = torch.where(
+        is_using_prediction_position_ids,
+        total_probs,
+        torch.full_like(total_probs, -1),
+    )
+
     total_probs = [p.tolist() for p in total_probs]
     return total_probs
 
