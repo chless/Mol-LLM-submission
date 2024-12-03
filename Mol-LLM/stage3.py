@@ -67,15 +67,6 @@ def main(cfg):
         args=cfg,
     )
 
-    # train_loader = dm.train_dataloader()
-
-    # from tqdm import tqdm
-    # for batch in tqdm(train_loader):
-    #     # print(batch)
-    #     # break
-    #     pass
-
-    # callbacks to save model parameters
     callbacks = []
 
     monitoring_metric = "train_total_loss"
@@ -108,7 +99,7 @@ def main(cfg):
         cfg.devices = [eval(cfg.devices)]
 
     logger = CSVLogger(save_dir=os.path.join(cfg.logging_dir, cfg.filename))
-    # wandb.login()
+
     wandb_logger = WandbLogger(
         name=cfg.filename,
         project=cfg.wandb_project,
@@ -121,12 +112,7 @@ def main(cfg):
         name=cfg.filename,
     )
 
-    # profiler = AdvancedProfiler(
-    #     dirpath="./profiler_logs",
-    #     filename="profiler_output.txt",
-    #     )
-    # TODO: allow single device
-    world_size = len(cfg.devices.split(",")) if len(cfg.devices.split(",")) > 1 else 1
+    world_size = len(cfg.devices.split(",")) if "," in cfg.devices > 1 else 1
     cfg.accumulate_grad_batches = cfg.total_batch_size // cfg.batch_size // world_size
     print("accumulate_grad_batches:", cfg.accumulate_grad_batches)
     trainer_args = {
