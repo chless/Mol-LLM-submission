@@ -526,11 +526,14 @@ from sklearn.metrics import (
 
 
 def convert_logit2binary_prob(logits, predictions, tokenizer):
-    True_token_id = tokenizer.convert_tokens_to_ids(["True"])[0]
-    False_token_id = tokenizer.convert_tokens_to_ids(["False"])[0]
+    # WARNING: for specific LLM tokenizer, behaviour might be different
+    # below code is for mistral7B tokenizer
+    # if you want to use this function for other tokenizer, you should check working, and modify if necessary
+    True_token_id = tokenizer.encode("True")[-1]
+    False_token_id = tokenizer.encode("False")[-1]
 
     bos_token, eos_token = added_tokens.BOOL
-    boolean_bos_id = tokenizer.convert_tokens_to_ids(bos_token)
+    boolean_bos_id = tokenizer.encode([bos_token])[-1]
 
     prediction_position_ids = torch.zeros(logits.shape[:-1], dtype=torch.bool)
     is_using_prediction_position_ids = torch.zeros((logits.shape[0], 2), dtype=torch.bool).to(logits.device)
