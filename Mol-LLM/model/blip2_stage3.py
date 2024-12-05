@@ -251,6 +251,10 @@ class Blip2Stage3(pl.LightningModule):
                 self.dataset_losses[task_subtask_pair] = []
 
         for i in range(instance_losses.shape[0]):
+            # if i th item is nan, skip
+            if instance_losses[i] != instance_losses[i]:
+                continue
+            
             task_subtask_pair = task_subtask_pairs[i]
             # calculate average loss
             self.dataset_losses[task_subtask_pair].append(instance_losses[i].item())
@@ -394,6 +398,9 @@ class Blip2Stage3(pl.LightningModule):
         instance_losses = outputs["instance_loss"]
 
         for i in range(instance_losses.shape[0]):
+            # if i th item is nan, skip
+            if instance_losses[i] != instance_losses[i]:
+                continue
             task_subtask_pair = task_subtask_pairs[i]
             # calculate average loss
             self.eval_dataset_losses[task_subtask_pair][
