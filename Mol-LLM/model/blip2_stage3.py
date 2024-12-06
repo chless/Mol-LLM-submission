@@ -330,6 +330,12 @@ class Blip2Stage3(pl.LightningModule):
             for task_subtask_pair in self.task_subtask_name_pairs
         }
 
+        #<DEBUG>
+        self.accurate_count = 0
+        self.total_count = 0
+        self.cut_count = 0
+        #</DEBUG>
+
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
 
         target_ids = batch.labels
@@ -381,6 +387,19 @@ class Blip2Stage3(pl.LightningModule):
         self.list_logs["tasks"].extend(tasks)
         self.list_logs["probs"].extend(probs)
         self.list_logs["prompts"].extend(prompts)
+
+        # <DEBUG>
+        for i in range(len(predictions)):
+            self.total_count += 1
+            if "True" in targets[i] and "True" in predictions[i]:
+                self.accurate_count += 1
+            elif "False" in targets[i] and "False" in predictions[i]:
+                self.accurate_count += 1
+            elif targets[i] == '':
+                self.cut_count += 1
+            else:
+                pass
+        # </DEBUG>
 
         batch_size = batch.input_ids.shape[0]
         # TODO: IMPORTANT! this loss calculateion should be fixed, with the change of data collater in eval mode
@@ -669,6 +688,9 @@ class Blip2Stage3(pl.LightningModule):
         print(
             "================================================================================="
         )
+        #<DEBUG>
+        print(f"Accuracy: {self.accurate_count / (self.total_count - self.cut_count)}")
+        #</DEBUG>
         result_path = os.path.join(
             self.logger.log_dir,
             f"{mode}-step{self.global_step}-{self.global_rank}-results.json",
