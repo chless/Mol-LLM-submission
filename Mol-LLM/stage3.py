@@ -69,7 +69,6 @@ def main(cfg):
 
     callbacks = []
 
-    monitoring_metric = "val_total_loss"
     callbacks.append(
         ModelCheckpoint(
             dirpath=os.path.join(cfg.logging_dir, cfg.filename),
@@ -77,9 +76,6 @@ def main(cfg):
             every_n_epochs=cfg.every_n_epochs,
             save_last=True,
             save_top_k=-1,
-            save_on_train_epoch_end=True,
-            monitor=monitoring_metric,
-            mode="min",
         )
     )
 
