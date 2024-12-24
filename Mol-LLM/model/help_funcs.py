@@ -17,11 +17,16 @@ from Levenshtein import distance as lev
 
 
 def caption_evaluate(predictions, targets, tokenizer, prompts):
-    meteor_scores = []
     references = []
     hypotheses = []
+    ref_sentences = []
+    hyp_sentences = []
     failure_idxs = []
-
+    
+    meteor_scores = []
+    rouge_scores = []
+    scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"])
+    
     patterns = {
         "DESCRIPTION": {
             "dual_side": re.compile(r"(?<=<DESCRIPTION>).*?(?=</DESCRIPTION>)"),
@@ -55,6 +60,7 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
             ref = pattern["dual_side"].search(target).group()
         else:
             ref = pattern["left_side"].search(target).group()
+        ref_sentences.append(ref)
         ref_tokens = tokenizer.tokenize(ref)
 
         try:
@@ -62,12 +68,11 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
                 pred = pattern["dual_side"].search(prediction).group()
             else:
                 pred = pattern["left_side"].search(prediction).group()
+            hyp_sentences.append(pred)
             pred_tokens = tokenizer.tokenize(pred)
 
             references.append([ref_tokens])
             hypotheses.append(pred_tokens)
-            mscore = meteor_score([ref_tokens], pred_tokens)
-            meteor_scores.append(mscore)
 
         except:
             failure_idxs.append(i)
@@ -79,24 +84,30 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
         bleu4 = corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25))
         bleu2 *= 100
         bleu4 *= 100
+        
+        for ref, hyp in tqdm(zip(references, hypotheses)):
+            mscore = meteor_score(ref, hyp)
+            meteor_scores.append(mscore)
+        
+        _meteor_score = np.mean(meteor_scores)
+        _meteor_score *= 100
+        
+        for ref_sen, hyp_sen in tqdm(zip(ref_sentences, hyp_sentences)):
+            lscore = scorer.score(hyp_sen, ref_sen)
+            rouge_scores.append(lscore)
+        
+        rouge_1 = np.mean([rs["rouge1"].fmeasure for rs in rouge_scores]) * 100
+        rouge_2 = np.mean([rs["rouge2"].fmeasure for rs in rouge_scores]) * 100
+        rouge_l = np.mean([rs["rougeL"].fmeasure for rs in rouge_scores]) * 100
+            
     else:
         bleu2 = 0
         bleu4 = 0
+        _meteor_score = 0
+        rouge_1 = 0
+        rouge_2 = 0
+        rouge_l = 0
 
-    _meteor_score = np.mean(meteor_scores)
-    _meteor_score *= 100
-
-    scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"])
-
-    rouge_scores = []
-
-    for gt, out in tqdm(zip(targets, predictions)):
-        rs = scorer.score(out, gt)
-        rouge_scores.append(rs)
-
-    rouge_1 = np.mean([rs["rouge1"].fmeasure for rs in rouge_scores]) * 100
-    rouge_2 = np.mean([rs["rouge2"].fmeasure for rs in rouge_scores]) * 100
-    rouge_l = np.mean([rs["rougeL"].fmeasure for rs in rouge_scores]) * 100
     evaluation_results = {
         "bleu2": bleu2,
         "bleu4": bleu4,
