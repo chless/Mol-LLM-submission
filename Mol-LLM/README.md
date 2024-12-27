@@ -40,7 +40,7 @@ python3 MolCA/stage3.py \
 --graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
 --valset_resize 2400 \
 --skip_sanity_check \
---llava_style 1 \
+--llava_pretraining 1 \
 --num_query_token 32 \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
@@ -85,7 +85,7 @@ python3 MolCA/stage3.py \
 --graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
 --valset_resize 2400 \
 --skip_sanity_check \
---llava_style 1 \
+--llava_pretraining 1 \
 --num_query_token 32 \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \
@@ -130,7 +130,7 @@ python3 MolCA/stage3.py \
 --graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
 --valset_resize 2400 \
 --skip_sanity_check \
---llava_style 1 \
+--llava_pretraining 1 \
 --num_query_token 32 \
 --bert_num_hidden_layers 5 \
 --mol_string_randomization_ratio -1 \

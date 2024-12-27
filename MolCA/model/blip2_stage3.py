@@ -224,7 +224,7 @@ class Blip2Stage3(pl.LightningModule):
             print("set lora weights trainable")
 
     def training_step(self, batch, batch_idx):
-        if self.args.llava_style:
+        if self.args.llava_pretraining:
             self.apply_separated_stage()
 
         if self.scheduler:

@@ -33,7 +33,7 @@ every_n_epochs: 1
 task: null
 save_top_k: 10
 logging_dir: "your logging path"
-llava_style: 0
+llava_pretraining: 0
 num_workers: 0
 skip_sanity_check: false
 

@@ -223,7 +223,7 @@ class Blip2Stage3(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # print(batch_idx, torch.cuda.memory_summary())
         # torch.cuda.empty_cache()
-        if self.args.llava_style:
+        if self.args.llava_pretraining:
             self.apply_separated_stage()
 
         if self.scheduler:

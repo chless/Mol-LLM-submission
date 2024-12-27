@@ -149,7 +149,7 @@ class Blip2OPT(Blip2Base):
             model=self.llm_model, keyword="embed", grad=True, IsPrint=False
         )
 
-        if self.args.llava_style:
+        if self.args.llava_pretraining:
             self.set_params_requires_grads(
                 model=self.llm_model, keyword="lora", grad=False, IsPrint=False
             )

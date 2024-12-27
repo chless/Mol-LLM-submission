@@ -32,7 +32,7 @@ every_n_train_steps: 200
 task: null
 save_top_k: 10
 logging_dir: "/home/chanhui-lee/text-mol/MolCA/all_checkpoints/"
-llava_style: 1
+llava_pretraining: 1
 num_workers: 0
 skip_sanity_check: false
 
