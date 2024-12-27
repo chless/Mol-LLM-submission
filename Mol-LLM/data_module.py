@@ -39,7 +39,8 @@ class Stage3DM(LightningDataModule):
             self.train_dataset = get_dataset("train", tokenizer, args)
 
         builder = load_dataset_builder(
-            os.path.join(args.raw_data_root, "InstructGraph.py")
+            os.path.join(args.raw_data_root, "InstructGraph.py"),
+            trust_remote_code=True,
         )
         builder.config.train_tasks
         self.task_subtask_name_pairs = list(builder.config.test_tasks)

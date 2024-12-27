@@ -211,7 +211,7 @@ class Blip2Stage3(pl.LightningModule):
 
     def apply_separated_stage(self):
         if (
-            self.trainer.global_step >= self.args.second_stage_start_step
+            self.trainer.global_step >= self.args.second_stage_start_epoch
             and not self.on_second_stage
         ):
             self.blip2model.set_params_requires_grads(
