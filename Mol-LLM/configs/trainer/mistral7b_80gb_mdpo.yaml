@@ -39,8 +39,8 @@ skip_sanity_check: false
 
 # accumulate_grad_batches: 11
 total_batch_size: 1024
-batch_size: 11
-inference_batch_size: 22
+batch_size: 5
+inference_batch_size: 10
 
 truncation: 1
 padding: max_length
@@ -71,4 +71,4 @@ test_on_trainset: false
 
 # multimodal training
 mol_string_randomization_ratio: -1
-mdpo: false
+mdpo: true
