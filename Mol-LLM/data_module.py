@@ -30,12 +30,17 @@ class Stage3DM(LightningDataModule):
 
         self.mol_representation = args.mol_representation
         self.tokenizer = tokenizer
-        
-        self.train_dataset = get_dataset('train', tokenizer, args)
-        self.val_dataset = get_dataset('validation', tokenizer, args)
-        self.test_dataset = get_dataset('test', tokenizer, args)
-        
-        builder = load_dataset_builder(os.path.join(args.raw_data_root, 'InstructGraph.py'))
+
+        self.test_dataset = get_dataset("test", tokenizer, args)
+        self.val_dataset = get_dataset("validation", tokenizer, args)
+        if args.debug:
+            self.train_dataset = get_dataset("test", tokenizer, args)
+        else:
+            self.train_dataset = get_dataset("train", tokenizer, args)
+
+        builder = load_dataset_builder(
+            os.path.join(args.raw_data_root, "InstructGraph.py")
+        )
         builder.config.train_tasks
         self.task_subtask_name_pairs = list(builder.config.test_tasks)
 
@@ -46,7 +51,8 @@ class Stage3DM(LightningDataModule):
             padding=True,
             max_length=args.max_length,
             return_tensors="pt",
-            use_graph='graph' in self.mol_representation,
+            use_graph="graph" in self.mol_representation,
+            mdpo=args.mdpo,
         )
         self.eval_collator = DataCollator(
             tokenizer=tokenizer,
@@ -54,10 +60,9 @@ class Stage3DM(LightningDataModule):
             padding=True,
             max_length=args.max_length,
             return_tensors="pt",
-            use_graph='graph' in self.mol_representation,
+            use_graph="graph" in self.mol_representation,
             train=False,
         )
-        
 
     def train_dataloader(self):
         loader = DataLoader(
@@ -68,7 +73,7 @@ class Stage3DM(LightningDataModule):
             pin_memory=True,
             drop_last=True,
             persistent_workers=True if self.args.num_workers > 0 else False,
-            collate_fn=self.train_collator
+            collate_fn=self.train_collator,
         )
         return loader
 
@@ -81,7 +86,7 @@ class Stage3DM(LightningDataModule):
             pin_memory=True,
             drop_last=False,
             persistent_workers=True if self.args.num_workers > 0 else False,
-            collate_fn=self.eval_collator
+            collate_fn=self.eval_collator,
         )
         return loader
 
@@ -94,69 +99,103 @@ class Stage3DM(LightningDataModule):
             pin_memory=True,
             drop_last=False,
             persistent_workers=True if self.args.num_workers > 0 else False,
-            collate_fn=self.eval_collator
+            collate_fn=self.eval_collator,
         )
         return loader
 
 
-
-
-
 def get_dataset(split, tokenizer, args):
-    
     data_path = args.raw_data_root
     mol_representation = args.mol_representation
     num_query_token = args.num_query_token
-    base_model = args.llm_model.replace('/', '-')
-    
-    
-    tasks = None
-    
+    base_model = args.llm_model.replace("/", "-")
+
     # to avoid re-generating
-    if 'graph' in mol_representation:
-        preprocessed_data_path = os.path.join(data_path, f"preprocessd_{base_model}_{split}_{mol_representation}_{num_query_token}")
+    tags = [base_model, mol_representation]
+    if "graph" in mol_representation:
+        tags += [f"q{num_query_token}"]
+    tags += [split]
+    processed_file_name = "_".join(tags)
+    preprocessed_data_path = os.path.join(data_path, processed_file_name)
+
+    if args.data_tag is not None:
+        assert args.tasks is not None, "data_tag is only used when tasks are specified"
+        taged_preprocessed_data_path = preprocessed_data_path + f"_{args.data_tag}"
     else:
-        preprocessed_data_path = os.path.join(data_path, f"preprocessd_{base_model}_{split}_{mol_representation}")
-    print("preprocessed_data_path:", preprocessed_data_path)
-    
-    if os.path.exists(preprocessed_data_path):
+        taged_preprocessed_data_path = None
+
+    # load taged subset of entire preprocessed data
+    if taged_preprocessed_data_path is not None and os.path.exists(
+        taged_preprocessed_data_path
+    ):
+        dataset = load_from_disk(taged_preprocessed_data_path)
+    elif taged_preprocessed_data_path is not None and os.path.exists(
+        preprocessed_data_path
+    ):
         dataset = load_from_disk(preprocessed_data_path)
-    else:  # preprocess data
-        
+
+        dataset = dataset.filter(lambda x: x["task"] in args.tasks)
+        dataset.save_to_disk(taged_preprocessed_data_path)
+    elif taged_preprocessed_data_path is not None and not os.path.exists(
+        preprocessed_data_path
+    ):
         dataset = load_dataset(
-            path=os.path.join(data_path, 'InstructGraph.py'),
-            split=split, 
-            tasks=tasks,
-            cache_dir=os.path.join(data_path, 'cache'),
-            )
-        
-        # when you debug, you can use this line to reduce the dataset size
-        # dataset = dataset.select(torch.randperm(len(dataset))[:1000])
-        
+            path=os.path.join(data_path, "InstructGraph.py"),
+            split=split,
+            cache_dir=os.path.join(data_path, "cache"),
+        )
+
         remove_keys = set(dataset.column_names)
         remove_keys -= {
-                'task', 
-                'x', 'edge_index', 'edge_attr', 
-                'additional_x', 'additional_edge_index', 'additional_edge_attr'
-            }
+            "task",
+            "x",
+            "edge_index",
+            "edge_attr",
+            "additional_x",
+            "additional_edge_index",
+            "additional_edge_attr",
+        }
         dataset = dataset.shuffle().map(
-                        generate_and_tokenize_prompt,
-                        remove_columns=remove_keys,
-                        fn_kwargs={
-                            'tokenizer': tokenizer, 
-                            'args': args, 
-                            'test': False if split=='train' else True
-                            },
-                        
-                        load_from_cache_file=False,
-                        )
-        # save preprocessd data
+            generate_and_tokenize_prompt,
+            remove_columns=remove_keys,
+            fn_kwargs={
+                "tokenizer": tokenizer,
+                "args": args,
+                "test": False if split == "train" else True,
+            },
+            load_from_cache_file=False,
+        )
         dataset.save_to_disk(preprocessed_data_path)
-    
-    
-    # filter tasks 
-    if args.tasks is not None:
-        dataset = dataset.filter(lambda x: x['task'] in args.tasks)
-        # you can save the filtered dataset
-        
+        dataset = dataset.filter(lambda x: x["task"] in args.tasks)
+        dataset.save_to_disk(taged_preprocessed_data_path)
+    elif os.path.exists(preprocessed_data_path):
+        dataset = load_from_disk(preprocessed_data_path)
+    else:
+        dataset = load_dataset(
+            path=os.path.join(data_path, "InstructGraph.py"),
+            split=split,
+            cache_dir=os.path.join(data_path, "cache"),
+        )
+
+        remove_keys = set(dataset.column_names)
+        remove_keys -= {
+            "task",
+            "x",
+            "edge_index",
+            "edge_attr",
+            "additional_x",
+            "additional_edge_index",
+            "additional_edge_attr",
+        }
+        dataset = dataset.shuffle().map(
+            generate_and_tokenize_prompt,
+            remove_columns=remove_keys,
+            fn_kwargs={
+                "tokenizer": tokenizer,
+                "args": args,
+                "test": False if split == "train" else True,
+            },
+            load_from_cache_file=False,
+        )
+        dataset.save_to_disk(preprocessed_data_path)
     return dataset
