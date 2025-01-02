@@ -5,6 +5,11 @@ from torch_geometric.loader.dataloader import Collater as GraphCollater
 
 import numpy as np
 
+from collections import Counter
+
+import selfies as sf
+
+import rdkit.Chem as Chem
 import re
 
 CLASSIFICATION_BENCHMARKS = [
@@ -63,7 +68,8 @@ tasks = (
     + NAME_CONVERSION_BENCHMARKS
 )
 
-input_mol_string_pattern = re.compile("<SELFIES>" + ".*?" + "</SELFIES>")
+input_mol_string_pattern = re.compile("<SELFIES>.*?</SELFIES>")
+graph_sequence = re.compile("<GRAPH>[<mol>]+?</GRAPH>")
 
 
 def task2id(task):
@@ -77,29 +83,6 @@ def id2task(task_id):
     id2task = {i: k for i, k in enumerate(tasks)}
     return id2task[task_id]
 
-
-import selfies as sf
-
-import rdkit.Chem as Chem
-
-
-def get_selfies_from_input_ids(input_ids, tokenizer):
-    input_texts = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
-    selfies = []
-    for text in input_texts:
-        # TODO: implement for reagent prediction, which gives two molecule
-        searched_selfies = input_mol_string_pattern.search(text).group()
-        searched_selfies = (
-            searched_selfies.replace("<SELFIES>", "")
-            .replace("</SELFIES>", "")
-            .replace(" ", "")
-        )
-        selfies.append(searched_selfies)
-
-    return selfies
-
-
-import random
 
 valence_dict = {
     "H": 1,
@@ -250,9 +233,6 @@ def add_atoms_based_on_valence_dict(mol, num_atoms_to_add):
     return out
 
 
-from collections import Counter
-
-
 def get_unique_atoms_and_counts(molecule):
     """
     Get a list of unique atoms and their counts in the given RDKit molecule object.
@@ -290,18 +270,6 @@ def sample_atom(atom_counts):
     sampled_atom = np.random.choice(atoms, p=np.array(counts) / np.sum(counts)).item()
 
     return sampled_atom
-
-
-def count_atoms(mol, atom_symbol):
-    # Initialize a counter for the atoms
-    atom_count = 0
-
-    # Iterate over all atoms in the molecule
-    for atom in mol.GetAtoms():
-        if atom.GetSymbol() == atom_symbol:
-            atom_count += 1
-
-    return atom_count
 
 
 def augment_molecular_structure(selfies: list[str], min_r=0.1, max_r=1.0):
@@ -361,12 +329,26 @@ def mol2graph(mol):
     return graph
 
 
+def graph2data(graph):
+    data = Data(
+        x=graph["node_feat"],
+        edge_index=graph["edge_index"],
+        edge_attr=graph["edge_feat"],
+    )
+    return data
+
+
 def prepare_rejected_mol(mol, preference_type="size"):
-    if preference_type == "size":
-        rejected_mol = augment_molecular_size(mol)
-    elif preference_type == "structure":
-        rejected_mol = augment_molecular_structure(mol)
-    return rejected_mol
+    if preference_type == "negative-size":
+        return augment_molecular_size(mol)
+    elif preference_type == "negative-structure":
+        return augment_molecular_structure(mol)
+    elif preference_type == "positive":
+        return mol
+    else:
+        raise ValueError(
+            "preference_type should be one of 'size', 'structure', 'positive'"
+        )
 
 
 class DataCollator(DataCollatorForSeq2Seq):
@@ -392,10 +374,28 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.max_length = max_length
         self.tokenizer.padding_side = "left"
         self.mdpo = mdpo
+        self.global_steps = 0
 
         if self.use_graph:
             # Collater with no special follow_batch or exclude_keys
             self.graph_collator = GraphCollater([], [])
+
+    def select_mol_modality(self, prompt_text, modality=None):
+        if modality == "string+graph":
+            return prompt_text
+        elif modality == "string_only":
+            string_only_prompt_text = [graph_sequence.sub("", p) for p in prompt_text]
+            return string_only_prompt_text
+        elif modality == "graph_only":
+            graph_only_prompt_text = [
+                input_mol_string_pattern.sub("", p) for p in prompt_text
+            ]
+            return graph_only_prompt_text
+        else:
+            raise ValueError("global_steps should be non-negative integer")
+
+    def select_mol_augmentation(self, prompt_text, augmentation=None):
+        return
 
     def __call__(self, batch, return_tensors=None):
         if return_tensors is None:
@@ -407,47 +407,46 @@ class DataCollator(DataCollatorForSeq2Seq):
         target_text = [sample["target_text"] for sample in batch]
         input_mol_strings = [sample["input_mol_string"] for sample in batch]
 
-        if self.mdpo:
+        if self.mdpo and self.train:
+            mol_modality = np.random.choice(
+                ["string+graph", "string_only", "graph_only"]
+            ).item()
+            prompt_text = self.select_mol_modality(prompt_text, modality=mol_modality)
+
+            # TODO: implement mol_augmentation for negative-structure
+            # mol_augmentation = np.random.choice(["negative-size", "negative-structure"],
+            #                                    p=[0.5, 0.5]).item()
+            mol_augmentation = "negative-size"
+
             list_selfies = [
                 i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
                 for i in input_mol_strings
             ]
             list_mol = [Chem.MolFromSmiles(sf.decoder(i)) for i in list_selfies]
             list_rejected_mol = [
-                prepare_rejected_mol(i, preference_type="size")["mol"] for i in list_mol
+                prepare_rejected_mol(i, preference_type=mol_augmentation)["mol"]
+                for i in list_mol
             ]
             list_rejected_selfies = [
                 sf.encoder(Chem.MolToSmiles(i)) for i in list_rejected_mol
             ]
+            rejected_input_mol_strings = [
+                "<SELFIES> " + i + " </SELFIES>" for i in list_rejected_selfies
+            ]
 
-            for i in range(len(prompt_text)):
-                assert (
-                    list_selfies[i] in prompt_text[i]
-                ), f"{list_selfies[i]} not in {prompt_text[i]}"
-                prompt_text[i] = prompt_text[i].replace(
-                    list_selfies[i], list_rejected_selfies[i]
-                )
+            rejected_prompt_text = prompt_text.copy()
+            if "string" in mol_modality:
+                for i in range(len(rejected_prompt_text)):
+                    assert (
+                        list_selfies[i] in rejected_prompt_text[i]
+                    ), f"{list_selfies[i]} not in {rejected_prompt_text[i]}"
+                    rejected_prompt_text[i] = rejected_prompt_text[i].replace(
+                        list_selfies[i], list_rejected_selfies[i]
+                    )
 
-            list_rejected_graph = [mol2graph(i) for i in list_rejected_mol]
-
-            list_rejected_additional_graph = [mol2graph(i) for i in list_rejected_mol]
-
-        prompt_tokenized = self.tokenizer(
-            prompt_text,
-            truncation=True,
-            max_length=self.max_length,
-            padding=False,
-            return_tensors=None,
-            add_special_tokens=False,
-        )
-        target_tokenized = self.tokenizer(
-            target_text,
-            truncation=True,
-            max_length=self.max_length - len(prompt_tokenized["input_ids"]),
-            padding=False,
-            return_tensors=None,
-            add_special_tokens=False,
-        )
+            prompt_text = prompt_text + rejected_prompt_text
+            target_text = target_text + target_text
+            input_mol_strings = input_mol_strings + rejected_input_mol_strings
 
         if self.use_graph:
             graphs = [
@@ -471,6 +470,57 @@ class DataCollator(DataCollatorForSeq2Seq):
                 )
                 for sample in batch
             ]
+            if self.mdpo and self.train:
+                list_rejected_graph = [
+                    graph2data(mol2graph(i)) for i in list_rejected_mol
+                ]
+                # TODO: implement additional graph for reagent prediction
+                list_rejected_additional_graph = [
+                    graph2data(mol2graph(i)) for i in list_rejected_mol
+                ]
+                rejected_graphs = [
+                    Data(
+                        x=torch.tensor(sample["x"], dtype=torch.int64).clone().detach(),
+                        edge_index=torch.tensor(sample["edge_index"], dtype=torch.int64)
+                        .clone()
+                        .detach(),
+                        edge_attr=torch.tensor(sample["edge_attr"], dtype=torch.int64)
+                        .clone()
+                        .detach(),
+                    )
+                    for sample in list_rejected_graph
+                ]
+                graphs = graphs + rejected_graphs
+                rejected_additional_graphs = [
+                    Data(
+                        x=torch.tensor(sample["x"], dtype=torch.int64).clone().detach(),
+                        edge_index=torch.tensor(sample["edge_index"], dtype=torch.int64)
+                        .clone()
+                        .detach(),
+                        edge_attr=torch.tensor(sample["edge_attr"], dtype=torch.int64)
+                        .clone()
+                        .detach(),
+                    )
+                    for sample in list_rejected_additional_graph
+                ]
+                additional_graphs = additional_graphs + rejected_additional_graphs
+
+        prompt_tokenized = self.tokenizer(
+            prompt_text,
+            truncation=True,
+            max_length=self.max_length,
+            padding=False,
+            return_tensors=None,
+            add_special_tokens=False,
+        )
+        target_tokenized = self.tokenizer(
+            target_text,
+            truncation=True,
+            max_length=self.max_length - len(prompt_tokenized["input_ids"]),
+            padding=False,
+            return_tensors=None,
+            add_special_tokens=False,
+        )
 
         full_input_ids = [
             p + t
@@ -543,15 +593,6 @@ class DataCollator(DataCollatorForSeq2Seq):
             additional_graphs = self.graph_collator(additional_graphs)
             features["graphs"] = graphs
             features["additional_graphs"] = additional_graphs
-
-            if self.mdpo:
-                list_rejected_graph = self.graph_collator(list_rejected_graph)
-                list_rejected_additional_graph = self.graph_collator(
-                    list_rejected_additional_graph
-                )
-                features["rejected_graphs"] = list_rejected_graph
-                features["rejected_additional_graphs"] = list_rejected_additional_graph
-
             features["is_mol_token"] = (
                 torch.tensor(features["input_ids"]) == self.tokenizer.mol_token_id
             )
@@ -560,6 +601,9 @@ class DataCollator(DataCollatorForSeq2Seq):
                     torch.tensor(features["prompt_input_ids"])
                     == self.tokenizer.mol_token_id
                 )
+
+            if self.mdpo and self.train:
+                features[f"{mol_augmentation}"] = torch.tensor(0, dtype=torch.int16)
 
         return features
 
