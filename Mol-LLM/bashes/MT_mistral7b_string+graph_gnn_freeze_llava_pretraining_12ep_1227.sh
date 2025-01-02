@@ -10,5 +10,6 @@ gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
 trainer=mistral7b_80gb_llava_pretraining \
 trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
-trainer.mol_representation=string+graph
+trainer.mol_representation=string+graph \
+ckpt_path=/data/all_checkpoints/MT_mistral7b_string+graph_gnn_freeze_llava_pretraining_12ep_1227/epoch=02-val_total_loss=0.000.ckpt \
 
