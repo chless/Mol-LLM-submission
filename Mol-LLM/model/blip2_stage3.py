@@ -264,13 +264,14 @@ class Blip2Stage3(pl.LightningModule):
                 self.dataset_losses[task_subtask_pair].pop(0)
 
         for dataset in self.dataset_losses.keys():
-            self.log(
-                f"train/{dataset}/loss",
-                sum(self.dataset_losses[dataset])
-                / len(self.dataset_losses[dataset]),
-                batch_size=len(self.dataset_losses[dataset]),
-                sync_dist=False,
-            )
+            if not len(self.dataset_losses[dataset]) == 0:
+                self.log(
+                    f"train/{dataset}/loss",
+                    sum(self.dataset_losses[dataset])
+                    / len(self.dataset_losses[dataset]),
+                    batch_size=len(self.dataset_losses[dataset]),
+                    sync_dist=False,
+                )
 
         loss = outputs["loss"]
         self.log(
