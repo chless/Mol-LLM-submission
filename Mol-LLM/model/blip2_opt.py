@@ -102,7 +102,9 @@ class Blip2OPT(Blip2Base):
         # initialize opt model
         self.llm_tokenizer = AutoTokenizer.from_pretrained(
             # llm_model, use_fast=False, padding_side="right"
-            llm_model, use_fast=False, padding_side="left"
+            llm_model,
+            use_fast=False,
+            padding_side="left",
         )
         self.llm_tokenizer.mol_string_randomization_ratio = (
             args.mol_string_randomization_ratio
@@ -199,10 +201,11 @@ class Blip2OPT(Blip2Base):
             )
         else:
             self.llm_model = OPTForCausalLM_Custom.from_pretrained(
-                llm_model, 
-                torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+                llm_model,
+                torch_dtype=(
+                    torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+                ),
             )
-            
 
     def add_necessary_tokens(self):
         # pad toekn for galactica is "<pad>""
@@ -240,8 +243,12 @@ class Blip2OPT(Blip2Base):
         self.llm_tokenizer.add_tokens(additional_tokens)
 
         # self.llm_tokenizer.mol_token = added_tokens.MOL_EMBEDDING[0]
-        self.llm_tokenizer.add_special_tokens({"additional_special_tokens": [added_tokens.MOL_EMBEDDING[0]]})
-        self.llm_tokenizer.mol_token_id = self.llm_tokenizer.convert_tokens_to_ids(added_tokens.MOL_EMBEDDING[0])
+        self.llm_tokenizer.add_special_tokens(
+            {"additional_special_tokens": [added_tokens.MOL_EMBEDDING[0]]}
+        )
+        self.llm_tokenizer.mol_token_id = self.llm_tokenizer.convert_tokens_to_ids(
+            added_tokens.MOL_EMBEDDING[0]
+        )
 
     def merge_and_initialize_lora(self):
         self.model.blip2model.llm_model.merge_and_unload(progressbar=True)
@@ -299,20 +306,14 @@ class Blip2OPT(Blip2Base):
         return partial_random_replaced
 
     def forward(self, batch):
-        
-        
         input_ids = batch.input_ids  # ['input_ids']
         attention_mask = batch.attention_mask  # ['attention_mask']
         target_ids = batch.labels  # ['labels']
-        
+
         if "graph" in self.args.mol_representation:
-            graphs = batch['graphs']
-            additional_graphs = batch['additional_graphs']
-            is_mol_token = batch['is_mol_token']
-        
-        
-        del batch
-        
+            graphs = batch["graphs"]
+            additional_graphs = batch["additional_graphs"]
+            is_mol_token = batch["is_mol_token"]
 
         # preprare targets to ignore pad tokens in the loss calculation
         targets = target_ids.masked_fill(
@@ -348,7 +349,7 @@ class Blip2OPT(Blip2Base):
             "logits": outputs.logits,
         }
         return results
-    
+
     def debug_pred(self, logits, targets):
         max_logits = logits.argmax(dim=-1)
         target_masks = targets != -100
@@ -359,8 +360,8 @@ class Blip2OPT(Blip2Base):
             target = targets[i]
             target_mask = target_masks[i]
 
-            #prediction = self.llm_tokenizer.decode(max_logit)
-            #label = self.llm_tokenizer.decode(target)
+            # prediction = self.llm_tokenizer.decode(max_logit)
+            # label = self.llm_tokenizer.decode(target)
 
             prediction = self.llm_tokenizer.decode(max_logit[target_mask])
             label = self.llm_tokenizer.decode(target[target_mask])
@@ -368,15 +369,13 @@ class Blip2OPT(Blip2Base):
             labels.append(label)
         return predictions, labels
 
-
     def inject_graph_embeds2input_embeds(self, input_embeds, is_mol_token, graphs):
         mol_graphs, mol2_graphs = graphs
-        
-        
+
         mol_token_sequence = []
-        
+
         for graphs in [mol_graphs, mol2_graphs]:
-            
+
             mol_x = graphs["x"]
             mol_edge_index = graphs["edge_index"]
             mol_edge_attr = graphs["edge_attr"]
@@ -397,21 +396,27 @@ class Blip2OPT(Blip2Base):
             )
             mol_tokens = self.opt_proj(query_output.last_hidden_state)
             mol_token_sequence.append(mol_tokens)
-        
-    
+
         mol_tokens = torch.cat(mol_token_sequence, dim=1)
-        
+
         num_mol_tokens_per_sample = is_mol_token.sum(dim=1)  # Shape: (batch_size,)
         if (num_mol_tokens_per_sample > 0).any():
-            mol_token_indices_full = is_mol_token.cumsum(dim=1) - 1  # Shape: (batch_size, seq_length)
+            mol_token_indices_full = (
+                is_mol_token.cumsum(dim=1) - 1
+            )  # Shape: (batch_size, seq_length)
 
             # Get indices where is_mol_token is True
-            batch_indices, token_indices = is_mol_token.nonzero(as_tuple=True)  # Shape: (num_true_tokens,)
+            batch_indices, token_indices = is_mol_token.nonzero(
+                as_tuple=True
+            )  # Shape: (num_true_tokens,)
 
             # Get corresponding mol_token_indices
-            mol_token_indices = mol_token_indices_full[batch_indices, token_indices]  # Shape: (num_true_tokens,)
-            input_embeds[batch_indices, token_indices, :] = mol_tokens[batch_indices, mol_token_indices, :]
-
+            mol_token_indices = mol_token_indices_full[
+                batch_indices, token_indices
+            ]  # Shape: (num_true_tokens,)
+            input_embeds[batch_indices, token_indices, :] = mol_tokens[
+                batch_indices, mol_token_indices, :
+            ]
 
         return input_embeds
 
@@ -423,7 +428,6 @@ class Blip2OPT(Blip2Base):
         input_ids,
         attention_mask,
         is_mol_token=None,
-        
         do_sample=False,
         num_beams=5,
         max_length=128,
@@ -450,7 +454,9 @@ class Blip2OPT(Blip2Base):
 
         input_embeds = self.llm_model.get_input_embeddings()(input_ids)
         if "graph" in self.args.mol_representation:
-            assert is_mol_token is not None, 'is_mol_token should be provided for graph representation'
+            assert (
+                is_mol_token is not None
+            ), "is_mol_token should be provided for graph representation"
             input_embeds = self.inject_graph_embeds2input_embeds(
                 input_embeds=input_embeds,
                 is_mol_token=is_mol_token,
