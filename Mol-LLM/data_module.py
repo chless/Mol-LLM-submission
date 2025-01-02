@@ -7,7 +7,7 @@ from pytorch_lightning import LightningDataModule
 
 from datasets import load_dataset, load_from_disk, load_dataset_builder
 
-from data_utils import DataCollator, generate_and_tokenize_prompt
+from data_utils import DataCollator, generate_and_tokenize_prompt, generate_text
 
 
 class Stage3DM(LightningDataModule):
@@ -157,7 +157,7 @@ def get_dataset(split, tokenizer, args):
             "additional_edge_attr",
         }
         dataset = dataset.shuffle().map(
-            generate_and_tokenize_prompt,
+            generate_text,
             remove_columns=remove_keys,
             fn_kwargs={
                 "tokenizer": tokenizer,
@@ -189,7 +189,7 @@ def get_dataset(split, tokenizer, args):
             "additional_edge_attr",
         }
         dataset = dataset.shuffle().map(
-            generate_and_tokenize_prompt,
+            generate_text,
             remove_columns=remove_keys,
             fn_kwargs={
                 "tokenizer": tokenizer,
