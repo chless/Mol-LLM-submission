@@ -159,6 +159,7 @@ def remove_atoms(mol, num_atoms_to_remove):
                 sanitized_mol = rw_mol.GetMol()
                 num_atoms_to_remove -= 1
                 change_made = True
+                break
             except:
                 continue
 
@@ -218,6 +219,7 @@ def add_atoms_based_on_valence_dict(mol, num_atoms_to_add):
                 atom_counts[new_atom.GetSymbol()] += 1
                 num_atoms_to_add -= 1
                 change_made = True
+                break
             except:
                 continue
 
