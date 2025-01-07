@@ -140,14 +140,13 @@ def get_batch_loss_metrics(
     ) = concatenated_forward(
         all_logits=logits, all_labels=labels, label_pad_token_id=-100
     )
-    losses, chosen_rewards, rejected_rewards = simpo_loss(
+    loss_simpo, chosen_rewards, rejected_rewards = simpo_loss(
         policy_chosen_logps=policy_chosen_logps,
         policy_rejected_logps=policy_rejected_logps,
         beta=beta,
         gamma_beta_ratio=gamma_beta_ratio,
         device=logits.device,
     )
-    loss_simpo = losses.mean()
 
     if sft_weight > 0.0:
         if not is_encoder_decoder:
@@ -177,22 +176,22 @@ def get_batch_loss_metrics(
             loss_not_reduced * instance_non_pad_tokens
         ).sum() / instance_non_pad_tokens.sum()
 
-        loss = sft_weight * sft_loss + loss_simpo
+        loss = sft_weight * sft_loss + loss_simpo.mean()
         metrics[f"sft_loss"] = sft_loss.detach().cpu()
 
     reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
-    metrics[f"rewards/chosen"] = chosen_rewards.mean().cpu()
-    metrics[f"rewards/rejected"] = rejected_rewards.mean().cpu()
-    metrics[f"rewards/accuracies"] = reward_accuracies.mean().cpu()
-    metrics[f"rewards/margins"] = (chosen_rewards - rejected_rewards).mean().cpu()
-    metrics[f"logps/rejected"] = policy_rejected_logps.detach().mean().cpu()
-    metrics[f"logps/chosen"] = policy_chosen_logps.detach().mean().cpu()
-    metrics[f"logits/rejected"] = policy_rejected_logits.detach().mean().cpu()
-    metrics[f"logits/chosen"] = policy_chosen_logits.detach().mean().cpu()
-    metrics[f"loss"] = loss.detach().cpu()
+    metrics[f"rewards/chosen"] = chosen_rewards.cpu()
+    metrics[f"rewards/rejected"] = rejected_rewards.cpu()
+    metrics[f"rewards/accuracies"] = reward_accuracies.cpu()
+    metrics[f"rewards/margins"] = (chosen_rewards - rejected_rewards).cpu()
+    metrics[f"logps/rejected"] = policy_rejected_logps.detach().cpu()
+    metrics[f"logps/chosen"] = policy_chosen_logps.detach().cpu()
     metrics[f"simpo_loss"] = loss_simpo.detach().cpu()
     metrics[f"sft_loss"] = sft_loss.detach().cpu()
     metrics[f"instance_loss"] = instance_loss.detach().cpu()
+    # TODO: activating the below line cause backprop error, but i don't understand.
+    # detach is out of place so would not affect returned loss...
+    # metrics[f"loss"] = loss.detach().cpu()
 
     return loss, metrics
