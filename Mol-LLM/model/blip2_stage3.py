@@ -234,9 +234,14 @@ class Blip2Stage3(pl.LightningModule):
 
         outputs = self.blip2model(batch)
         if hasattr(self.args, "mdpo") and self.args.mdpo:
+            target_ids = batch.labels
+            targets = target_ids.masked_fill(
+                target_ids == self.blip2model.llm_tokenizer.pad_token_id, -100
+            )
+
             loss, metrics = minimal_simpo.get_batch_loss_metrics(
                 logits=outputs["logits"],
-                labels=batch.labels,
+                labels=targets,
                 is_encoder_decoder=False,
                 sft_weight=self.args.sft_weight,
                 beta=self.args.beta,
@@ -245,6 +250,15 @@ class Blip2Stage3(pl.LightningModule):
             outputs["loss"] = loss
             outputs["instance_loss"] = metrics.pop("instance_loss")
             outputs["logits"] = outputs["logits"][: len(batch.tasks)]
+
+            for k in metrics:
+                outputs[k] = metrics[k]
+                self.log(
+                    f"train/{k}",
+                    metrics[k],
+                    batch_size=batch_size,
+                    sync_dist=False,
+                )
 
         self.log(
             "lr",
