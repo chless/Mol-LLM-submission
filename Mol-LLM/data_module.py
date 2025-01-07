@@ -29,6 +29,7 @@ class Stage3DM(LightningDataModule):
         self.inference_max_length = args.inference_max_length
 
         self.mol_representation = args.mol_representation
+        self.modality_randomization = args.modality_randomization
         self.tokenizer = tokenizer
 
         self.test_dataset = get_dataset("test", tokenizer, args)
@@ -52,7 +53,8 @@ class Stage3DM(LightningDataModule):
             padding=True,
             max_length=args.max_length,
             return_tensors="pt",
-            use_graph="graph" in self.mol_representation,
+            mol_representation=self.mol_representation,
+            modality_randomization=self.modality_randomization,
             mdpo=args.mdpo,
         )
         self.eval_collator = DataCollator(
@@ -61,7 +63,8 @@ class Stage3DM(LightningDataModule):
             padding=True,
             max_length=args.max_length,
             return_tensors="pt",
-            use_graph="graph" in self.mol_representation,
+            mol_representation=self.mol_representation,
+            modality_randomization=self.modality_randomization,
             train=False,
         )
 

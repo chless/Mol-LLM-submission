@@ -310,17 +310,16 @@ class Blip2OPT(Blip2Base):
         attention_mask = batch.attention_mask  # ['attention_mask']
         target_ids = batch.labels  # ['labels']
 
-        if "graph" in self.args.mol_representation:
-            graphs = batch["graphs"]
-            additional_graphs = batch["additional_graphs"]
-            is_mol_token = batch["is_mol_token"]
-
         # preprare targets to ignore pad tokens in the loss calculation
         targets = target_ids.masked_fill(
             target_ids == self.llm_tokenizer.pad_token_id, -100
         )
 
-        if "graph" in self.args.mol_representation:
+        if "graphs" in batch.keys():
+            graphs = batch["graphs"]
+            additional_graphs = batch["additional_graphs"]
+            is_mol_token = batch["is_mol_token"]
+
             input_embeds = self.llm_model.get_input_embeddings()(input_ids)
             input_embeds = self.inject_graph_embeds2input_embeds(
                 input_embeds=input_embeds,

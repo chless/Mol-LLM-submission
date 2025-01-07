@@ -105,23 +105,108 @@ valence_dict = {
 }
 
 
-def augment_molecular_size(mol, min_r=0.2, max_r=0.9):
+def prepare_rejected_input_mol_string(selfies, preference_type="negative-size"):
+    if preference_type == "negative-size":
+        return augment_molecular_size_based_on_selfies(selfies)
+    elif preference_type == "negative-structure":
+        return augment_molecular_structure_based_on_selfies(selfies)
+    else:
+        raise ValueError("preference_type should be one of 'size', 'structure'")
+
+
+def augment_molecular_size_based_on_selfies(selfies, min_r=0.3, max_r=0.9):
+    smiles = sf.decoder(selfies)
+    mol = Chem.MolFromSmiles(smiles)
     num_atoms = mol.GetNumAtoms()
     min_atoms = int(num_atoms * min_r)
     max_atoms = int(num_atoms * max_r)
-    num_changing_atoms = np.random.randint(min_atoms, max_atoms)
+    try:
+        num_changing_atoms = max(np.random.randint(min_atoms, max_atoms), 1)
+    except:
+        print(smiles)
 
-    if np.random.rand() > 0.5:
-        edit_mol = add_atoms_based_on_valence_dict(
-            mol, num_atoms_to_add=num_changing_atoms
+    prob = np.random.rand()
+    if num_atoms == 1:
+        edit_mol = add_atoms_based_on_selfies(selfies, num_atoms_to_add=1)
+    elif prob > 0.5:
+        edit_mol = add_atoms_based_on_selfies(
+            selfies, num_atoms_to_add=num_changing_atoms
         )
     else:
-        edit_mol = remove_atoms(mol, num_atoms_to_remove=num_changing_atoms)
+        edit_mol = remove_atoms_based_on_selfies(
+            selfies, num_atoms_to_remove=num_changing_atoms
+        )
+
+    assert edit_mol is not None
 
     return edit_mol
 
 
-def remove_atoms(mol, num_atoms_to_remove):
+def augment_molecular_structure_based_on_selfies(selfies):
+    return selfies
+
+
+import copy
+
+
+def add_atoms_based_on_selfies(selfies, num_atoms_to_add):
+    edit_selfies = copy.copy(selfies)
+    atoms = re.findall("\[.+?\]", selfies)
+    while num_atoms_to_add > 0:
+        try:
+            selected_atom = np.random.choice(atoms).item()
+            edit_selfies_parts = list(re.finditer("\[.+?\]", edit_selfies))
+            edit_index = np.random.choice(edit_selfies_parts).start()
+            new_selfies = (
+                edit_selfies[:edit_index] + selected_atom + edit_selfies[edit_index:]
+            )
+
+            new_smiles = sf.decoder(new_selfies)
+            new_mol = Chem.MolFromSmiles(new_smiles)
+            Chem.SanitizeMol(new_mol)
+
+            edit_selfies = new_selfies
+            num_atoms_to_add -= 1
+        except:
+            break
+
+    return edit_selfies
+
+
+def remove_atoms_based_on_selfies(selfies, num_atoms_to_remove):
+    edit_selfies = copy.copy(selfies)
+    while num_atoms_to_remove > 0:
+        try:
+            edit_selfies_parts = list(re.finditer("\[.+?\]", edit_selfies))
+            selected_part = np.random.choice(edit_selfies_parts)
+            edit_index = selected_part.start()
+            edit_len = len(selected_part.group())
+            new_selfies = (
+                edit_selfies[:edit_index] + edit_selfies[edit_index + edit_len :]
+            )
+
+            new_smiles = sf.decoder(edit_selfies)
+            new_mol = Chem.MolFromSmiles(new_smiles)
+            Chem.SanitizeMol(new_mol)
+
+            edit_selfies = new_selfies
+            num_atoms_to_remove -= 1
+        except:
+            break
+
+    return edit_selfies
+
+
+def prepare_rejected_mol(mol, preference_type="negative-size"):
+    if preference_type == "negative-size":
+        return augment_molecular_size_based_on_mol(mol)
+    elif preference_type == "negative-structure":
+        return augment_molecular_structure(mol)
+    else:
+        raise ValueError("preference_type should be one of 'size', 'structure'")
+
+
+def remove_atoms_based_on_mol(mol, num_atoms_to_remove):
     assert (
         num_atoms_to_remove < mol.GetNumAtoms()
     ), "num_atoms_to_remove should be less than the number of atoms in the molecule."
@@ -175,7 +260,7 @@ def remove_atoms(mol, num_atoms_to_remove):
     return out
 
 
-def add_atoms_based_on_valence_dict(mol, num_atoms_to_add):
+def add_atoms_based_on_mol(mol, num_atoms_to_add):
     assert num_atoms_to_add > 0, "num_atoms_to_add should be positive."
 
     sanitized_mol = Chem.RWMol(mol)
@@ -186,7 +271,7 @@ def add_atoms_based_on_valence_dict(mol, num_atoms_to_add):
         for atom in sanitized_mol.GetAtoms():
             if atom.GetSymbol() not in valence_dict:
                 continue
-            if atom.GetDegree() < valence_dict[atom.GetSymbol()]:
+            if atom.GetExplicitValence() < valence_dict[atom.GetSymbol()]:
                 # Check if all neighbors are connected by single bonds
                 # to guarantee that the new bond will be single, so that might be kekulizable...
                 all_single_bonds = True
@@ -340,19 +425,6 @@ def graph2data(graph):
     return data
 
 
-def prepare_rejected_mol(mol, preference_type="size"):
-    if preference_type == "negative-size":
-        return augment_molecular_size(mol)
-    elif preference_type == "negative-structure":
-        return augment_molecular_structure(mol)
-    elif preference_type == "positive":
-        return mol
-    else:
-        raise ValueError(
-            "preference_type should be one of 'size', 'structure', 'positive'"
-        )
-
-
 class DataCollator(DataCollatorForSeq2Seq):
     def __init__(
         self,
@@ -361,7 +433,8 @@ class DataCollator(DataCollatorForSeq2Seq):
         max_length=512,
         pad_to_multiple_of=None,
         return_tensors=None,
-        use_graph=False,
+        mol_representation="string+graph",
+        modality_randomization=False,
         train=True,
         mdpo=False,
     ):
@@ -371,33 +444,29 @@ class DataCollator(DataCollatorForSeq2Seq):
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
         )
-        self.use_graph = use_graph
+        self.mol_representation = mol_representation
+        if self.mol_representation in ["string+graph", "graph_only"]:
+            self.graph_collator = GraphCollater([], [])
+        self.modality_randomization = modality_randomization
         self.train = train
         self.max_length = max_length
         self.tokenizer.padding_side = "left"
         self.mdpo = mdpo
         self.global_steps = 0
 
-        if self.use_graph:
-            # Collater with no special follow_batch or exclude_keys
-            self.graph_collator = GraphCollater([], [])
-
-    def select_mol_modality(self, prompt_text, modality=None):
-        if modality == "string+graph":
+    def select_mol_representation(self, prompt_text, mol_representation="string+graph"):
+        if mol_representation == "string+graph":
             return prompt_text
-        elif modality == "string_only":
+        elif mol_representation == "string_only":
             string_only_prompt_text = [graph_sequence.sub("", p) for p in prompt_text]
             return string_only_prompt_text
-        elif modality == "graph_only":
+        elif mol_representation == "graph_only":
             graph_only_prompt_text = [
                 input_mol_string_pattern.sub("", p) for p in prompt_text
             ]
             return graph_only_prompt_text
         else:
             raise ValueError("global_steps should be non-negative integer")
-
-    def select_mol_augmentation(self, prompt_text, augmentation=None):
-        return
 
     def __call__(self, batch, return_tensors=None):
         if return_tensors is None:
@@ -409,11 +478,18 @@ class DataCollator(DataCollatorForSeq2Seq):
         target_text = [sample["target_text"] for sample in batch]
         input_mol_strings = [sample["input_mol_string"] for sample in batch]
 
-        if self.mdpo and self.train:
-            mol_modality = np.random.choice(
+        if self.modality_randomization and self.train:
+            mol_representation = np.random.choice(
                 ["string+graph", "string_only", "graph_only"]
             ).item()
-            prompt_text = self.select_mol_modality(prompt_text, modality=mol_modality)
+        else:
+            mol_representation = self.mol_representation
+
+        prompt_text = self.select_mol_representation(
+            prompt_text, mol_representation=mol_representation
+        )
+
+        if self.mdpo and self.train:
 
             # TODO: implement mol_augmentation for negative-structure
             # mol_augmentation = np.random.choice(["negative-size", "negative-structure"],
@@ -424,33 +500,30 @@ class DataCollator(DataCollatorForSeq2Seq):
                 i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
                 for i in input_mol_strings
             ]
-            list_mol = [Chem.MolFromSmiles(sf.decoder(i)) for i in list_selfies]
-            list_rejected_mol = [
-                prepare_rejected_mol(i, preference_type=mol_augmentation)["mol"]
-                for i in list_mol
+            list_rejected_input_mol_string = [
+                sample["rejected_input_mol_string"] for sample in batch
             ]
-            list_rejected_selfies = [
-                sf.encoder(Chem.MolToSmiles(i)) for i in list_rejected_mol
+            list_rejected_smiles = [
+                sf.decoder(i.replace("<SELFIES> ", "").replace(" </SELFIES>", ""))
+                for i in list_rejected_input_mol_string
             ]
-            rejected_input_mol_strings = [
-                "<SELFIES> " + i + " </SELFIES>" for i in list_rejected_selfies
-            ]
+            list_rejected_mol = [Chem.MolFromSmiles(i) for i in list_rejected_smiles]
 
             rejected_prompt_text = prompt_text.copy()
-            if "string" in mol_modality:
+            if "string" in mol_representation:
                 for i in range(len(rejected_prompt_text)):
                     assert (
                         list_selfies[i] in rejected_prompt_text[i]
                     ), f"{list_selfies[i]} not in {rejected_prompt_text[i]}"
                     rejected_prompt_text[i] = rejected_prompt_text[i].replace(
-                        list_selfies[i], list_rejected_selfies[i]
+                        list_selfies[i], list_rejected_input_mol_string[i]
                     )
 
             prompt_text = prompt_text + rejected_prompt_text
             target_text = target_text + target_text
-            input_mol_strings = input_mol_strings + rejected_input_mol_strings
+            input_mol_strings = input_mol_strings + list_rejected_input_mol_string
 
-        if self.use_graph:
+        if "graph" in mol_representation:
             graphs = [
                 Data(
                     x=torch.tensor(sample["x"], dtype=torch.int64),
@@ -590,7 +663,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         ), f"features.labels.size(1)={features.labels.size(1)} > self.max_length={self.max_length}"
 
         features["tasks"] = torch.tensor(tasks, dtype=torch.int16)
-        if self.use_graph:
+        if "graph" in mol_representation:
             graphs = self.graph_collator(graphs)
             additional_graphs = self.graph_collator(additional_graphs)
             features["graphs"] = graphs
