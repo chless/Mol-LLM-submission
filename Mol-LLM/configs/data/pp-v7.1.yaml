@@ -1,5 +1,5 @@
 raw_data_root: 'your data path'
-data_tag: "property_prediction_small"
+data_tag: "property_prediction_small_offline"
 
 tasks:
   - bace
