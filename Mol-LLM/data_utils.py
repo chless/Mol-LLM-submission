@@ -653,6 +653,9 @@ class DataCollator(DataCollatorForSeq2Seq):
                     label[:len_label], dtype=torch.int64
                 )
 
+        labels_ids = labels_ids.masked_fill(
+            labels_ids == self.tokenizer.pad_token_id, -100
+        )
         features["labels"] = labels_ids
 
         assert (
