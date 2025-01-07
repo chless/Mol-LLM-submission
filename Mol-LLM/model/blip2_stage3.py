@@ -345,12 +345,6 @@ class Blip2Stage3(pl.LightningModule):
             for task_subtask_pair in self.task_subtask_name_pairs
         }
 
-        # <DEBUG>
-        self.accurate_count = 0
-        self.total_count = 0
-        self.cut_count = 0
-        # </DEBUG>
-
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
         if "graph" in self.args.mol_representation:
             graphs = batch["graphs"]
@@ -695,9 +689,7 @@ class Blip2Stage3(pl.LightningModule):
         print(
             "================================================================================="
         )
-        # <DEBUG>
-        print(f"Accuracy: {self.accurate_count / (self.total_count - self.cut_count)}")
-        # </DEBUG>
+
         result_path = os.path.join(
             self.logger.log_dir,
             f"{mode}-step{self.global_step}-{self.global_rank}-results.json",
