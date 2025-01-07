@@ -222,90 +222,81 @@ class Blip2Stage3(pl.LightningModule):
             print("set lora weights trainable")
 
     def training_step(self, batch, batch_idx):
-        # print(batch_idx, torch.cuda.memory_summary())
-        # torch.cuda.empty_cache()
         if self.args.llava_pretraining:
             self.apply_separated_stage()
 
         if self.scheduler:
             self.scheduler.step(cur_step=self.trainer.global_step)
 
-        batch_size = self.args.batch_size
-
         outputs = self.blip2model(batch)
-        if hasattr(self.args, "mdpo") and self.args.mdpo:
-            target_ids = batch.labels
-            targets = target_ids.masked_fill(
-                target_ids == self.blip2model.llm_tokenizer.pad_token_id, -100
-            )
+        logits = outputs.pop("logits")
 
+        if hasattr(self.args, "mdpo") and self.args.mdpo:
             loss, metrics = minimal_simpo.get_batch_loss_metrics(
-                logits=outputs["logits"],
-                labels=targets,
+                logits=logits,
+                labels=batch.labels,
                 is_encoder_decoder=False,
                 sft_weight=self.args.sft_weight,
                 beta=self.args.beta,
                 gamma_beta_ratio=self.args.gamma_beta_ratio,
             )
             outputs["loss"] = loss
-            outputs["instance_loss"] = metrics.pop("instance_loss")
-            outputs["logits"] = outputs["logits"][: len(batch.tasks)]
-
-            for k in metrics:
-                outputs[k] = metrics[k]
-                self.log(
-                    f"train/{k}",
-                    metrics[k],
-                    batch_size=batch_size,
-                    sync_dist=False,
-                )
+            outputs.update(metrics)
 
         self.log(
             "lr",
             self.trainer.optimizers[0].param_groups[0]["lr"],
-            batch_size=batch_size,
+            batch_size=self.args.batch_size,
             sync_dist=False,
         )
+
+        for k, v in outputs.items():
+            self.log(
+                f"train_total_{k}",
+                float(v if len(v.shape) == 0 else v.mean()),
+                batch_size=self.args.batch_size,
+                sync_dist=False,
+            )
+
+        self.task_specific_logging(
+            outputs=outputs,
+            tasks=[id2task(task_id.item()) for task_id in batch.tasks],
+            split="train",
+        )
+
+        return outputs["loss"]
+
+    def task_specific_logging(self, outputs, tasks, split):
         # log dataset specific losses
-        # task_subtask_pairs = batch[0].task_subtask_pair
-        task_subtask_pairs = [id2task(task_id.item()) for task_id in batch.tasks]
+        outputs = {k: v for k, v in outputs.items() if v.shape != torch.Size([])}
 
-        instance_losses = outputs["instance_loss"]
+        for task in tasks:
+            self.task_specific_outputs.setdefault(task, {k: [] for k in outputs.keys()})
 
-        for task_subtask_pair in task_subtask_pairs:
-            if task_subtask_pair not in self.dataset_losses.keys():
-                self.dataset_losses[task_subtask_pair] = []
+        for metric, v in outputs.items():
 
-        for i in range(instance_losses.shape[0]):
-            # if i th item is nan, skip
-            if instance_losses[i] != instance_losses[i]:
-                continue
+            for i in range(v.shape[0]):
+                if torch.isnan(v[i]):
+                    continue
 
-            task_subtask_pair = task_subtask_pairs[i]
-            # calculate average loss
-            self.dataset_losses[task_subtask_pair].append(instance_losses[i].item())
+                task = tasks[i]
+                self.task_specific_outputs[task][metric].append(v[i].item())
 
-            while len(self.dataset_losses[task_subtask_pair]) > self.num_moving_samples:
-                self.dataset_losses[task_subtask_pair].pop(0)
+                if (
+                    len(self.task_specific_outputs[task][metric])
+                    > self.num_moving_samples
+                ):
+                    self.task_specific_outputs[task][metric].pop(0)
 
-        for dataset in self.dataset_losses.keys():
-            if not len(self.dataset_losses[dataset]) == 0:
-                self.log(
-                    f"train/{dataset}/loss",
-                    sum(self.dataset_losses[dataset])
-                    / len(self.dataset_losses[dataset]),
-                    batch_size=len(self.dataset_losses[dataset]),
-                    sync_dist=False,
-                )
-
-        loss = outputs["loss"]
-        self.log(
-            "train_total_loss",
-            float(loss),
-            batch_size=batch_size,
-            sync_dist=False,
-        )
-        return loss
+        for task, metric_dict in self.task_specific_outputs.items():
+            for metric, vs in metric_dict.items():
+                if vs:
+                    self.log(
+                        f"{split}/{task}/{metric}",
+                        sum(vs) / len(vs),
+                        batch_size=len(vs),
+                        sync_dist=False,
+                    )
 
     def on_train_epoch_start(self) -> None:
         if self.blip2model.llm_tokenizer.mol_string_randomization_ratio > 0:
@@ -322,7 +313,7 @@ class Blip2Stage3(pl.LightningModule):
             sync_dist=False,
         )
 
-        self.dataset_losses = {}
+        self.task_specific_outputs = {}
 
         self.train_list_predictions = []
         self.train_list_targets = []
@@ -361,9 +352,6 @@ class Blip2Stage3(pl.LightningModule):
         # </DEBUG>
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
-
-        target_ids = batch.labels
-
         if "graph" in self.args.mol_representation:
             graphs = batch["graphs"]
             additional_graphs = batch["additional_graphs"]
@@ -390,7 +378,11 @@ class Blip2Stage3(pl.LightningModule):
         predictions = [
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions
         ]
-        target_ids = torch.where(target_ids == -100, 0, target_ids)
+        target_ids = torch.where(
+            batch.labels == -100,
+            self.blip2model.llm_tokenizer.pad_token_id,
+            batch.labels,
+        )
         targets = self.blip2model.llm_tokenizer.batch_decode(target_ids)
         targets = [
             t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
@@ -414,24 +406,11 @@ class Blip2Stage3(pl.LightningModule):
         self.list_logs["probs"].extend(probs)
         self.list_logs["prompts"].extend(prompts)
 
-        # <DEBUG>
-        for i in range(len(predictions)):
-            self.total_count += 1
-            if "True" in targets[i] and "True" in predictions[i]:
-                self.accurate_count += 1
-            elif "False" in targets[i] and "False" in predictions[i]:
-                self.accurate_count += 1
-            elif targets[i] == "":
-                self.cut_count += 1
-            else:
-                pass
-        # </DEBUG>
-
         batch_size = batch.input_ids.shape[0]
         # TODO: IMPORTANT! this loss calculateion should be fixed, with the change of data collater in eval mode
 
         del target_ids, graphs, additional_graphs, is_mol_token
-
+        # TODO: deprecate below code, and calculate from logits from generate
         outputs = self.blip2model(batch)
         ##============== Overall Loss ===================##
 
