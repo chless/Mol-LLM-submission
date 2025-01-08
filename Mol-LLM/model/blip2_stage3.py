@@ -240,8 +240,9 @@ class Blip2Stage3(pl.LightningModule):
                 beta=self.args.beta,
                 gamma_beta_ratio=self.args.gamma_beta_ratio,
             )
-            outputs["loss"] = loss
             outputs.update(metrics)
+        else:
+            loss = outputs.pop("loss")
 
         self.log(
             "lr",
@@ -250,9 +251,16 @@ class Blip2Stage3(pl.LightningModule):
             sync_dist=False,
         )
 
+        self.log(
+            f"train_total_loss",
+            float(loss),
+            batch_size=self.args.batch_size,
+            sync_dist=False,
+        )
+
         for k, v in outputs.items():
             self.log(
-                f"train_total_{k}",
+                f"train/{k}",
                 float(v if len(v.shape) == 0 else v.mean()),
                 batch_size=self.args.batch_size,
                 sync_dist=False,
@@ -268,12 +276,14 @@ class Blip2Stage3(pl.LightningModule):
 
     def task_specific_logging(self, outputs, tasks, split):
         # log dataset specific losses
-        outputs = {k: v for k, v in outputs.items() if v.shape != torch.Size([])}
+        new_outputs = {k: v for k, v in outputs.items() if v.shape != torch.Size([])}
 
         for task in tasks:
-            self.task_specific_outputs.setdefault(task, {k: [] for k in outputs.keys()})
+            self.task_specific_outputs.setdefault(
+                task, {k: [] for k in new_outputs.keys()}
+            )
 
-        for metric, v in outputs.items():
+        for metric, v in new_outputs.items():
 
             for i in range(v.shape[0]):
                 if torch.isnan(v[i]):
