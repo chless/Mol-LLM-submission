@@ -1,6 +1,6 @@
 export TOKENIZERS_PARALLELISM=false;
 file_name='PP_mistral7b_modality_random_mdpo_0108'
-gpus="'5,6,7'"
+gpus="'1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
@@ -13,5 +13,5 @@ trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.modality_randomization=true \
-trainer.max_epochs=4
+trainer.max_epochs=10
 
