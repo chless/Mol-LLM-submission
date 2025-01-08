@@ -1,0 +1,197 @@
+import torch
+from typing import Tuple
+from torch.nn import functional as F
+
+
+def simpo_loss(
+    policy_chosen_logps: torch.FloatTensor,
+    policy_rejected_logps: torch.FloatTensor,
+    loss_type="sigmoid",
+    beta=1.0,
+    label_smoothing=0.0,
+    gamma_beta_ratio=0.0,
+    device="cuda",
+) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
+    """Compute the SimPO loss for a batch of policy model log probabilities.
+
+    Args:
+        policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
+        policy_rejected_logps: Log probabilities of the policy model for the rejected responses. Shape: (batch_size,)
+
+    Returns:
+        A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
+        The losses tensor contains the SimPO loss for each example in the batch.
+        The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
+    """
+    pi_logratios = policy_chosen_logps - policy_rejected_logps
+    pi_logratios = pi_logratios.to(device)
+    logits = pi_logratios - gamma_beta_ratio
+
+    if loss_type == "sigmoid":
+        losses = (
+            -F.logsigmoid(beta * logits) * (1 - label_smoothing)
+            - F.logsigmoid(-beta * logits) * label_smoothing
+        )
+    elif loss_type == "hinge":
+        losses = torch.relu(1 - beta * logits)
+    else:
+        raise ValueError(
+            f"Unknown loss type: {loss_type}. Should be one of ['sigmoid', 'hinge']"
+        )
+
+    chosen_rewards = beta * policy_chosen_logps.to(device).detach()
+    rejected_rewards = beta * policy_rejected_logps.to(device).detach()
+
+    return losses, chosen_rewards, rejected_rewards
+
+
+from typing import Dict, List, Union
+from torch import nn
+
+
+def concatenated_forward(
+    all_logits: torch.FloatTensor,
+    all_labels: torch.LongTensor,
+    label_pad_token_id: int = -100,
+) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
+    """Run the given model on the given batch of inputs, concatenating the chosen and rejected inputs together.
+
+    We do this to avoid doing two forward passes, because it's faster for FSDP.
+    """
+
+    all_logps = get_batch_logps(
+        logits=all_logits,
+        labels=all_labels,
+        average_log_prob=True,
+        is_encoder_decoder=False,
+        label_pad_token_id=label_pad_token_id,
+    )
+    len_chosen = all_labels.shape[0] // 2
+
+    chosen_logps = all_logps[:len_chosen]
+    rejected_logps = all_logps[len_chosen:]
+
+    chosen_logits = all_logits[:len_chosen]
+    rejected_logits = all_logits[len_chosen:]
+
+    chosen_labels = all_labels[:len_chosen]
+
+    return (chosen_logps, rejected_logps, chosen_logits, rejected_logits, chosen_labels)
+
+
+def get_batch_logps(
+    logits: torch.FloatTensor,
+    labels: torch.LongTensor,
+    average_log_prob: bool = True,
+    label_pad_token_id: int = -100,
+    is_encoder_decoder: bool = False,
+) -> torch.FloatTensor:
+    """Compute the log probabilities of the given labels under the given logits.
+
+    Args:
+        logits: Logits of the model (unnormalized). Shape: (batch_size, sequence_length, vocab_size)
+        labels: Labels for which to compute the log probabilities. Label tokens with a value of label_pad_token_id are ignored. Shape: (batch_size, sequence_length)
+        average_log_prob: If True, return the average log probability per (non-masked) token. Otherwise, return the sum of the log probabilities of the (non-masked) tokens.
+        label_pad_token_id: The label pad token id.
+        is_encoder_decoder: Whether the model is an encoder-decoder model.
+
+    Returns:
+        A tensor of shape (batch_size,) containing the average/sum log probabilities of the given labels under the given logits.
+    """
+    if logits.shape[:-1] != labels.shape:
+        raise ValueError(
+            "Logits (batch and sequence length dim) and labels must have the same shape."
+        )
+
+    if not is_encoder_decoder:
+        labels = labels[:, 1:].clone()
+        logits = logits[:, :-1, :]
+    loss_mask = labels != label_pad_token_id
+
+    # dummy token; we'll ignore the losses on these tokens later
+    labels[labels == label_pad_token_id] = 0
+
+    per_token_logps = torch.gather(
+        logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)
+    ).squeeze(2)
+
+    if average_log_prob:
+        return (per_token_logps * loss_mask).sum(-1) / loss_mask.sum(-1)
+    else:
+        return (per_token_logps * loss_mask).sum(-1)
+
+
+def get_batch_loss_metrics(
+    logits: torch.FloatTensor,
+    labels: torch.LongTensor,
+    sft_weight: float = 0.0,
+    is_encoder_decoder: bool = False,
+    beta: float = 1.0,
+    gamma_beta_ratio: float = 0.0,
+):
+    """Compute the SimPO loss and other metrics for the given batch of inputs for train or test."""
+    metrics = {}
+    (
+        policy_chosen_logps,
+        policy_rejected_logps,
+        policy_chosen_logits,
+        policy_rejected_logits,
+        chosen_labels,
+    ) = concatenated_forward(
+        all_logits=logits, all_labels=labels, label_pad_token_id=-100
+    )
+    loss_simpo, chosen_rewards, rejected_rewards = simpo_loss(
+        policy_chosen_logps=policy_chosen_logps,
+        policy_rejected_logps=policy_rejected_logps,
+        beta=beta,
+        gamma_beta_ratio=gamma_beta_ratio,
+        device=logits.device,
+    )
+
+    if sft_weight > 0.0:
+        if not is_encoder_decoder:
+            policy_chosen_logits = policy_chosen_logits[..., :-1, :].contiguous()
+            chosen_labels = chosen_labels[..., 1:].clone()
+
+        shift_logits = policy_chosen_logits.view(-1, policy_chosen_logits.shape[-1])
+        shift_labels = chosen_labels.view(-1)
+
+        # custom forward to get not reduced loss
+        loss_fct_not_reduced = nn.CrossEntropyLoss(reduction="none")
+        loss_not_reduced = loss_fct_not_reduced(shift_logits, shift_labels).view(
+            chosen_labels.size(0), -1
+        )
+        # normalization exclude default ignore index -100
+        instance_non_pad_tokens = torch.where(
+            shift_labels != -100,
+            torch.tensor(1).to(shift_labels.device),
+            torch.tensor(0).to(shift_labels.device),
+        ).view(chosen_labels.size(0), -1)
+        instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
+            dim=-1
+        ) / instance_non_pad_tokens.sum(dim=-1)
+        instance_loss = instance_loss.detach()
+        # cross entropy aggregate not row-wise, but sum of all instances
+        sft_loss = (
+            loss_not_reduced * instance_non_pad_tokens
+        ).sum() / instance_non_pad_tokens.sum()
+
+        loss = sft_weight * sft_loss + loss_simpo.mean()
+        metrics[f"sft_loss"] = sft_loss.detach().cpu()
+
+    reward_accuracies = (chosen_rewards > rejected_rewards).float()
+
+    metrics[f"rewards/chosen"] = chosen_rewards.cpu()
+    metrics[f"rewards/rejected"] = rejected_rewards.cpu()
+    metrics[f"rewards/accuracies"] = reward_accuracies.cpu()
+    metrics[f"rewards/margins"] = (chosen_rewards - rejected_rewards).cpu()
+    metrics[f"logps/rejected"] = policy_rejected_logps.detach().cpu()
+    metrics[f"logps/chosen"] = policy_chosen_logps.detach().cpu()
+    metrics[f"simpo_loss"] = loss_simpo.detach().cpu()
+    metrics[f"sft_loss"] = sft_loss.detach().cpu()
+    metrics[f"instance_loss"] = instance_loss.detach().cpu()
+    # TODO: activating the below line cause backprop error, but i don't understand.
+    # detach is out of place so would not affect returned loss...
+    # metrics[f"loss"] = loss.detach().cpu()
+
+    return loss, metrics
