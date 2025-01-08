@@ -13,5 +13,6 @@ trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.modality_randomization=true \
+trainer.total_batch_size=512 \
 trainer.max_epochs=10
 
