@@ -11,6 +11,7 @@ import selfies as sf
 
 import rdkit.Chem as Chem
 import re
+import copy
 
 CLASSIFICATION_BENCHMARKS = [
     "smol-property_prediction-bbbp",
@@ -118,8 +119,8 @@ def augment_molecular_size_based_on_selfies(selfies, min_r=0.3, max_r=0.9):
     smiles = sf.decoder(selfies)
     mol = Chem.MolFromSmiles(smiles)
     num_atoms = mol.GetNumAtoms()
-    min_atoms = int(num_atoms * min_r)
-    max_atoms = int(num_atoms * max_r)
+    min_atoms = max(1, int(num_atoms * min_r))
+    max_atoms = min(int(num_atoms * max_r), num_atoms - 1)
     try:
         num_changing_atoms = max(np.random.randint(min_atoms, max_atoms), 1)
     except:
@@ -144,9 +145,6 @@ def augment_molecular_size_based_on_selfies(selfies, min_r=0.3, max_r=0.9):
 
 def augment_molecular_structure_based_on_selfies(selfies):
     return selfies
-
-
-import copy
 
 
 def add_atoms_based_on_selfies(selfies, num_atoms_to_add):
@@ -204,6 +202,30 @@ def prepare_rejected_mol(mol, preference_type="negative-size"):
         return augment_molecular_structure(mol)
     else:
         raise ValueError("preference_type should be one of 'size', 'structure'")
+
+
+def augment_molecular_size_based_on_mol(mol, min_r=0.3, max_r=0.9):
+    num_atoms = mol.GetNumAtoms()
+    min_atoms = max(1, int(num_atoms * min_r))
+    max_atoms = min(int(num_atoms * max_r), num_atoms - 1)
+
+    if min_atoms >= max_atoms:
+        edit_mol = add_atoms_based_on_mol(mol, num_atoms_to_add=min_atoms)
+    else:
+        num_changing_atoms = np.random.randint(min_atoms, max_atoms)
+
+        prob = np.random.rand()
+
+        if prob > 0.5:
+            edit_mol = add_atoms_based_on_mol(mol, num_atoms_to_add=num_changing_atoms)
+        else:
+            edit_mol = remove_atoms_based_on_mol(
+                mol, num_atoms_to_remove=num_changing_atoms
+            )
+
+    assert edit_mol is not None
+
+    return edit_mol
 
 
 def remove_atoms_based_on_mol(mol, num_atoms_to_remove):
@@ -490,7 +512,6 @@ class DataCollator(DataCollatorForSeq2Seq):
         )
 
         if self.mdpo and self.train:
-
             # TODO: implement mol_augmentation for negative-structure
             # mol_augmentation = np.random.choice(["negative-size", "negative-structure"],
             #                                    p=[0.5, 0.5]).item()
@@ -500,14 +521,12 @@ class DataCollator(DataCollatorForSeq2Seq):
                 i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
                 for i in input_mol_strings
             ]
-            list_rejected_input_mol_string = [
-                sample["rejected_input_mol_string"] for sample in batch
+            list_rejected_selfies = [
+                sample["rejected_input_mol_string"]
+                .replace("<SELFIES> ", "")
+                .replace(" </SELFIES>", "")
+                for sample in batch
             ]
-            list_rejected_smiles = [
-                sf.decoder(i.replace("<SELFIES> ", "").replace(" </SELFIES>", ""))
-                for i in list_rejected_input_mol_string
-            ]
-            list_rejected_mol = [Chem.MolFromSmiles(i) for i in list_rejected_smiles]
 
             rejected_prompt_text = prompt_text.copy()
             if "string" in mol_representation:
@@ -516,12 +535,12 @@ class DataCollator(DataCollatorForSeq2Seq):
                         list_selfies[i] in rejected_prompt_text[i]
                     ), f"{list_selfies[i]} not in {rejected_prompt_text[i]}"
                     rejected_prompt_text[i] = rejected_prompt_text[i].replace(
-                        list_selfies[i], list_rejected_input_mol_string[i]
+                        list_selfies[i], list_rejected_selfies[i]
                     )
 
             prompt_text = prompt_text + rejected_prompt_text
             target_text = target_text + target_text
-            input_mol_strings = input_mol_strings + list_rejected_input_mol_string
+            input_mol_strings = input_mol_strings + list_rejected_selfies
 
         if "graph" in mol_representation:
             graphs = [
@@ -546,13 +565,23 @@ class DataCollator(DataCollatorForSeq2Seq):
                 for sample in batch
             ]
             if self.mdpo and self.train:
-                list_rejected_graph = [
-                    graph2data(mol2graph(i)) for i in list_rejected_mol
-                ]
-                # TODO: implement additional graph for reagent prediction
-                list_rejected_additional_graph = [
-                    graph2data(mol2graph(i)) for i in list_rejected_mol
-                ]
+                try:
+                    list_rejected_smiles = [
+                        sf.decoder(i) for i in list_rejected_selfies
+                    ]
+                    list_rejected_mol = [
+                        Chem.MolFromSmiles(i) for i in list_rejected_smiles
+                    ]
+
+                    list_rejected_graph = [
+                        graph2data(mol2graph(i)) for i in list_rejected_mol
+                    ]
+                    # TODO: implement additional graph for reagent prediction
+                    list_rejected_additional_graph = [
+                        graph2data(mol2graph(i)) for i in list_rejected_mol
+                    ]
+                except:
+                    print(list_rejected_selfies)
                 rejected_graphs = [
                     Data(
                         x=torch.tensor(sample["x"], dtype=torch.int64).clone().detach(),
