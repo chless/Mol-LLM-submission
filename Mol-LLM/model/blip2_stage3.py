@@ -132,7 +132,9 @@ class Blip2Stage3(pl.LightningModule):
                 lr=self.args.init_lr,
                 weight_decay=self.args.weight_decay,
             )
-            self.steps_per_epoch = len(self.trainer.train_dataloader) / self.args.accumulate_grad_batches
+            self.steps_per_epoch = (
+                len(self.trainer.train_dataloader) / self.args.accumulate_grad_batches
+            )
 
             max_step = int(self.args.max_epochs * self.steps_per_epoch)
 
@@ -250,7 +252,7 @@ class Blip2Stage3(pl.LightningModule):
 
         self.log(
             f"train_total_loss",
-            float(loss),
+            loss.clone().detach().item(),
             batch_size=self.args.batch_size,
             sync_dist=False,
         )
@@ -712,3 +714,14 @@ class Blip2Stage3(pl.LightningModule):
             json.dump(result_dict, f, ensure_ascii=False, indent=4)
 
         print(f"\nDevice {self.device} on_evaluation_epoch_end end")
+
+
+def check_model_parameters(model, keyword):
+    from collections import OrderedDict
+
+    # save as ordered dict
+    trainable_params_dict = OrderedDict()
+    for name, param in model.named_parameters():
+        if param.requires_grad and keyword in name:
+            trainable_params_dict[name] = param
+    return trainable_params_dict
