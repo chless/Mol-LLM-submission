@@ -701,7 +701,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             features["graphs"] = graphs
             features["additional_graphs"] = additional_graphs
             features["is_mol_token"] = (
-                torch.tensor(features["input_ids"]) == self.tokenizer.mol_token_id
+                features["input_ids"] == self.tokenizer.mol_token_id
             )
             if not self.train:
                 features["prompt_is_mol_token"] = (
