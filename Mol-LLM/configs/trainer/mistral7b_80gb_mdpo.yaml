@@ -70,6 +70,6 @@ mol_representation: string_only
 modality_randomization: true
 mol_string_randomization_ratio: -1
 mdpo: true
-sft_weight: 0.5
+sft_weight: 1.0
 beta: 2.0
 gamma_beta_ratio: 0.25
