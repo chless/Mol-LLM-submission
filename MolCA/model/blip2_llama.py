@@ -75,7 +75,8 @@ class Blip2Llama(Blip2OPT):
             args=args,
         )
         self.system_prompt = "You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation."
-    def set_llm_model(self, llm_model):     
+
+    def set_llm_model(self, llm_model):
         self.llm_model = LlamaForCausalLM_Custom.from_pretrained(
             llm_model, torch_dtype=torch.bfloat16
         )
@@ -86,14 +87,12 @@ class Blip2Llama(Blip2OPT):
             formatted_text = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>{system_prompt}<|eot_id|>".format(
                 system_prompt=self.system_prompt
             )
-            formatted_text += (
-                "<|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|>".format(
-                    user_prompt=llm_prompt
-                )
+            formatted_text += "<|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|>".format(
+                user_prompt=llm_prompt
             )
             formatted_text += "<|start_header_id|>assistant<|end_header_id|>"
             return formatted_text
-        elif self.args.llm_model == 'mistralai/Mistral-7B-Instruct-v0.3':
+        elif self.args.llm_model == "mistralai/Mistral-7B-Instruct-v0.3":
             message = [
                 {
                     "role": "system",
@@ -104,9 +103,7 @@ class Blip2Llama(Blip2OPT):
                     "content": llm_prompt,
                 },
             ]
-            formatted_ids = self.llm_tokenizer.apply_chat_template(
-                conversation=message
-            )
+            formatted_ids = self.llm_tokenizer.apply_chat_template(conversation=message)
             formatted_text = self.llm_tokenizer.decode(
                 formatted_ids,
             )
@@ -244,7 +241,7 @@ class LlamaForCausalLM_Custom(LlamaForCausalLM):
             instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
                 dim=-1
             ) / instance_non_pad_tokens.sum(dim=-1)
-            instance_loss = instance_loss.detach()
+
             # cross entropy aggregate not row-wise, but sum of all instances
             loss = (
                 loss_not_reduced * instance_non_pad_tokens
@@ -264,8 +261,12 @@ class LlamaForCausalLM_Custom(LlamaForCausalLM):
             attentions=outputs.attentions,
             instance_loss=instance_loss,
         )
+
+
 from transformers.modeling_outputs import ModelOutput
 from dataclasses import dataclass
+
+
 @dataclass
 class CausalLMOutputWithPast_Custom(ModelOutput):
     """
@@ -303,17 +304,17 @@ class CausalLMOutputWithPast_Custom(ModelOutput):
     instance_loss: Optional[torch.FloatTensor] = None
 
 
-
 from transformers.modeling_outputs import ModelOutput
 from dataclasses import dataclass
-
 
 
 from transformers.models.llama.modeling_llama import LlamaModel
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.utils import logging
 from transformers.cache_utils import Cache, DynamicCache
+
 logger = logging.get_logger(__name__)
+
 
 class LlamaModel_sequence_packing(LlamaModel):
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
@@ -330,12 +331,20 @@ class LlamaModel_sequence_packing(LlamaModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
@@ -366,15 +375,23 @@ class LlamaModel_sequence_packing(LlamaModel):
                 )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
         hidden_states = inputs_embeds
 
@@ -433,7 +450,11 @@ class LlamaModel_sequence_packing(LlamaModel):
             next_cache = next_cache.to_legacy_cache()
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,

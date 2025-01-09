@@ -661,7 +661,7 @@ class OPTForCausalLM_Custom(OPTForCausalLM):
             instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
                 dim=-1
             ) / instance_non_pad_tokens.sum(dim=-1)
-            instance_loss = instance_loss.detach()
+
             # cross entropy aggregate not row-wise, but sum of all instances
             loss = (
                 loss_not_reduced * instance_non_pad_tokens

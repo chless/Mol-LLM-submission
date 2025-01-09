@@ -255,7 +255,9 @@ class Blip2OPT(Blip2Base):
         self.llm_tokenizer.add_tokens(additional_tokens)
 
         self.llm_tokenizer.mol_token = added_tokens.MOL_EMBEDDING[0]
-        self.llm_tokenizer.mol_token_id = self.llm_tokenizer.convert_tokens_to_ids(self.llm_tokenizer.mol_token)
+        self.llm_tokenizer.mol_token_id = self.llm_tokenizer.convert_tokens_to_ids(
+            self.llm_tokenizer.mol_token
+        )
 
     def merge_and_initialize_lora(self):
         self.model.blip2model.llm_model.merge_and_unload(progressbar=True)
@@ -369,7 +371,7 @@ class Blip2OPT(Blip2Base):
             "logits": outputs.logits,
         }
         return results
-    
+
     def debug_pred(self, logits, targets):
         max_logits = logits.argmax(dim=-1)
         target_masks = targets != -100
@@ -380,15 +382,14 @@ class Blip2OPT(Blip2Base):
             target = targets[i]
             target_mask = target_masks[i]
 
-            #prediction = self.llm_tokenizer.decode(max_logit)
-            #label = self.llm_tokenizer.decode(target)
+            # prediction = self.llm_tokenizer.decode(max_logit)
+            # label = self.llm_tokenizer.decode(target)
 
             prediction = self.llm_tokenizer.decode(max_logit[target_mask])
             label = self.llm_tokenizer.decode(target[target_mask])
             predictions.append(prediction)
             labels.append(label)
         return predictions, labels
-
 
     def inject_graph_embeds2input_embeds(self, input_embeds, input_tokens, graphs):
         if "additional_x" in graphs.keys():
@@ -426,7 +427,9 @@ class Blip2OPT(Blip2Base):
             num_mol_tokens_in_prompt = mol_token_indices.sum().item()
             if num_mol_tokens_in_prompt:
                 # inject as mant mol tokens as specified in prompt
-                input_embeds[data_idx, mol_token_indices, :] = mol_tokens[data_idx, :num_mol_tokens_in_prompt]
+                input_embeds[data_idx, mol_token_indices, :] = mol_tokens[
+                    data_idx, :num_mol_tokens_in_prompt
+                ]
 
         return input_embeds
 
@@ -666,7 +669,7 @@ class OPTForCausalLM_Custom(OPTForCausalLM):
             instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
                 dim=-1
             ) / instance_non_pad_tokens.sum(dim=-1)
-            instance_loss = instance_loss.detach()
+
             # cross entropy aggregate not row-wise, but sum of all instances
             loss = (
                 loss_not_reduced * instance_non_pad_tokens
