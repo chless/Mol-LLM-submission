@@ -7,7 +7,6 @@ from pytorch_lightning import Trainer, strategies
 from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger, WandbLogger, TensorBoardLogger
 from data_module import Stage3DM
-
 from model.blip2_stage3 import Blip2Stage3
 import json
 import hydra
@@ -128,8 +127,6 @@ def main(cfg):
         "check_val_every_n_epoch": cfg.check_val_every_n_epoch,
         "accumulate_grad_batches": cfg.accumulate_grad_batches,
         "log_every_n_steps": cfg.log_every_n_steps,
-        # "num_sanity_val_steps": 0,
-        # "profiler": profiler,
     }
 
     if cfg.skip_sanity_check:
@@ -141,10 +138,6 @@ def main(cfg):
     if cfg.mode in {"pretrain", "ft", "multi_task"}:
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         outputs = trainer.test(model, datamodule=dm)
-
-        # wandb_logger.experiment.save("./wandb_profiling_logs/profiler_trace.json")
-        # profiler_summary = profiler.summary()
-        # wandb_logger.log_metrics({"Profiler Summary": profiler_summary})
 
     elif cfg.mode == "test":
         ckpt = torch.load(cfg.ckpt_path, map_location="cpu")
