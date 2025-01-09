@@ -228,6 +228,7 @@ class Blip2Stage3(pl.LightningModule):
         logits = outputs.pop("logits")
 
         if hasattr(self.args, "mdpo") and self.args.mdpo:
+            outputs.pop("loss")
             loss, metrics = minimal_simpo.get_batch_loss_metrics(
                 logits=logits,
                 labels=batch.labels,
@@ -268,7 +269,7 @@ class Blip2Stage3(pl.LightningModule):
             split="train",
         )
 
-        return outputs["loss"]
+        return loss
 
     def task_specific_logging(self, outputs, tasks, split):
         # log dataset specific losses
