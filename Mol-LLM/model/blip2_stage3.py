@@ -228,20 +228,18 @@ class Blip2Stage3(pl.LightningModule):
 
         outputs = self.blip2model(batch)
         logits = outputs.pop("logits")
+        loss = outputs.pop("loss")
 
         if hasattr(self.args, "mdpo") and self.args.mdpo:
-            outputs.pop("loss")
-            loss, metrics = minimal_simpo.get_batch_loss_metrics(
+            loss, metrics = minimal_simpo.minimal_get_batch_loss_metrics(
                 logits=logits,
                 labels=batch.labels,
-                is_encoder_decoder=False,
-                sft_weight=self.args.sft_weight,
+                instance_loss=outputs["instance_loss"],
+                simpo_weight=self.args.simpo_weight,
                 beta=self.args.beta,
                 gamma_beta_ratio=self.args.gamma_beta_ratio,
             )
             outputs.update(metrics)
-        else:
-            loss = outputs.pop("loss")
 
         self.log(
             "lr",

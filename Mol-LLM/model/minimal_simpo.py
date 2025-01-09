@@ -121,6 +121,75 @@ def get_batch_logps(
         return (per_token_logps * loss_mask).sum(-1)
 
 
+def minimal_get_batch_loss_metrics(
+    logits: torch.FloatTensor,
+    labels: torch.LongTensor,
+    instance_loss: torch.FloatTensor,
+    simpo_weight: float = 1.0,
+    beta: float = 1.0,
+    gamma_beta_ratio: float = 0.0,
+):
+    """Compute the SimPO loss and other metrics for the given batch of inputs for train or test."""
+    metrics = {}
+    (
+        policy_chosen_logps,
+        policy_rejected_logps,
+        policy_chosen_logits,
+        policy_rejected_logits,
+        chosen_labels,
+    ) = concatenated_forward(
+        all_logits=logits, all_labels=labels, label_pad_token_id=-100
+    )
+
+    losses_simpo, chosen_rewards, rejected_rewards = simpo_loss(
+        policy_chosen_logps=policy_chosen_logps,
+        policy_rejected_logps=policy_rejected_logps,
+        beta=beta,
+        gamma_beta_ratio=gamma_beta_ratio,
+        device=logits.device,
+    )
+
+    chosen_loss_mask = chosen_labels[:, 1:].clone() != -100
+    rejected_labels = labels[chosen_labels.size(0) :]
+    rejected_loss_mask = rejected_labels[:, 1:].clone() != -100
+
+    simpo_loss_mask = torch.where(
+        (rejected_loss_mask.sum(-1) > 0) & (chosen_loss_mask.sum(-1) > 0), True, False
+    )
+
+    loss_simpo = losses_simpo[simpo_loss_mask].mean()
+
+    chosen_instance_loss = instance_loss[: chosen_labels.size(0)]
+    sft_loss = (
+        chosen_instance_loss * chosen_loss_mask.sum(-1)
+    ).sum() / chosen_loss_mask.sum()
+
+    if torch.isnan(loss_simpo):
+        assert False, "loss_simpo is nan"
+
+    loss = sft_loss
+    if simpo_weight > 0.0:
+        loss += simpo_weight * loss_simpo
+
+    reward_accuracies = (chosen_rewards > rejected_rewards).float()
+
+    metrics[f"rewards/chosen"] = chosen_rewards.cpu()
+    metrics[f"rewards/rejected"] = rejected_rewards.cpu()
+    metrics[f"rewards/accuracies"] = reward_accuracies.cpu()
+    metrics[f"rewards/margins"] = (chosen_rewards - rejected_rewards).cpu()
+
+    metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
+    metrics[f"instance_loss"] = chosen_instance_loss.clone().detach().cpu()
+    metrics[f"simpo_loss"] = losses_simpo.clone().detach().cpu()
+    metrics[f"logps/rejected"] = policy_rejected_logps.clone().detach().cpu()
+    metrics[f"logps/chosen"] = policy_chosen_logps.clone().detach().cpu()
+    # TODO: activating the below line cause backprop error, but i don't understand.
+    # detach is out of place so would not affect returned loss...
+    # metrics[f"loss"] = loss.detach().cpu()
+
+    return loss, metrics
+
+
 def get_batch_loss_metrics(
     logits: torch.FloatTensor,
     labels: torch.LongTensor,
