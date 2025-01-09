@@ -344,7 +344,7 @@ class Blip2OPT(Blip2Base):
 
         results = {
             "loss": outputs.loss,
-            "instance_loss": outputs.instance_loss.cpu(),
+            "instance_loss": outputs.instance_loss,
             "logits": outputs.logits,
         }
         return results
