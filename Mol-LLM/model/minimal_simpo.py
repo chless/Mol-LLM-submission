@@ -167,17 +167,19 @@ def get_batch_loss_metrics(
             torch.tensor(1).to(shift_labels.device),
             torch.tensor(0).to(shift_labels.device),
         ).view(chosen_labels.size(0), -1)
-        instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
-            dim=-1
-        ) / instance_non_pad_tokens.sum(dim=-1)
-        instance_loss = instance_loss.detach()
         # cross entropy aggregate not row-wise, but sum of all instances
         sft_loss = (
             loss_not_reduced * instance_non_pad_tokens
         ).sum() / instance_non_pad_tokens.sum()
 
         loss = sft_weight * sft_loss + loss_simpo.mean()
-        metrics[f"sft_loss"] = sft_loss.detach().cpu()
+
+        instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
+            dim=-1
+        ) / instance_non_pad_tokens.sum(dim=-1)
+
+        metrics[f"instance_loss"] = instance_loss.clone().detach().cpu()
+        metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
 
     reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
@@ -185,11 +187,10 @@ def get_batch_loss_metrics(
     metrics[f"rewards/rejected"] = rejected_rewards.cpu()
     metrics[f"rewards/accuracies"] = reward_accuracies.cpu()
     metrics[f"rewards/margins"] = (chosen_rewards - rejected_rewards).cpu()
-    metrics[f"logps/rejected"] = policy_rejected_logps.detach().cpu()
-    metrics[f"logps/chosen"] = policy_chosen_logps.detach().cpu()
-    metrics[f"simpo_loss"] = loss_simpo.detach().cpu()
-    metrics[f"sft_loss"] = sft_loss.detach().cpu()
-    metrics[f"instance_loss"] = instance_loss.detach().cpu()
+
+    metrics[f"logps/rejected"] = policy_rejected_logps.clone().detach().cpu()
+    metrics[f"logps/chosen"] = policy_chosen_logps.clone().detach().cpu()
+    metrics[f"simpo_loss"] = loss_simpo.clone().detach().cpu()
     # TODO: activating the below line cause backprop error, but i don't understand.
     # detach is out of place so would not affect returned loss...
     # metrics[f"loss"] = loss.detach().cpu()
