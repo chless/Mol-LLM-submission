@@ -72,4 +72,4 @@ mol_string_randomization_ratio: -1
 mdpo: true
 simpo_weight: 1.0
 beta: 2.0
-gamma_beta_ratio: 0.25
+gamma_beta_ratio: 1.0
