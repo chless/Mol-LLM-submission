@@ -1,6 +1,6 @@
 export TOKENIZERS_PARALLELISM=false;
 file_name='PP_mistral7b_modality_random_mdpo_0108'
-gpus="'1,2,3,4,5,6,7'"
+gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
