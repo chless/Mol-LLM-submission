@@ -709,8 +709,13 @@ class DataCollator(DataCollatorForSeq2Seq):
                     == self.tokenizer.mol_token_id
                 )
 
-            if self.mdpo and self.train:
-                features[f"{mol_augmentation}"] = torch.tensor(0, dtype=torch.int16)
+        if self.mdpo and self.train:
+            features[f"{mol_augmentation}"] = torch.tensor(0, dtype=torch.int16)
+
+            features["is_chosen_rejected_different"] = torch.tensor(
+                [c != r for c, r in zip(list_selfies, list_rejected_selfies)],
+                dtype=torch.bool,
+            )
 
         return features
 

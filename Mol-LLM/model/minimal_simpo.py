@@ -39,8 +39,8 @@ def simpo_loss(
             f"Unknown loss type: {loss_type}. Should be one of ['sigmoid', 'hinge']"
         )
 
-    chosen_rewards = beta * policy_chosen_logps.to(device).detach()
-    rejected_rewards = beta * policy_rejected_logps.to(device).detach()
+    chosen_rewards = beta * policy_chosen_logps.to(device).clone().detach()
+    rejected_rewards = beta * policy_rejected_logps.to(device).clone().detach()
 
     return losses, chosen_rewards, rejected_rewards
 
@@ -125,6 +125,7 @@ def minimal_get_batch_loss_metrics(
     logits: torch.FloatTensor,
     labels: torch.LongTensor,
     instance_loss: torch.FloatTensor,
+    is_chosen_rejected_different: torch.BoolTensor,
     simpo_weight: float = 1.0,
     beta: float = 1.0,
     gamma_beta_ratio: float = 0.0,
@@ -156,6 +157,7 @@ def minimal_get_batch_loss_metrics(
     simpo_loss_mask = torch.where(
         (rejected_loss_mask.sum(-1) > 0) & (chosen_loss_mask.sum(-1) > 0), True, False
     )
+    simpo_loss_mask = simpo_loss_mask & is_chosen_rejected_different
 
     loss_simpo = losses_simpo[simpo_loss_mask].mean()
 
@@ -167,9 +169,10 @@ def minimal_get_batch_loss_metrics(
     if torch.isnan(loss_simpo):
         assert False, "loss_simpo is nan"
 
-    loss = sft_loss
     if simpo_weight > 0.0:
-        loss += simpo_weight * loss_simpo
+        loss = sft_loss + simpo_weight * loss_simpo
+    else:
+        loss = sft_loss
 
     reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
@@ -193,7 +196,7 @@ def minimal_get_batch_loss_metrics(
 def get_batch_loss_metrics(
     logits: torch.FloatTensor,
     labels: torch.LongTensor,
-    sft_weight: float = 0.0,
+    simpo_weight: float = 0.0,
     is_encoder_decoder: bool = False,
     beta: float = 1.0,
     gamma_beta_ratio: float = 0.0,
@@ -209,7 +212,7 @@ def get_batch_loss_metrics(
     ) = concatenated_forward(
         all_logits=logits, all_labels=labels, label_pad_token_id=-100
     )
-    loss_simpo, chosen_rewards, rejected_rewards = simpo_loss(
+    losses_simpo, chosen_rewards, rejected_rewards = simpo_loss(
         policy_chosen_logps=policy_chosen_logps,
         policy_rejected_logps=policy_rejected_logps,
         beta=beta,
@@ -217,38 +220,49 @@ def get_batch_loss_metrics(
         device=logits.device,
     )
 
-    if sft_weight > 0.0:
-        if not is_encoder_decoder:
-            policy_chosen_logits = policy_chosen_logits[..., :-1, :].contiguous()
-            chosen_labels = chosen_labels[..., 1:].clone()
+    if not is_encoder_decoder:
+        policy_chosen_logits = policy_chosen_logits[..., :-1, :].contiguous()
+        chosen_labels = chosen_labels[..., 1:].clone()
 
-        shift_logits = policy_chosen_logits.view(-1, policy_chosen_logits.shape[-1])
-        shift_labels = chosen_labels.view(-1)
+    shift_logits = policy_chosen_logits.view(-1, policy_chosen_logits.shape[-1])
+    shift_labels = chosen_labels.view(-1)
 
-        # custom forward to get not reduced loss
-        loss_fct_not_reduced = nn.CrossEntropyLoss(reduction="none")
-        loss_not_reduced = loss_fct_not_reduced(shift_logits, shift_labels).view(
-            chosen_labels.size(0), -1
-        )
-        # normalization exclude default ignore index -100
-        instance_non_pad_tokens = torch.where(
-            shift_labels != -100,
-            torch.tensor(1).to(shift_labels.device),
-            torch.tensor(0).to(shift_labels.device),
-        ).view(chosen_labels.size(0), -1)
-        # cross entropy aggregate not row-wise, but sum of all instances
-        sft_loss = (
-            loss_not_reduced * instance_non_pad_tokens
-        ).sum() / instance_non_pad_tokens.sum()
+    # custom forward to get not reduced loss
+    loss_fct_not_reduced = nn.CrossEntropyLoss(reduction="none")
+    loss_not_reduced = loss_fct_not_reduced(shift_logits, shift_labels).view(
+        chosen_labels.size(0), -1
+    )
+    # normalization exclude default ignore index -100
+    instance_non_pad_tokens = torch.where(
+        shift_labels != -100,
+        torch.tensor(1).to(shift_labels.device),
+        torch.tensor(0).to(shift_labels.device),
+    ).view(chosen_labels.size(0), -1)
+    # cross entropy aggregate not row-wise, but sum of all instances
+    sft_loss = (
+        loss_not_reduced * instance_non_pad_tokens
+    ).sum() / instance_non_pad_tokens.sum()
 
-        loss = sft_weight * sft_loss + loss_simpo.mean()
+    chosen_loss_mask = chosen_labels[:, 1:].clone() != -100
+    rejected_labels = labels[chosen_labels.size(0) :]
+    rejected_loss_mask = rejected_labels[:, 1:].clone() != -100
 
-        instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
-            dim=-1
-        ) / instance_non_pad_tokens.sum(dim=-1)
+    simpo_loss_mask = torch.where(
+        (rejected_loss_mask.sum(-1) > 0) & (chosen_loss_mask.sum(-1) > 0), True, False
+    )
 
-        metrics[f"instance_loss"] = instance_loss.clone().detach().cpu()
-        metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
+    loss_simpo = losses_simpo[simpo_loss_mask].mean()
+
+    if torch.isnan(loss_simpo):
+        assert False, "loss_simpo is nan"
+
+    loss = sft_loss
+    if simpo_weight > 0.0:
+        loss += simpo_weight * losses_simpo.mean()
+
+    instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
+        dim=-1
+    ) / instance_non_pad_tokens.sum(dim=-1)
 
     reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
@@ -257,9 +271,11 @@ def get_batch_loss_metrics(
     metrics[f"rewards/accuracies"] = reward_accuracies.cpu()
     metrics[f"rewards/margins"] = (chosen_rewards - rejected_rewards).cpu()
 
+    metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
+    metrics[f"instance_loss"] = instance_loss.clone().detach().cpu()
+    metrics[f"simpo_loss"] = losses_simpo.clone().detach().cpu()
     metrics[f"logps/rejected"] = policy_rejected_logps.clone().detach().cpu()
     metrics[f"logps/chosen"] = policy_chosen_logps.clone().detach().cpu()
-    metrics[f"simpo_loss"] = loss_simpo.clone().detach().cpu()
     # TODO: activating the below line cause backprop error, but i don't understand.
     # detach is out of place so would not affect returned loss...
     # metrics[f"loss"] = loss.detach().cpu()

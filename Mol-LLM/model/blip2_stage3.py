@@ -21,6 +21,7 @@ from data_utils import CLASSIFICATION_BENCHMARKS, id2task
 from transformers.utils import logging
 
 from model import minimal_simpo
+from contextlib import nullcontext
 
 logger = logging.get_logger(__name__)
 logging.set_verbosity_info()
@@ -231,14 +232,23 @@ class Blip2Stage3(pl.LightningModule):
         loss = outputs.pop("loss")
 
         if hasattr(self.args, "mdpo") and self.args.mdpo:
-            loss, metrics = minimal_simpo.minimal_get_batch_loss_metrics(
-                logits=logits,
-                labels=batch.labels,
-                instance_loss=outputs["instance_loss"],
-                simpo_weight=self.args.simpo_weight,
-                beta=self.args.beta,
-                gamma_beta_ratio=self.args.gamma_beta_ratio,
-            )
+            compute_loss_context_manager = torch.amp.autocast
+
+            if self.trainer.global_step in [221, 2198]:
+                simpo_weight = 0
+            else:
+                simpo_weight = self.args.simpo_weight
+
+            with compute_loss_context_manager(device_type="cuda"):
+                loss, metrics = minimal_simpo.minimal_get_batch_loss_metrics(
+                    logits=logits,
+                    labels=batch.labels,
+                    instance_loss=outputs["instance_loss"],
+                    simpo_weight=simpo_weight,
+                    beta=self.args.beta,
+                    gamma_beta_ratio=self.args.gamma_beta_ratio,
+                    is_chosen_rejected_different=batch.is_chosen_rejected_different,
+                )
             outputs.update(metrics)
 
         self.log(
