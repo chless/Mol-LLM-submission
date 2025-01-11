@@ -173,6 +173,9 @@ def minimal_get_batch_loss_metrics(
     else:
         loss = sft_loss
 
+    if torch.isnan(loss):
+        assert not torch.isnan(loss), "loss is nan"
+
     reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
     metrics[f"rewards/chosen"] = chosen_rewards.cpu()
