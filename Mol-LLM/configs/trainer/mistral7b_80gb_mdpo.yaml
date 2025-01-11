@@ -73,3 +73,4 @@ mdpo: true
 simpo_weight: 1.0
 beta: 2.0
 gamma_beta_ratio: 1.0
+loss_type: sigmoid
