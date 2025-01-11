@@ -234,7 +234,7 @@ class Blip2Stage3(pl.LightningModule):
         if hasattr(self.args, "mdpo") and self.args.mdpo:
             compute_loss_context_manager = torch.amp.autocast
 
-            if self.trainer.global_step in [221, 2198]:
+            if self.trainer.global_step in [-1]:
                 simpo_weight = 0
             else:
                 simpo_weight = self.args.simpo_weight
@@ -248,6 +248,7 @@ class Blip2Stage3(pl.LightningModule):
                     beta=self.args.beta,
                     gamma_beta_ratio=self.args.gamma_beta_ratio,
                     is_chosen_rejected_different=batch.is_chosen_rejected_different,
+                    loss_type=self.args.loss_type,
                 )
             outputs.update(metrics)
 
@@ -382,6 +383,88 @@ class Blip2Stage3(pl.LightningModule):
             max_length=self.gen_max_len,
             min_length=self.min_len,
         )
+
+        num_steps = len(outputs.attentions)
+        seq_lengths = batch.prompt_input_ids.shape[1]
+        all_layers_attn = [
+            torch.stack(outputs.attentions[step_idx])[..., :seq_lengths]
+            for step_idx in range(1, num_steps)
+        ]
+
+        # [num_steps, num_heads, max_generated_length, max_generated_length] -> [num_steps, batch_size, max_generated_length]
+        full_attn_mean = torch.stack(all_layers_attn).mean(dim=(1, 3)).squeeze()
+
+        selfies_start_token_id = 35743
+        selfies_end_token_id = 35744
+
+        selfies_mask = torch.zeros_like(batch.prompt_input_ids, dtype=torch.bool)
+        st_batch_indices, start_indices = (
+            batch.prompt_input_ids == selfies_start_token_id
+        ).nonzero(as_tuple=True)
+        end_batch_indices, end_indices = (
+            batch.prompt_input_ids == selfies_end_token_id
+        ).nonzero(as_tuple=True)
+
+        valid_start_mask = torch.isin(st_batch_indices, end_batch_indices)
+        st_batch_indices = st_batch_indices[valid_start_mask]
+        start_indices = start_indices[valid_start_mask]
+
+        start_indices += 1
+        end_indices -= 1
+
+        seq_range = torch.arange(
+            seq_lengths, device=batch.prompt_input_ids.device
+        ).unsqueeze(0)
+
+        broadcasted_start = start_indices.unsqueeze(1)
+        broadcasted_end = end_indices.unsqueeze(1)
+
+        sequence_masks = (seq_range >= broadcasted_start) & (
+            seq_range <= broadcasted_end
+        )
+        temp_mask = torch.zeros_like(batch.prompt_input_ids, dtype=torch.bool)
+        temp_mask.scatter_add_(
+            0, end_batch_indices.unsqueeze(1).expand(-1, seq_lengths), sequence_masks
+        )
+        selfies_mask = selfies_mask | temp_mask
+
+        # mol_attn_score = full_attn_mean[:, mol_token_mask]
+
+        mol_scores = []
+        selfies_scores = []
+
+        for i in range(batch.prompt_input_ids.shape[0]):
+            mol_scores.append(
+                full_attn_mean[:, i, is_mol_token[i]].mean(dim=-1).mean(dim=0)
+            )
+            selfies_scores.append(
+                full_attn_mean[:, i, selfies_mask[i]].mean(dim=-1).mean(dim=0)
+            )
+
+        mol_scores = torch.stack(mol_scores)
+        mol_scores = torch.where(
+            torch.isnan(mol_scores), torch.zeros_like(mol_scores), mol_scores
+        )
+        selfies_scores = torch.stack(selfies_scores)
+        selfies_scores = torch.where(
+            torch.isnan(selfies_scores),
+            torch.zeros_like(selfies_scores),
+            selfies_scores,
+        )
+
+        self.log(
+            f"{mode}/graph_attn_score",
+            mol_scores.mean().item(),
+            sync_dist=False,
+            batch_size=batch.prompt_input_ids.shape[0],
+        )
+        self.log(
+            f"{mode}/selfies_attn_score",
+            selfies_scores.mean().item(),
+            sync_dist=False,
+            batch_size=batch.prompt_input_ids.shape[0],
+        )
+
         predictions = outputs.predictions
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             batch.input_ids, skip_special_tokens=False
