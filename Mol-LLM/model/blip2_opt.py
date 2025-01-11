@@ -480,6 +480,7 @@ class Blip2OPT(Blip2Base):
             output_scores=True,
             output_logits=True,
             return_dict_in_generate=True,
+            output_attentions=True,
         )
 
         batch_size, sequence_length = outputs.sequences.shape
