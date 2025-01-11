@@ -105,6 +105,7 @@ def get_batch_logps(
         labels = labels[:, 1:].clone()
         logits = logits[:, :-1, :]
     loss_mask = labels != label_pad_token_id
+    target_truncation_mask = torch.where(loss_mask.sum(-1) > 0, True, False)
 
     # dummy token; we'll ignore the losses on these tokens later
     labels[labels == label_pad_token_id] = 0
@@ -113,8 +114,12 @@ def get_batch_logps(
         logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)
     ).squeeze(2)
 
+    # just add one for target truncated instance.
+    # the loss is not used for backprop, so it's fine to have a dummy loss for truncated instances.
+    numerically_stable_mask = loss_mask.sum(-1) + ~target_truncation_mask * 1e-6
+
     if average_log_prob:
-        return (per_token_logps * loss_mask).sum(-1) / loss_mask.sum(-1)
+        return (per_token_logps * loss_mask).sum(-1) / numerically_stable_mask
     else:
         return (per_token_logps * loss_mask).sum(-1)
 
@@ -159,16 +164,15 @@ def minimal_get_batch_loss_metrics(
     )
     simpo_loss_mask = simpo_loss_mask & is_chosen_rejected_different
 
-    loss_simpo = losses_simpo[simpo_loss_mask].mean()
+    loss_simpo = losses_simpo[simpo_loss_mask]
+    loss_simpo = loss_simpo.mean()
 
     chosen_instance_loss = instance_loss[: chosen_labels.size(0)]
     sft_loss = (
         chosen_instance_loss * chosen_loss_mask.sum(-1)
     ).sum() / chosen_loss_mask.sum()
 
-    if torch.isnan(loss_simpo):
-        loss = sft_loss
-    elif simpo_weight > 0.0:
+    if simpo_weight > 0.0:
         loss = sft_loss + simpo_weight * loss_simpo
     else:
         loss = sft_loss
