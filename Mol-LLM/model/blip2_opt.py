@@ -436,6 +436,7 @@ class Blip2OPT(Blip2Base):
         length_penalty=1.0,
         num_captions=1,
         temperature=1,
+        output_attentions=False,
     ):
         """
         Args:
@@ -480,7 +481,7 @@ class Blip2OPT(Blip2Base):
             output_scores=True,
             output_logits=True,
             return_dict_in_generate=True,
-            output_attentions=True,
+            output_attentions=output_attentions,
         )
 
         batch_size, sequence_length = outputs.sequences.shape
