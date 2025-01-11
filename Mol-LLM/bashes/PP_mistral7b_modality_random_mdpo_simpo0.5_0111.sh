@@ -1,5 +1,5 @@
 export TOKENIZERS_PARALLELISM=false;
-file_name='PP_mistral7b_modality_random_mdpo_0111'
+file_name='PP_mistral7b_modality_random_mdpo_simpo0.5_0111'
 gpus="'4,5,6,7'"
 
 python Mol-LLM/stage3.py \
