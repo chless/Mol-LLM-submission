@@ -17,5 +17,5 @@ trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.max_epochs=5 \
 trainer.val_check_interval=0.25 \
-trainer.skip_sanity_check=true
+trainer.skip_sanity_check=false
 
