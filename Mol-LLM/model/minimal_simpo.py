@@ -8,7 +8,6 @@ def simpo_loss(
     policy_rejected_logps: torch.FloatTensor,
     loss_type="sigmoid",
     beta=1.0,
-    label_smoothing=0.0,
     gamma_beta_ratio=0.0,
     device="cuda",
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
@@ -26,12 +25,11 @@ def simpo_loss(
     pi_logratios = policy_chosen_logps - policy_rejected_logps
     pi_logratios = pi_logratios.to(device)
     logits = pi_logratios - gamma_beta_ratio
+    # avoid overflow
+    logits = torch.clamp(logits, min=-10, max=10)
 
     if loss_type == "sigmoid":
-        losses = (
-            -F.logsigmoid(beta * logits) * (1 - label_smoothing)
-            - F.logsigmoid(-beta * logits) * label_smoothing
-        )
+        losses = -F.logsigmoid(beta * logits)
     elif loss_type == "hinge":
         losses = torch.relu(1 - beta * logits)
     else:
@@ -129,6 +127,7 @@ def minimal_get_batch_loss_metrics(
     simpo_weight: float = 1.0,
     beta: float = 1.0,
     gamma_beta_ratio: float = 0.0,
+    loss_type="sigmoid",
 ):
     """Compute the SimPO loss and other metrics for the given batch of inputs for train or test."""
     metrics = {}
@@ -148,6 +147,7 @@ def minimal_get_batch_loss_metrics(
         beta=beta,
         gamma_beta_ratio=gamma_beta_ratio,
         device=logits.device,
+        loss_type=loss_type,
     )
 
     chosen_loss_mask = chosen_labels[:, 1:].clone() != -100
@@ -167,9 +167,8 @@ def minimal_get_batch_loss_metrics(
     ).sum() / chosen_loss_mask.sum()
 
     if torch.isnan(loss_simpo):
-        assert False, "loss_simpo is nan"
-
-    if simpo_weight > 0.0:
+        loss = sft_loss
+    elif simpo_weight > 0.0:
         loss = sft_loss + simpo_weight * loss_simpo
     else:
         loss = sft_loss
