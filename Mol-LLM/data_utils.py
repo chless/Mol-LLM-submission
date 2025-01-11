@@ -115,39 +115,48 @@ def substitute_atoms_based_on_selfies(selfies, min_r=0.3, max_r=0.9):
     ]
     min_atoms = max(1, int(min_r * len(atoms)))
     max_atoms = min(int(max_r * len(atoms)), len(atoms) - 1)
-    num_atoms_to_substitute = np.random.randint(min_atoms, max_atoms)
-    while num_atoms_to_substitute > 0:
-        selected_atom = np.random.choice(atoms).item()
-        edit_selfies_parts = list(re.finditer("\[.+?\]", edit_selfies))
-        edit_part = np.random.choice(edit_selfies_parts)
-        new_selfies = (
-            edit_selfies[: edit_part.start()]
-            + selected_atom
-            + edit_selfies[edit_part.end() :]
-        )
+    if min_atoms >= max_atoms:
+        return edit_selfies + edit_selfies
+    else:
+        num_atoms_to_substitute = np.random.randint(min_atoms, max_atoms)
+        while num_atoms_to_substitute > 0:
+            selected_atom = np.random.choice(atoms).item()
+            edit_selfies_parts = list(re.finditer("\[.+?\]", edit_selfies))
+            edit_part = np.random.choice(edit_selfies_parts)
+            new_selfies = (
+                edit_selfies[: edit_part.start()]
+                + selected_atom
+                + edit_selfies[edit_part.end() :]
+            )
 
-        edit_selfies = new_selfies
-        num_atoms_to_substitute -= 1
+            edit_selfies = new_selfies
+            num_atoms_to_substitute -= 1
 
-    return edit_selfies
+        return edit_selfies
 
 
 def substitute_atoms_based_on_graph(graph, min_r=0.3, max_r=0.9):
     num_atoms = graph.x.size(0)
     min_atoms = max(1, int(min_r * num_atoms))
     max_atoms = min(int(max_r * num_atoms), num_atoms - 1)
-    num_atoms_to_substitute = np.random.randint(min_atoms, max_atoms)
 
     edit_graph = graph.clone()
-    #
-    original_indices = np.arange(num_atoms)
-    shuffled_indices = shuffle_partial(
-        original_indices.tolist(), num_to_shuffle=num_atoms_to_substitute
-    )
-    for i in range(len(shuffled_indices)):
-        edit_graph.x[i] = graph.x[shuffled_indices[i]]
 
-    return edit_graph
+    if min_atoms >= max_atoms:
+        print(f"min_atoms={min_atoms} >= max_atoms={max_atoms}")
+        return edit_graph
+    else:
+
+        num_atoms_to_substitute = np.random.randint(min_atoms, max_atoms)
+
+        original_indices = np.arange(num_atoms)
+        shuffled_indices = shuffle_partial(
+            original_indices.tolist(), num_to_shuffle=num_atoms_to_substitute
+        )
+        for i in range(len(shuffled_indices)):
+            edit_graph.x[i] = graph.x[shuffled_indices[i]]
+
+        return edit_graph
 
 
 def remove_atoms_based_on_selfies(selfies, num_atoms_to_remove):
