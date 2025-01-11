@@ -106,69 +106,48 @@ valence_dict = {
 }
 
 
-def prepare_rejected_input_mol_string(selfies, preference_type="negative-size"):
-    if preference_type == "negative-size":
-        return augment_molecular_size_based_on_selfies(selfies)
-    elif preference_type == "negative-structure":
-        return augment_molecular_structure_based_on_selfies(selfies)
-    else:
-        raise ValueError("preference_type should be one of 'size', 'structure'")
-
-
-def augment_molecular_size_based_on_selfies(selfies, min_r=0.3, max_r=0.9):
-    smiles = sf.decoder(selfies)
-    mol = Chem.MolFromSmiles(smiles)
-    num_atoms = mol.GetNumAtoms()
-    min_atoms = max(1, int(num_atoms * min_r))
-    max_atoms = min(int(num_atoms * max_r), num_atoms - 1)
-    try:
-        num_changing_atoms = max(np.random.randint(min_atoms, max_atoms), 1)
-    except:
-        print(smiles)
-
-    prob = np.random.rand()
-    if num_atoms == 1:
-        edit_mol = add_atoms_based_on_selfies(selfies, num_atoms_to_add=1)
-    elif prob > 0.5:
-        edit_mol = add_atoms_based_on_selfies(
-            selfies, num_atoms_to_add=num_changing_atoms
-        )
-    else:
-        edit_mol = remove_atoms_based_on_selfies(
-            selfies, num_atoms_to_remove=num_changing_atoms
-        )
-
-    assert edit_mol is not None
-
-    return edit_mol
-
-
-def augment_molecular_structure_based_on_selfies(selfies):
-    return selfies
-
-
-def add_atoms_based_on_selfies(selfies, num_atoms_to_add):
+def substitute_atoms_based_on_selfies(selfies, min_r=0.3, max_r=0.9):
     edit_selfies = copy.copy(selfies)
-    atoms = re.findall("\[.+?\]", selfies)
-    while num_atoms_to_add > 0:
-        try:
-            selected_atom = np.random.choice(atoms).item()
-            edit_selfies_parts = list(re.finditer("\[.+?\]", edit_selfies))
-            edit_index = np.random.choice(edit_selfies_parts).start()
-            new_selfies = (
-                edit_selfies[:edit_index] + selected_atom + edit_selfies[edit_index:]
-            )
+    atoms = [
+        atom
+        for atom in re.findall("\[.+?\]", selfies)
+        if "Ring" not in atom and "Branch" not in atom
+    ]
+    min_atoms = max(1, int(min_r * len(atoms)))
+    max_atoms = min(int(max_r * len(atoms)), len(atoms) - 1)
+    num_atoms_to_substitute = np.random.randint(min_atoms, max_atoms)
+    while num_atoms_to_substitute > 0:
+        selected_atom = np.random.choice(atoms).item()
+        edit_selfies_parts = list(re.finditer("\[.+?\]", edit_selfies))
+        edit_part = np.random.choice(edit_selfies_parts)
+        new_selfies = (
+            edit_selfies[: edit_part.start()]
+            + selected_atom
+            + edit_selfies[edit_part.end() :]
+        )
 
-            new_smiles = sf.decoder(new_selfies)
-            new_mol = Chem.MolFromSmiles(new_smiles)
-            Chem.SanitizeMol(new_mol)
-
-            edit_selfies = new_selfies
-            num_atoms_to_add -= 1
-        except:
-            break
+        edit_selfies = new_selfies
+        num_atoms_to_substitute -= 1
 
     return edit_selfies
+
+
+def substitute_atoms_based_on_graph(graph, min_r=0.3, max_r=0.9):
+    num_atoms = graph.x.size(0)
+    min_atoms = max(1, int(min_r * num_atoms))
+    max_atoms = min(int(max_r * num_atoms), num_atoms - 1)
+    num_atoms_to_substitute = np.random.randint(min_atoms, max_atoms)
+
+    edit_graph = graph.clone()
+    #
+    original_indices = np.arange(num_atoms)
+    shuffled_indices = shuffle_partial(
+        original_indices.tolist(), num_to_shuffle=num_atoms_to_substitute
+    )
+    for i in range(len(shuffled_indices)):
+        edit_graph.x[i] = graph.x[shuffled_indices[i]]
+
+    return edit_graph
 
 
 def remove_atoms_based_on_selfies(selfies, num_atoms_to_remove):
@@ -440,11 +419,34 @@ def mol2graph(mol):
 
 def graph2data(graph):
     data = Data(
-        x=graph["node_feat"],
-        edge_index=graph["edge_index"],
-        edge_attr=graph["edge_feat"],
+        x=torch.tensor(graph["node_feat"], dtype=torch.int64),
+        edge_index=torch.tensor(graph["edge_index"], dtype=torch.int64),
+        edge_attr=torch.tensor(graph["edge_feat"], dtype=torch.int64),
     )
     return data
+
+
+import random
+
+
+def shuffle_partial(lst, num_to_shuffle=0):
+    # Step 1: Calculate the number of elements to shuffle
+    n = len(lst)
+
+    # Step 2: Randomly select indices to shuffle
+    indices_to_shuffle = random.sample(range(n), num_to_shuffle)
+
+    # Step 3: Extract the elements at these indices
+    elements_to_shuffle = [lst[i] for i in indices_to_shuffle]
+
+    # Step 4: Shuffle the selected elements
+    random.shuffle(elements_to_shuffle)
+
+    # Step 5: Replace the original elements with the shuffled ones
+    for i, idx in enumerate(indices_to_shuffle):
+        lst[idx] = elements_to_shuffle[i]
+
+    return lst
 
 
 class DataCollator(DataCollatorForSeq2Seq):
@@ -512,22 +514,31 @@ class DataCollator(DataCollatorForSeq2Seq):
         )
 
         if self.mdpo and self.train:
-            # TODO: implement mol_augmentation for negative-structure
-
-            num_rejected_mols = len(batch) // 2
             mol_augmentations = np.random.choice(
                 ["neg-insertion", "neg-deletion", "neg-substitution"],
-                size=num_rejected_mols,
+                size=len(batch),
             ).tolist()
 
             list_selfies = [
                 i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
                 for i in input_mol_strings
             ]
-            list_rejected_selfies = [
-                sample[neg_type].replace("<SELFIES> ", "").replace(" </SELFIES>", "")
-                for sample, neg_type in zip(batch, mol_augmentations)
-            ]
+
+            list_rejected_selfies = []
+            for i in range(len(list_selfies)):
+                selfies = list_selfies[i]
+
+                if mol_augmentations[i] in ["neg-insertion", "neg-deletion"]:
+                    list_rejected_selfies.append(
+                        batch[i]["rejected_input_mol_string"]
+                        .replace("<SELFIES> ", "")
+                        .replace(" </SELFIES>", "")
+                    )
+                else:
+                    rejected_selfies = substitute_atoms_based_on_selfies(
+                        selfies, min_r=0.3, max_r=0.9
+                    )
+                    list_rejected_selfies.append(rejected_selfies)
 
             rejected_prompt_text = prompt_text.copy()
             if "string" in mol_representation:
@@ -541,10 +552,9 @@ class DataCollator(DataCollatorForSeq2Seq):
 
             prompt_text = prompt_text + rejected_prompt_text
             target_text = target_text + target_text
-            input_mol_strings = input_mol_strings + list_rejected_selfies
 
         if "graph" in mol_representation:
-            graphs = [
+            list_graphs = [
                 Data(
                     x=torch.tensor(sample["x"], dtype=torch.int64),
                     edge_index=torch.tensor(sample["edge_index"], dtype=torch.int64),
@@ -553,7 +563,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                 for sample in batch
             ]
             # for reagent prediction
-            additional_graphs = [
+            list_additional_graphs = [
                 Data(
                     x=torch.tensor(sample["additional_x"], dtype=torch.int64),
                     edge_index=torch.tensor(
@@ -565,50 +575,38 @@ class DataCollator(DataCollatorForSeq2Seq):
                 )
                 for sample in batch
             ]
-            if self.mdpo and self.train:
-                try:
-                    list_rejected_smiles = [
-                        sf.decoder(i) for i in list_rejected_selfies
-                    ]
-                    list_rejected_mol = [
-                        Chem.MolFromSmiles(i) for i in list_rejected_smiles
-                    ]
 
-                    list_rejected_graph = [
-                        graph2data(mol2graph(i)) for i in list_rejected_mol
-                    ]
-                    # TODO: implement additional graph for reagent prediction
-                    list_rejected_additional_graph = [
-                        graph2data(mol2graph(i)) for i in list_rejected_mol
-                    ]
-                except:
-                    print(list_rejected_selfies)
-                rejected_graphs = [
-                    Data(
-                        x=torch.tensor(sample["x"], dtype=torch.int64).clone().detach(),
-                        edge_index=torch.tensor(sample["edge_index"], dtype=torch.int64)
-                        .clone()
-                        .detach(),
-                        edge_attr=torch.tensor(sample["edge_attr"], dtype=torch.int64)
-                        .clone()
-                        .detach(),
-                    )
-                    for sample in list_rejected_graph
-                ]
-                graphs = graphs + rejected_graphs
-                rejected_additional_graphs = [
-                    Data(
-                        x=torch.tensor(sample["x"], dtype=torch.int64).clone().detach(),
-                        edge_index=torch.tensor(sample["edge_index"], dtype=torch.int64)
-                        .clone()
-                        .detach(),
-                        edge_attr=torch.tensor(sample["edge_attr"], dtype=torch.int64)
-                        .clone()
-                        .detach(),
-                    )
-                    for sample in list_rejected_additional_graph
-                ]
-                additional_graphs = additional_graphs + rejected_additional_graphs
+            if self.mdpo and self.train:
+                # TODO: implement additional graph for reagent prediction
+                list_rejected_graphs = []
+                list_rejected_additional_graphs = []
+
+                for i in range(len(list_rejected_selfies)):
+                    if mol_augmentations[i] in ["neg-insertion", "neg-deletion"]:
+                        rejected_selfies = (
+                            list_rejected_selfies[i]
+                            .replace("<SELFIES> ", "")
+                            .replace(" </SELFIES>", "")
+                        )
+                        smiles = sf.decoder(rejected_selfies)
+                        mol = Chem.MolFromSmiles(smiles)
+                        graph = graph2data(mol2graph(mol))
+                    elif mol_augmentations[i] == "neg-substitution":
+                        graph = substitute_atoms_based_on_graph(list_graphs[i])
+
+                    else:
+                        raise ValueError(
+                            "mol_augmentation should be one of ['neg-insertion', 'neg-deletion', 'neg-substitution']"
+                        )
+
+                    list_rejected_graphs.append(graph)
+
+                list_rejected_additional_graphs = copy.deepcopy(list_rejected_graphs)
+
+                list_graphs = list_graphs + list_rejected_graphs
+                list_additional_graphs = (
+                    list_additional_graphs + list_rejected_additional_graphs
+                )
 
         prompt_tokenized = self.tokenizer(
             prompt_text,
@@ -697,8 +695,8 @@ class DataCollator(DataCollatorForSeq2Seq):
 
         features["tasks"] = torch.tensor(tasks, dtype=torch.int16)
         if "graph" in mol_representation:
-            graphs = self.graph_collator(graphs)
-            additional_graphs = self.graph_collator(additional_graphs)
+            graphs = self.graph_collator(list_graphs)
+            additional_graphs = self.graph_collator(list_additional_graphs)
             features["graphs"] = graphs
             features["additional_graphs"] = additional_graphs
             features["is_mol_token"] = (
@@ -711,8 +709,6 @@ class DataCollator(DataCollatorForSeq2Seq):
                 )
 
         if self.mdpo and self.train:
-            features[f"{mol_augmentation}"] = torch.tensor(0, dtype=torch.int16)
-
             features["is_chosen_rejected_different"] = torch.tensor(
                 [c != r for c, r in zip(list_selfies, list_rejected_selfies)],
                 dtype=torch.bool,
@@ -798,3 +794,24 @@ molecule captioning, molecule generation. \n\n"
     }
 
     return text_result
+
+
+def random_replace_mol_string(input_tokens_input_ids, tokenizer):
+    ids = input_tokens_input_ids
+    mol_string_randomization_ratio = tokenizer.mol_string_randomization_ratio
+    total_selfies_token_ids = tokenizer.selfies_token_ids
+
+    selfies_min_id = min(total_selfies_token_ids)
+    selfies_max_id = max(total_selfies_token_ids)
+    # if ids are correspond to total_selfies_token_ids, replace them with random token by mol_string_randomization_ratio
+    full_random_replaced = torch.where(
+        (ids >= selfies_min_id) & (ids <= selfies_max_id),
+        torch.randint(selfies_min_id, selfies_max_id + 1, ids.shape, device=ids.device),
+        ids,
+    )
+    partial_random_replaced = torch.where(
+        torch.rand(ids.shape, device=ids.device) < mol_string_randomization_ratio,
+        full_random_replaced,
+        ids,
+    )
+    return partial_random_replaced
