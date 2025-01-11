@@ -1,5 +1,5 @@
 raw_data_root: 'your data path'
-data_tag: "pp_super_small"
+data_tag: "pp_super_small_offline"
 
 tasks:
   - bace
