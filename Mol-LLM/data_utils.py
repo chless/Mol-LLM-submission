@@ -513,19 +513,20 @@ class DataCollator(DataCollatorForSeq2Seq):
 
         if self.mdpo and self.train:
             # TODO: implement mol_augmentation for negative-structure
-            # mol_augmentation = np.random.choice(["negative-size", "negative-structure"],
-            #                                    p=[0.5, 0.5]).item()
-            mol_augmentation = "negative-size"
+
+            num_rejected_mols = len(batch) // 2
+            mol_augmentations = np.random.choice(
+                ["neg-insertion", "neg-deletion", "neg-substitution"],
+                size=num_rejected_mols,
+            ).tolist()
 
             list_selfies = [
                 i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
                 for i in input_mol_strings
             ]
             list_rejected_selfies = [
-                sample["rejected_input_mol_string"]
-                .replace("<SELFIES> ", "")
-                .replace(" </SELFIES>", "")
-                for sample in batch
+                sample[neg_type].replace("<SELFIES> ", "").replace(" </SELFIES>", "")
+                for sample, neg_type in zip(batch, mol_augmentations)
             ]
 
             rejected_prompt_text = prompt_text.copy()
