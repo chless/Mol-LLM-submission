@@ -138,7 +138,7 @@ def substitute_atoms_based_on_selfies(selfies, min_r=0.3, max_r=0.9):
 def substitute_atoms_based_on_graph(graph, min_r=0.3, max_r=0.9):
     num_atoms = graph.x.size(0)
     min_atoms = max(1, int(min_r * num_atoms))
-    max_atoms = min(int(max_r * num_atoms), num_atoms - 1)
+    max_atoms = int(max_r * num_atoms)
 
     edit_graph = graph.clone()
 
