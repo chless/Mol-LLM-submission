@@ -373,7 +373,7 @@ class Blip2Stage3(pl.LightningModule):
             additional_graphs = None
             is_mol_token = None
 
-        los_attn_score = False
+        los_attn_score = self.args.log_attn_score
         outputs = self.blip2model.generate(
             graphs=(graphs, additional_graphs),
             # input_tokens=prompt_tokens,
