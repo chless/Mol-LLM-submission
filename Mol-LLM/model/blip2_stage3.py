@@ -435,37 +435,71 @@ class Blip2Stage3(pl.LightningModule):
 
             # mol_attn_score = full_attn_mean[:, mol_token_mask]
 
-            mol_scores = []
-            selfies_scores = []
+            mol_mean_scores = []
+            mol_sum_scores = []
+            selfies_mean_scores = []
+            selfies_sum_scores = []
 
             for i in range(batch.prompt_input_ids.shape[0]):
-                mol_scores.append(
+                mol_mean_scores.append(
                     full_attn_mean[:, i, is_mol_token[i]].mean(dim=-1).mean(dim=0)
                 )
-                selfies_scores.append(
+                mol_sum_scores.append(
+                    full_attn_mean[:, i, is_mol_token[i]].sum(dim=-1).sum(dim=0)
+                )
+                selfies_mean_scores.append(
                     full_attn_mean[:, i, selfies_mask[i]].mean(dim=-1).mean(dim=0)
                 )
+                selfies_sum_scores.append(
+                    full_attn_mean[:, i, selfies_mask[i]].sum(dim=-1).sum(dim=0)
+                )
 
-            mol_scores = torch.stack(mol_scores)
-            mol_scores = torch.where(
-                torch.isnan(mol_scores), torch.zeros_like(mol_scores), mol_scores
+            mol_mean_scores = torch.stack(mol_mean_scores)
+            mol_mean_scores = torch.where(
+                torch.isnan(mol_mean_scores),
+                torch.zeros_like(mol_mean_scores),
+                mol_mean_scores,
             )
-            selfies_scores = torch.stack(selfies_scores)
-            selfies_scores = torch.where(
-                torch.isnan(selfies_scores),
-                torch.zeros_like(selfies_scores),
-                selfies_scores,
+            mol_sum_scores = torch.stack(mol_sum_scores)
+            mol_sum_scores = torch.where(
+                torch.isnan(mol_sum_scores),
+                torch.zeros_like(mol_sum_scores),
+                mol_sum_scores,
+            )
+            selfies_mean_scores = torch.stack(selfies_mean_scores)
+            selfies_mean_scores = torch.where(
+                torch.isnan(selfies_mean_scores),
+                torch.zeros_like(selfies_mean_scores),
+                selfies_mean_scores,
+            )
+            selfies_sum_scores = torch.stack(selfies_sum_scores)
+            selfies_sum_scores = torch.where(
+                torch.isnan(selfies_sum_scores),
+                torch.zeros_like(selfies_sum_scores),
+                selfies_sum_scores,
             )
 
             self.log(
-                f"{mode}/graph_attn_score",
-                mol_scores.mean().item(),
+                f"{mode}/graph_attn_mean_score",
+                mol_mean_scores.mean().item(),
                 sync_dist=False,
                 batch_size=batch.prompt_input_ids.shape[0],
             )
             self.log(
-                f"{mode}/selfies_attn_score",
-                selfies_scores.mean().item(),
+                f"{mode}/graph_attn_sum_score",
+                mol_sum_scores.mean().item(),
+                sync_dist=False,
+                batch_size=batch.prompt_input_ids.shape[0],
+            )
+            self.log(
+                f"{mode}/selfies_attn_mean_score",
+                selfies_mean_scores.mean().item(),
+                sync_dist=False,
+                batch_size=batch.prompt_input_ids.shape[0],
+            )
+            self.log(
+                f"{mode}/selfies_attn_sum_score",
+                selfies_sum_scores.mean().item(),
                 sync_dist=False,
                 batch_size=batch.prompt_input_ids.shape[0],
             )
