@@ -4,6 +4,8 @@ cross_attention_freq: 2
 num_query_token: 32
 bert_num_hidden_layers: 5
 
+projector_type: qformer
+
 llm_model: "mistralai/Mistral-7B-Instruct-v0.3"
 tune_llm: lora
 peft_config: null

@@ -170,26 +170,32 @@ class Blip2OPT(Blip2Base):
                 self.graph_encoder.train = disabled_train
                 print("freeze graph encoder")
 
-            self.num_query_token = num_query_token
-            self.Qformer, self.query_tokens = self.init_Qformer(
-                bert_name,
-                num_query_token,
-                gin_hidden_dim,
-                cross_attention_freq,
-                bert_num_hidden_layers=args.bert_num_hidden_layers,
-            )
+            if self.args.projector_type == "qformer":
 
-            ## remove the unused parameters
-            self.Qformer.cls = None
-            self.Qformer.bert.embeddings.word_embeddings = None
-            self.Qformer.bert.embeddings.position_embeddings = None
-            for layer in self.Qformer.bert.encoder.layer:
-                layer.output = None
-                layer.intermediate = None
+                self.num_query_token = num_query_token
+                self.Qformer, self.query_tokens = self.init_Qformer(
+                    bert_name,
+                    num_query_token,
+                    gin_hidden_dim,
+                    cross_attention_freq,
+                    bert_num_hidden_layers=args.bert_num_hidden_layers,
+                )
 
-            self.opt_proj = nn.Linear(
-                self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
-            )
+                ## remove the unused parameters
+                self.Qformer.cls = None
+                self.Qformer.bert.embeddings.word_embeddings = None
+                self.Qformer.bert.embeddings.position_embeddings = None
+                for layer in self.Qformer.bert.encoder.layer:
+                    layer.output = None
+                    layer.intermediate = None
+
+                self.opt_proj = nn.Linear(
+                    self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
+                )
+            elif self.args.projector_type == "mlp":
+                self.opt_proj = nn.Linear(
+                    gin_hidden_dim, self.llm_model.config.hidden_size
+                )
 
     def get_lora_target_modules(self):
         return ["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]
