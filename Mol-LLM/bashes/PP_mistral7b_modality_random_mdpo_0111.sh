@@ -1,6 +1,6 @@
 export TOKENIZERS_PARALLELISM=false;
 file_name='PP_mistral7b_modality_random_mdpo_0111'
-gpus="'4,5,6,7'"
+gpus="'5,6,7'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
@@ -17,5 +17,6 @@ trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.max_epochs=5 \
 trainer.val_check_interval=0.25 \
-trainer.skip_sanity_check=false
+trainer.skip_sanity_check=false \
+ckpt_path="'/data/all_checkpoints/PP_mistral7b_modality_random_mdpo_0111/last.ckpt'"
 
