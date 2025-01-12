@@ -72,7 +72,7 @@ mol_representation: string_only
 modality_randomization: true
 mol_string_randomization_ratio: -1
 mdpo: true
-simpo_weight: 1.0
+simpo_weight: 0.5
 beta: 2.0
 gamma_beta_ratio: 1.0
 loss_type: sigmoid
