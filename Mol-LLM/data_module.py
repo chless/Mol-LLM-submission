@@ -56,6 +56,7 @@ class Stage3DM(LightningDataModule):
             mol_representation=self.mol_representation,
             modality_randomization=self.modality_randomization,
             mdpo=args.mdpo,
+            projector_type=args.projector_type,
         )
         self.eval_collator = DataCollator(
             tokenizer=tokenizer,
@@ -66,6 +67,7 @@ class Stage3DM(LightningDataModule):
             mol_representation=self.mol_representation,
             modality_randomization=self.modality_randomization,
             train=False,
+            projector_type=args.projector_type,
         )
 
     def train_dataloader(self):

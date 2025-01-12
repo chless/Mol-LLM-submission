@@ -193,8 +193,14 @@ class Blip2OPT(Blip2Base):
                     self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
                 )
             elif self.args.projector_type == "mlp":
-                self.opt_proj = nn.Linear(
-                    gin_hidden_dim, self.llm_model.config.hidden_size
+                # build self.opt_proj with 2 layers
+                self.opt_proj = nn.Sequential(
+                    nn.Linear(gin_hidden_dim, self.llm_model.config.hidden_size),
+                    nn.SiLU(),
+                    nn.Linear(
+                        self.llm_model.config.hidden_size,
+                        self.llm_model.config.hidden_size,
+                    ),
                 )
 
     def get_lora_target_modules(self):
@@ -392,14 +398,17 @@ class Blip2OPT(Blip2Base):
             if not self.tune_gnn:
                 mol_embeds = mol_embeds.detach()
             mol_embeds = self.ln_graph(mol_embeds, mol_masks)
-            query_tokens = self.query_tokens.expand(mol_embeds.shape[0], -1, -1)
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=mol_embeds,
-                encoder_attention_mask=mol_masks,
-                return_dict=True,
-            )
-            mol_tokens = self.opt_proj(query_output.last_hidden_state)
+            if self.args.projector_type == "qformer":
+                query_tokens = self.query_tokens.expand(mol_embeds.shape[0], -1, -1)
+                query_output = self.Qformer.bert(
+                    query_embeds=query_tokens,
+                    encoder_hidden_states=mol_embeds,
+                    encoder_attention_mask=mol_masks,
+                    return_dict=True,
+                )
+                mol_tokens = self.opt_proj(query_output.last_hidden_state)
+            else:
+                mol_tokens = self.opt_proj(mol_embeds)
             mol_token_sequence.append(mol_tokens)
 
         mol_tokens = torch.cat(mol_token_sequence, dim=1)

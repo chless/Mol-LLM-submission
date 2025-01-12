@@ -470,6 +470,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         modality_randomization=False,
         train=True,
         mdpo=False,
+        projector_type="qformer",
     ):
         super().__init__(
             tokenizer,
@@ -477,15 +478,15 @@ class DataCollator(DataCollatorForSeq2Seq):
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
         )
-        self.mol_representation = mol_representation
-        if self.mol_representation in ["string+graph", "graph_only"]:
-            self.graph_collator = GraphCollater([], [])
-        self.modality_randomization = modality_randomization
         self.train = train
         self.max_length = max_length
         self.tokenizer.padding_side = "left"
         self.mdpo = mdpo
-        self.global_steps = 0
+        self.mol_representation = mol_representation
+        self.modality_randomization = modality_randomization
+        self.projector_type = projector_type
+        if self.mol_representation in ["string+graph", "graph_only"]:
+            self.graph_collator = GraphCollater([], [])
 
     def select_mol_representation(self, prompt_text, mol_representation="string+graph"):
         if mol_representation == "string+graph":
@@ -499,7 +500,9 @@ class DataCollator(DataCollatorForSeq2Seq):
             ]
             return graph_only_prompt_text
         else:
-            raise ValueError("global_steps should be non-negative integer")
+            raise ValueError(
+                "mol_representation should be one of ['string+graph', 'string_only', 'graph_only']"
+            )
 
     def __call__(self, batch, return_tensors=None):
         if return_tensors is None:
@@ -616,6 +619,13 @@ class DataCollator(DataCollatorForSeq2Seq):
                 list_additional_graphs = (
                     list_additional_graphs + list_rejected_additional_graphs
                 )
+        if self.projector_type == "mlp" and "graph" in mol_representation:
+            # TODO: implement for reagent prediction
+            for i in range(len(prompt_text)):
+                num_nodes_in_graph = list_graphs[i].x.size(0)
+                num_nodes_mol = "<mol>" * num_nodes_in_graph
+                mol_tokens_pattern = re.compile("(<mol>)+")
+                prompt_text[i] = mol_tokens_pattern.sub(num_nodes_mol, prompt_text[i])
 
         prompt_tokenized = self.tokenizer(
             prompt_text,
