@@ -373,7 +373,7 @@ class Blip2Stage3(pl.LightningModule):
             additional_graphs = None
             is_mol_token = None
 
-        los_attn_score = self.args.log_attn_score
+        log_attn_score = self.args.log_attn_score
         outputs = self.blip2model.generate(
             graphs=(graphs, additional_graphs),
             # input_tokens=prompt_tokens,
@@ -383,10 +383,10 @@ class Blip2Stage3(pl.LightningModule):
             num_beams=self.num_beams,
             max_length=self.gen_max_len,
             min_length=self.min_len,
-            output_attentions=los_attn_score,
+            output_attentions=log_attn_score,
         )
 
-        if los_attn_score:
+        if log_attn_score:
             num_steps = len(outputs.attentions)
             seq_lengths = batch.prompt_input_ids.shape[1]
             all_layers_attn = [
