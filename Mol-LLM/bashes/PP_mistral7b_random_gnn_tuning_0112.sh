@@ -1,6 +1,6 @@
 export TOKENIZERS_PARALLELISM=false;
 file_name='PP_mistral7b_random_gnn_tuning_0112'
-gpus="'4,5'"
+gpus="'4,5,6,7'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
