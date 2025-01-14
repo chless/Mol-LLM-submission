@@ -1,6 +1,6 @@
 export TOKENIZERS_PARALLELISM=false;
 file_name='MT_mistral7b_string_only_12ep_1126'
-gpus="'0,1,2,3,4,5,6,7'"
+gpus="'1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
