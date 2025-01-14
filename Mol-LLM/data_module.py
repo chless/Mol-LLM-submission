@@ -112,7 +112,8 @@ class Stage3DM(LightningDataModule):
 
 def get_dataset(split, tokenizer, args):
     data_path = args.raw_data_root
-    mol_representation = args.mol_representation
+    # TODO: deprecate mol_representation in preprocessed data, substitute mol representation with <INPUT>
+    mol_representation = "string+graph"
     num_query_token = args.num_query_token
     base_model = args.llm_model.replace("/", "-")
 
