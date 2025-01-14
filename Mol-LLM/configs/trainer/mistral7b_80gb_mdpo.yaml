@@ -73,6 +73,7 @@ modality_randomization: true
 mol_string_randomization_ratio: -1
 mdpo: true
 simpo_weight: 0.5
+simpo_modality: string+graph
 beta: 2.0
 gamma_beta_ratio: 1.0
 loss_type: sigmoid
