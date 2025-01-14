@@ -1,5 +1,5 @@
 export TOKENIZERS_PARALLELISM=false;
-file_name='PP_mistral7b_random_mdpo_gnn_freezing_0114'
+file_name='PP_mistral7b_random_mdpo-graph_gnn_freezing_0114'
 gpus="'0,1,2,3'"
 
 python Mol-LLM/stage3.py \
