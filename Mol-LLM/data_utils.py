@@ -466,11 +466,8 @@ class DataCollator(DataCollatorForSeq2Seq):
         max_length=512,
         pad_to_multiple_of=None,
         return_tensors=None,
-        mol_representation="string+graph",
-        modality_randomization=False,
         train=True,
-        mdpo=False,
-        projector_type="qformer",
+        args=None,
     ):
         super().__init__(
             tokenizer,
@@ -481,10 +478,12 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.train = train
         self.max_length = max_length
         self.tokenizer.padding_side = "left"
-        self.mdpo = mdpo
-        self.mol_representation = mol_representation
-        self.modality_randomization = modality_randomization
-        self.projector_type = projector_type
+
+        self.mdpo = args.mdpo
+        self.mol_representation = args.mol_representation
+        self.modality_randomization = args.modality_randomization
+        self.projector_type = args.projector_type
+        self.simpo_modality = args.simpo_modality
         if self.mol_representation in ["string+graph", "graph_only"]:
             self.graph_collator = GraphCollater([], [])
 
@@ -553,7 +552,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                     list_rejected_selfies.append(rejected_selfies)
 
             rejected_prompt_text = prompt_text.copy()
-            if "string" in mol_representation:
+            if "string" in mol_representation and "string" in self.simpo_modality:
                 for i in range(len(rejected_prompt_text)):
                     assert (
                         list_selfies[i] in rejected_prompt_text[i]
@@ -589,31 +588,39 @@ class DataCollator(DataCollatorForSeq2Seq):
             ]
 
             if self.mdpo and self.train:
-                # TODO: implement additional graph for reagent prediction
-                list_rejected_graphs = []
-                list_rejected_additional_graphs = []
+                if "graph" in self.simpo_modality:
+                    # TODO: implement additional graph for reagent prediction
+                    list_rejected_graphs = []
+                    list_rejected_additional_graphs = []
 
-                for i in range(len(list_rejected_selfies)):
-                    if mol_augmentations[i] in ["neg-insertion", "neg-deletion"]:
-                        rejected_selfies = (
-                            list_rejected_selfies[i]
-                            .replace("<SELFIES> ", "")
-                            .replace(" </SELFIES>", "")
-                        )
-                        smiles = sf.decoder(rejected_selfies)
-                        mol = Chem.MolFromSmiles(smiles)
-                        graph = graph2data(mol2graph(mol))
-                    elif mol_augmentations[i] == "neg-substitution":
-                        graph = substitute_atoms_based_on_graph(list_graphs[i])
+                    for i in range(len(list_rejected_selfies)):
+                        if mol_augmentations[i] in ["neg-insertion", "neg-deletion"]:
+                            rejected_selfies = (
+                                list_rejected_selfies[i]
+                                .replace("<SELFIES> ", "")
+                                .replace(" </SELFIES>", "")
+                            )
+                            smiles = sf.decoder(rejected_selfies)
+                            mol = Chem.MolFromSmiles(smiles)
+                            graph = graph2data(mol2graph(mol))
+                        elif mol_augmentations[i] == "neg-substitution":
+                            graph = substitute_atoms_based_on_graph(list_graphs[i])
 
-                    else:
-                        raise ValueError(
-                            "mol_augmentation should be one of ['neg-insertion', 'neg-deletion', 'neg-substitution']"
-                        )
+                        else:
+                            raise ValueError(
+                                "mol_augmentation should be one of ['neg-insertion', 'neg-deletion', 'neg-substitution']"
+                            )
 
-                    list_rejected_graphs.append(graph)
+                        list_rejected_graphs.append(graph)
 
-                list_rejected_additional_graphs = copy.deepcopy(list_rejected_graphs)
+                    list_rejected_additional_graphs = copy.deepcopy(
+                        list_rejected_graphs
+                    )
+                else:
+                    list_rejected_graphs = copy.deepcopy(list_graphs)
+                    list_rejected_additional_graphs = copy.deepcopy(
+                        list_additional_graphs
+                    )
 
                 list_graphs = list_graphs + list_rejected_graphs
                 list_additional_graphs = (

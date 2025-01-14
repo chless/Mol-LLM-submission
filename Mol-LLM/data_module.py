@@ -49,25 +49,19 @@ class Stage3DM(LightningDataModule):
         tokenizer.padding_side = "left"
         self.train_collator = DataCollator(
             tokenizer=tokenizer,
-            # pad_to_multiple_of=8,
             padding=True,
             max_length=args.max_length,
             return_tensors="pt",
-            mol_representation=self.mol_representation,
-            modality_randomization=self.modality_randomization,
-            mdpo=args.mdpo,
-            projector_type=args.projector_type,
+            train=True,
+            args=args,
         )
         self.eval_collator = DataCollator(
             tokenizer=tokenizer,
-            # pad_to_multiple_of=8,
             padding=True,
             max_length=args.max_length,
             return_tensors="pt",
-            mol_representation=self.mol_representation,
-            modality_randomization=self.modality_randomization,
             train=False,
-            projector_type=args.projector_type,
+            args=args,
         )
 
     def train_dataloader(self):
