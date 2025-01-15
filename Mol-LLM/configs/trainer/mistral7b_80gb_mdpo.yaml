@@ -69,11 +69,11 @@ test_on_trainset: false
 
 # multimodal training
 mol_representation: string_only
-modality_randomization: true
+modality_randomization: false
 mol_string_randomization_ratio: -1
 mdpo: true
 simpo_weight: 0.5
-simpo_modality: string+graph
+simpo_modality: graph
 beta: 2.0
 gamma_beta_ratio: 1.0
 loss_type: sigmoid
