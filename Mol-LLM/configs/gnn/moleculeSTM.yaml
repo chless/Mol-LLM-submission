@@ -4,4 +4,4 @@ drop_ratio: 0.0
 tune_gnn: true
 used_gnn_layer: -1
 gnn_jk: last
-graph_encoder_ckpt: "your gnn model path"
+graph_encoder_ckpt: None
