@@ -483,7 +483,9 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.mol_representation = args.mol_representation
         self.modality_randomization = args.modality_randomization
         self.projector_type = args.projector_type
-        self.simpo_modality = args.simpo_modality
+        self.simpo_modality = (
+            args.simpo_modality if hasattr(args, "simpo_modality") else None
+        )
         if self.mol_representation in ["string+graph", "graph_only"]:
             self.graph_collator = GraphCollater([], [])
 
