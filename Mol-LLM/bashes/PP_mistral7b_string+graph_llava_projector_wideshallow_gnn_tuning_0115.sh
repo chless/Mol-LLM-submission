@@ -1,16 +1,15 @@
 export TOKENIZERS_PARALLELISM=false;
-file_name='PP_mistral7b_string+graph_mdpo-graph_gnn_freezing_0114'
-gpus="'1,2,3'"
+file_name='PP_mistral7b_string+graph_llava_projector_wideshallow_gnn_tuning_0115'
+gpus="'2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
 data=pp-super-small-v7.1 \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
-gnn=moleculeSTM_freeze \
-gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
-trainer=mistral7b_80gb_mdpo \
-trainer.simpo_modality=graph \
+gnn=scratch_wide_shallow \
+trainer=mistral7b_80gb \
+trainer.projector_type=mlp \
 trainer.total_batch_size=256 \
 trainer.modality_randomization=false \
 trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
