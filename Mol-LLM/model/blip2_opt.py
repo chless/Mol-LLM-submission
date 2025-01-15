@@ -193,14 +193,9 @@ class Blip2OPT(Blip2Base):
                     self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
                 )
             elif self.args.projector_type == "mlp":
-                # build self.opt_proj with 2 layers
-                self.opt_proj = nn.Sequential(
-                    nn.Linear(gin_hidden_dim, self.llm_model.config.hidden_size),
-                    nn.SiLU(),
-                    nn.Linear(
-                        self.llm_model.config.hidden_size,
-                        self.llm_model.config.hidden_size,
-                    ),
+                # build self.opt_proj with single layers
+                self.opt_proj = nn.Linear(
+                    gin_hidden_dim, self.llm_model.config.hidden_size
                 )
 
     def get_lora_target_modules(self):

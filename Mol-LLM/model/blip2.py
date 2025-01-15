@@ -75,17 +75,21 @@ class Blip2Base(BaseModel):
 
     @classmethod
     def init_graph_encoder(cls, gin_num_layers, gin_hidden_dim, gin_drop_ratio, args):
-        ckpt = torch.load(args.graph_encoder_ckpt, map_location=torch.device("cpu"))
 
         if "MoleculeSTM" in args.graph_encoder_ckpt:
             gnn_class = GNN_MoleculeSTM
-            renamed_state_dict = {}
-            for k, v in ckpt.items():
-                if k.startswith("molecule_node_model."):
-                    renamed_state_dict[k.replace("molecule_node_model.", "")] = v
-            ckpt = renamed_state_dict
+            if ckpt is not None:
+                ckpt = torch.load(
+                    args.graph_encoder_ckpt, map_location=torch.device("cpu")
+                )
+                renamed_state_dict = {}
+                for k, v in ckpt.items():
+                    if k.startswith("molecule_node_model."):
+                        renamed_state_dict[k.replace("molecule_node_model.", "")] = v
+                ckpt = renamed_state_dict
         else:
             gnn_class = GNN
+            ckpt = None
 
         graph_encoder = gnn_class(
             num_layer=gin_num_layers,
@@ -96,13 +100,14 @@ class Blip2Base(BaseModel):
             args=args,
         )
 
-        print(f"load graph encoder from {args.graph_encoder_ckpt}")
-        missing_keys, unexpected_keys = graph_encoder.load_state_dict(
-            ckpt, strict=False
-        )
-        if len(missing_keys) or len(unexpected_keys):
-            print(missing_keys)
-            print(unexpected_keys)
+        if ckpt is not None:
+            print(f"load graph encoder from {args.graph_encoder_ckpt}")
+            missing_keys, unexpected_keys = graph_encoder.load_state_dict(
+                ckpt, strict=False
+            )
+            if len(missing_keys) or len(unexpected_keys):
+                print(missing_keys)
+                print(unexpected_keys)
 
         ln_graph = LayerNorm(gin_hidden_dim)
 
