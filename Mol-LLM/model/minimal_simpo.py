@@ -168,9 +168,10 @@ def minimal_get_batch_loss_metrics(
     loss_simpo = loss_simpo.mean()
 
     chosen_instance_loss = instance_loss[: chosen_labels.size(0)]
+    sft_loss_mask = chosen_loss_mask.sum(-1) > 0
     sft_loss = (
         chosen_instance_loss * chosen_loss_mask.sum(-1)
-    ).sum() / chosen_loss_mask.sum()
+    )[sft_loss_mask].sum() / chosen_loss_mask.sum()
 
     if simpo_weight > 0.0:
         loss = sft_loss + simpo_weight * loss_simpo
