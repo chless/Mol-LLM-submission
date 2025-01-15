@@ -26,7 +26,6 @@ class Stage3DM(LightningDataModule):
         self.batch_size = args.batch_size
         self.max_length = args.max_length
         self.inference_batch_size = args.inference_batch_size
-        self.inference_max_length = args.inference_max_length
 
         self.mol_representation = args.mol_representation
         self.modality_randomization = args.modality_randomization
