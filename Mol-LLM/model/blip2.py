@@ -78,7 +78,7 @@ class Blip2Base(BaseModel):
 
         if "MoleculeSTM" in args.graph_encoder_ckpt:
             gnn_class = GNN_MoleculeSTM
-            if ckpt is not None:
+            if args.graph_encoder_ckpt is not None:
                 ckpt = torch.load(
                     args.graph_encoder_ckpt, map_location=torch.device("cpu")
                 )
