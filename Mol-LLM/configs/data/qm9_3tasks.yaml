@@ -1,0 +1,7 @@
+raw_data_root: 'your data path'
+data_tag: "qm9_3tasks"
+
+tasks:
+  - qm9_homo
+  - qm9_lumo
+  - qm9_homo_lumo_gap
