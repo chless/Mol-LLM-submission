@@ -1847,15 +1847,17 @@ if __name__ == "__main__":
                 dataset = datasets.Dataset.from_list(list_dict_data)
 
                 count = 0
-                for i in range(1000):
-                    ex = dataset[10]["input_mol_string"]
+                iter_bar = tqdm(range(len(dataset)))
+                for i in iter_bar:
+                    ex = dataset[i]["input_mol_string"]
                     exsmiles = sf.decoder(
                         ex.replace("<SELFIES>", "").replace("</SELFIES>", "")
                     )
                     exmol = Chem.MolFromSmiles(exsmiles)
                     exsmiles = Chem.MolToSmiles(exmol)
-                    if exsmiles in qm9_molinst_train_smiles:
+                    if exsmiles in qm9_molinst_test_smiles:
                         count += 1
+                    iter_bar.set_description(f"count: {count}")
                     # print(exsmiles in qm9_molinst_train_smiles)
 
                 train_dataset = dataset.filter(
@@ -1903,6 +1905,8 @@ if __name__ == "__main__":
 
     trainsets = []
     testsets = []
+    trainsets_dict = {}
+    testsets_dict = {}
 
     for task_subtask_pair in task_subtask_pairs:
         task, subtask_idx = task_subtask_pair
@@ -1910,10 +1914,12 @@ if __name__ == "__main__":
             f"{raw_data_root}/{task}_subtask-{subtask_idx}_train"
         )
         trainsets.append(trainset)
+        trainsets_dict[task_subtask_pair] = trainset
         testset = datasets.Dataset.load_from_disk(
             f"{raw_data_root}/{task}_subtask-{subtask_idx}_test"
         )
         testsets.append(testset)
+        testsets_dict[task_subtask_pair] = testset
 
         print(f"{task}_{subtask_idx} loaded")
 
