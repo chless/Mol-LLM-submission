@@ -21,6 +21,7 @@ import instructions_smol
 import model.added_tokens as added_tokens
 from pytorch_lightning import LightningDataModule
 import pandas as pd
+import datasets
 
 # token added to implement a custom sequence tokenization. This token is added at
 # corpus cleaning step and removed in pretokenization. The digits are added to increase the chance
@@ -1674,12 +1675,6 @@ if __name__ == "__main__":
     if not os.path.exists(raw_data_root):
         os.makedirs(raw_data_root)
 
-    raw_dir = os.path.join(raw_data_root, "raw")
-    if not os.path.exists(raw_dir):
-        os.makedirs(raw_dir)
-
-    processed_dir = os.path.join(raw_data_root, "processed")
-
     start, end = added_tokens.SELFIES
     task_subtask_dict, task_subtask_pairs = get_task_subtask_info(
         args.target_benchmarks
@@ -1689,35 +1684,60 @@ if __name__ == "__main__":
     downloading_task_subtask_pairs = []
     for task_subtask_pair in task_subtask_pairs:
         task, subtask_idx = task_subtask_pair
-        if (
-            os.path.exists(f"{raw_dir}/{task}_subtask-{subtask_idx}_train.pth")
-            and os.path.exists(f"{raw_dir}/{task}_subtask-{subtask_idx}_val.pth")
-            and os.path.exists(f"{raw_dir}/{task}_subtask-{subtask_idx}_test.pth")
-        ):
+        if os.path.exists(
+            f"{raw_data_root}/{task}_subtask-{subtask_idx}_train"
+        ) and os.path.exists(f"{raw_data_root}/{task}_subtask-{subtask_idx}_test"):
             print(f"{task}_{subtask_idx} already exists")
         else:
             downloading_task_subtask_pairs.append(task_subtask_pair)
 
-    multi_task_datasets = {}
+    if downloading_task_subtask_pairs:
+        qm9_molinst_trainset = datasets.Dataset.load_from_disk(
+            f"{raw_data_root}/qm9_homo_lumo_gap_subtask-0_train"
+        )
+        qm9_molinst_train_input_mol_strings = [
+            i["input_mol_string"] for i in qm9_molinst_trainset
+        ]
+        qm9_molinst_train_input_mol = [
+            Chem.MolFromSmiles(
+                sf.decoder(i.replace("<SELFIES>", "").replace("</SELFIES>", ""))
+            )
+            for i in qm9_molinst_train_input_mol_strings
+        ]
+        qm9_molinst_train_smiles = [
+            Chem.MolToSmiles(i) for i in qm9_molinst_train_input_mol
+        ]
+
+        qm9_molinst_testset = datasets.Dataset.load_from_disk(
+            f"{raw_data_root}/qm9_homo_lumo_gap_subtask-0_test"
+        )
+        qm9_molinst_test_input_mol_strings = [
+            i["input_mol_string"] for i in qm9_molinst_testset
+        ]
+        qm9_molinst_test_input_mol = [
+            Chem.MolFromSmiles(
+                sf.decoder(i.replace("<SELFIES>", "").replace("</SELFIES>", ""))
+            )
+            for i in qm9_molinst_test_input_mol_strings
+        ]
+        qm9_molinst_test_smiles = [
+            Chem.MolToSmiles(i) for i in qm9_molinst_test_input_mol
+        ]
 
     for task_subtask_pair in tqdm(
         downloading_task_subtask_pairs, desc="Downloading task_subtask_pairs"
     ):
         task_name = task_subtask_pair[0]
-        if task_name not in multi_task_datasets:
-            new_dataset = get_dataset(task_name=task_name, raw_data_root=raw_data_root)
-            multi_task_datasets[task_name] = new_dataset
-        else:
-            pass
+        new_dataset = get_dataset(task_name=task_name, raw_data_root=raw_data_root)
 
-        subtasks = multi_task_datasets[task_name][0]
+        subtasks = new_dataset[0]
         subtask_idx = task_subtask_pair[1]
         if subtask_idx == "multi_label_classification":
             task_subtask_pair = f"{task_name}/{subtask_idx}"
         else:
             task_subtask_pair = f"{task_name}/{subtasks[subtask_idx]}"
 
-        data_split = multi_task_datasets[task_name][1:]  # train_set, val_set, test_set
+        data_split = new_dataset[task_name][1:]  # train_set, val_set, test_set
         if "smol" in task_name:
             dataset = SMolInstructDataset
         elif task_name in [
@@ -1757,14 +1777,16 @@ if __name__ == "__main__":
             task_subtask_pair=task_subtask_pair,
             subtask_idx=subtask_idx,
         )
+        dataset_splits = {
+            "val": valid_dataset,
+            "test": test_dataset,
+            "train": train_dataset,
+        }
 
         if task_name in "qm9_additional_label":
             # concat datasets using torch ConcatDataset
             concat_dataset = ConcatDataset([valid_dataset, test_dataset, train_dataset])
-            torch.save(
-                concat_dataset,
-                f"{raw_dir}/{task_name}_subtask-{subtask_idx}_train.pth",
-            )
+
             # convert the dataset to json
             list_dict_data = []
             for i in range(len(concat_dataset)):
@@ -1781,25 +1803,123 @@ if __name__ == "__main__":
 
                 list_dict_data.append(dict_data)
 
-            import json
+            dataset = datasets.Dataset.from_list(list_dict_data)
 
-            with open(
-                f"{raw_dir}/{task_name}_subtask-{subtask_idx}_train.json", "w"
-            ) as f:
-                json.dump(list_dict_data, f)
+            train_dataset = dataset.filter(
+                lambda x: x["input_mol_string"] in qm9_molinst_train_input_mol_strings
+            )
+            test_dataset = dataset.filter(
+                lambda x: x["input_mol_string"] in qm9_molinst_test_input_mol_strings
+            )
+            valid_dataset = test_dataset
+
+            dataset_splits = {
+                "val": valid_dataset,
+                "test": test_dataset,
+                "train": train_dataset,
+            }
+            for split in dataset_splits.keys():
+                dataset.save_to_disk(
+                    f"{raw_data_root}/{task_name}_subtask-{subtask_idx}_{split}"
+                )
+
+            # <DEBUG>
+            iter_bar = tqdm([0, 1, 5, 6, 7, 9, 10, 11])
+            for subtask_idx in iter_bar:
+                source_dataset = torch.load(
+                    f"{raw_data_root}/raw/{task_name}_subtask-{subtask_idx}_train.pth"
+                )
+
+                list_dict_data = []
+                for i in range(len(source_dataset)):
+                    data = source_dataset[i]
+                    dict_data = {
+                        "x": data[0].x,
+                        "edge_index": data[0].edge_index,
+                        "edge_attr": data[0].edge_attr,
+                        "label": data[1],
+                        "input_mol_string": data[2],
+                        "task_subtask_pair": data[3],
+                        "instruction": data[4].item(),
+                    }
+
+                    list_dict_data.append(dict_data)
+                dataset = datasets.Dataset.from_list(list_dict_data)
+
+                count = 0
+                for i in range(1000):
+                    ex = dataset[10]["input_mol_string"]
+                    exsmiles = sf.decoder(
+                        ex.replace("<SELFIES>", "").replace("</SELFIES>", "")
+                    )
+                    exmol = Chem.MolFromSmiles(exsmiles)
+                    exsmiles = Chem.MolToSmiles(exmol)
+                    if exsmiles in qm9_molinst_train_smiles:
+                        count += 1
+                    # print(exsmiles in qm9_molinst_train_smiles)
+
+                train_dataset = dataset.filter(
+                    lambda x: x["input_mol_string"] in qm9_molinst_train_input_mol
+                )
+                test_dataset = dataset.filter(
+                    lambda x: x["input_mol_string"] in qm9_molinst_test_input_mol
+                )
+                valid_dataset = test_dataset
+
+                dataset_splits = {
+                    "val": valid_dataset,
+                    "test": test_dataset,
+                    # "train": train_dataset,
+                }
+                for split in dataset_splits.keys():
+                    dataset.save_to_disk(
+                        f"{raw_data_root}/{task_name}_subtask-{subtask_idx}_{split}"
+                    )
+            # </DEBUG>
 
         else:
-            torch.save(
-                valid_dataset,
-                f"{raw_dir}/{task_name}_subtask-{subtask_idx}_val.pth",
+            for split in dataset_splits.keys():
+                dataset = dataset_splits[split]
+                list_dict_data = []
+                for i in range(len(dataset)):
+                    data = dataset[i]
+                    dict_data = {
+                        "x": data[0].x,
+                        "edge_index": data[0].edge_index,
+                        "edge_attr": data[0].edge_attr,
+                        "label": data[1],
+                        "input_mol_string": data[2],
+                        "task_subtask_pair": data[3],
+                        "instruction": data[4].item(),
+                    }
+
+                    list_dict_data.append(dict_data)
+
+            dataset = datasets.Dataset.from_list(list_dict_data)
+            # save datset
+            dataset.save_to_disk(
+                f"{raw_data_root}/{task_name}_subtask-{subtask_idx}_{split}"
             )
-            torch.save(
-                test_dataset,
-                f"{raw_dir}/{task_name}_subtask-{subtask_idx}_test.pth",
-            )
-            torch.save(
-                train_dataset,
-                f"{raw_dir}/{task_name}_subtask-{subtask_idx}_train.pth",
-            )
+
+    trainsets = []
+    testsets = []
+
+    for task_subtask_pair in task_subtask_pairs:
+        task, subtask_idx = task_subtask_pair
+        trainset = datasets.Dataset.load_from_disk(
+            f"{raw_data_root}/{task}_subtask-{subtask_idx}_train"
+        )
+        trainsets.append(trainset)
+        testset = datasets.Dataset.load_from_disk(
+            f"{raw_data_root}/{task}_subtask-{subtask_idx}_test"
+        )
+        testsets.append(testset)
+
+        print(f"{task}_{subtask_idx} loaded")
+
+    concat_trainset = datasets.concatenate_datasets(trainsets)
+    concat_testset = datasets.concatenate_datasets(testsets)
+    concat_trainset.save_to_disk(f"{raw_data_root}/qn9_additional_label_trainset")
+    concat_testset.save_to_disk(f"{raw_data_root}/qn9_additional_label_testset")
 
     a = 17
