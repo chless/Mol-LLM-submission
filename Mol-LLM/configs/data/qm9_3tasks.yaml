@@ -1,5 +1,5 @@
 raw_data_root: 'your data path'
-data_tag: "qm9_3tasks"
+data_tag: "qm9_3tasks_offline"
 
 tasks:
   - qm9_homo
