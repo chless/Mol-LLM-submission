@@ -1,12 +1,12 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='PP_mistral7b_string+graph_mdpo_gnn_tuning_0117'
-gpus="'0,1,2,3,4,5,6,7'"
+file_name='qm9_4tasks_mistral7b_string+graph_mdpo_gnn_tuning_0117'
+gpus="'0'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
-data=qm9_3tasks \
+data=qm9_4tasks \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=moleculeSTM \
 gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
