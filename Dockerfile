@@ -25,7 +25,7 @@ RUN echo "set-option -g history-limit 10000" >> .tmux.conf.local
 RUN useradd -ms /bin/zsh github-action
 
 RUN apt-get update \
-    && apt-get install -y clang-format clang-tidy swig qtdeclarative5-dev \
+    && apt-get install -y clang-format clang-tidy swig qtdeclarative5-dev htop htop \
     && rm -rf /var/lib/apt/lists/*
 
 # Install conda
