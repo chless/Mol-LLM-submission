@@ -1691,7 +1691,7 @@ if __name__ == "__main__":
         else:
             downloading_task_subtask_pairs.append(task_subtask_pair)
 
-    if downloading_task_subtask_pairs:
+    if downloading_task_subtask_pairs and False:
         qm9_molinst_trainset = datasets.Dataset.load_from_disk(
             f"{raw_data_root}/qm9_homo_lumo_gap_subtask-0_train"
         )
@@ -1737,7 +1737,7 @@ if __name__ == "__main__":
         else:
             task_subtask_pair = f"{task_name}/{subtasks[subtask_idx]}"
 
-        data_split = new_dataset[task_name][1:]  # train_set, val_set, test_set
+        data_split = new_dataset[1:]  # train_set, val_set, test_set
         if "smol" in task_name:
             dataset = SMolInstructDataset
         elif task_name in [
@@ -1782,7 +1782,7 @@ if __name__ == "__main__":
             "test": test_dataset,
             "train": train_dataset,
         }
-        if task_name in "qm9_additional_label":
+        if False and task_name in "qm9_additional_label":
             # concat datasets using torch ConcatDataset
             concat_dataset = ConcatDataset([valid_dataset, test_dataset, train_dataset])
 
@@ -1898,35 +1898,36 @@ if __name__ == "__main__":
 
                     list_dict_data.append(dict_data)
 
-            dataset = datasets.Dataset.from_list(list_dict_data)
-            # save datset
-            dataset.save_to_disk(
-                f"{raw_data_root}/{task_name}_subtask-{subtask_idx}_{split}"
+                dataset = datasets.Dataset.from_list(list_dict_data)
+                # save datset
+                dataset.save_to_disk(
+                    f"{raw_data_root}/{task_name}_subtask-{subtask_idx}_{split}"
+                )
+
+    if False:
+        trainsets = []
+        testsets = []
+        trainsets_dict = {}
+        testsets_dict = {}
+
+        for task_subtask_pair in task_subtask_pairs:
+            task, subtask_idx = task_subtask_pair
+            trainset = datasets.Dataset.load_from_disk(
+                f"{raw_data_root}/{task}_subtask-{subtask_idx}_train"
             )
+            trainsets.append(trainset)
+            trainsets_dict[task_subtask_pair] = trainset
+            testset = datasets.Dataset.load_from_disk(
+                f"{raw_data_root}/{task}_subtask-{subtask_idx}_test"
+            )
+            testsets.append(testset)
+            testsets_dict[task_subtask_pair] = testset
 
-    trainsets = []
-    testsets = []
-    trainsets_dict = {}
-    testsets_dict = {}
+            print(f"{task}_{subtask_idx} loaded")
 
-    for task_subtask_pair in task_subtask_pairs:
-        task, subtask_idx = task_subtask_pair
-        trainset = datasets.Dataset.load_from_disk(
-            f"{raw_data_root}/{task}_subtask-{subtask_idx}_train"
-        )
-        trainsets.append(trainset)
-        trainsets_dict[task_subtask_pair] = trainset
-        testset = datasets.Dataset.load_from_disk(
-            f"{raw_data_root}/{task}_subtask-{subtask_idx}_test"
-        )
-        testsets.append(testset)
-        testsets_dict[task_subtask_pair] = testset
-
-        print(f"{task}_{subtask_idx} loaded")
-
-    concat_trainset = datasets.concatenate_datasets(trainsets)
-    concat_testset = datasets.concatenate_datasets(testsets)
-    concat_trainset.save_to_disk(f"{raw_data_root}/qn9_additional_label_trainset")
-    concat_testset.save_to_disk(f"{raw_data_root}/qn9_additional_label_testset")
+        concat_trainset = datasets.concatenate_datasets(trainsets)
+        concat_testset = datasets.concatenate_datasets(testsets)
+        concat_trainset.save_to_disk(f"{raw_data_root}/qn9_additional_label_trainset")
+        concat_testset.save_to_disk(f"{raw_data_root}/qn9_additional_label_testset")
 
     a = 17
