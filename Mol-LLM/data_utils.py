@@ -533,7 +533,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             ).tolist()
 
             list_selfies = [
-                i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
+                i.replace("<SELFIES>", "").replace("</SELFIES>", "").replace(" ", "")
                 for i in input_mol_strings
             ]
 
@@ -544,8 +544,8 @@ class DataCollator(DataCollatorForSeq2Seq):
                 if mol_augmentations[i] in ["neg-insertion", "neg-deletion"]:
                     list_rejected_selfies.append(
                         batch[i]["rejected_input_mol_string"]
-                        .replace("<SELFIES> ", "")
-                        .replace(" </SELFIES>", "")
+                        .replace("<SELFIES>", "")
+                        .replace("</SELFIES>", "").replace(" ", "")
                     )
                 else:
                     rejected_selfies = substitute_atoms_based_on_selfies(
@@ -599,8 +599,8 @@ class DataCollator(DataCollatorForSeq2Seq):
                         if mol_augmentations[i] in ["neg-insertion", "neg-deletion"]:
                             rejected_selfies = (
                                 list_rejected_selfies[i]
-                                .replace("<SELFIES> ", "")
-                                .replace(" </SELFIES>", "")
+                                .replace("<SELFIES>", "")
+                                .replace("</SELFIES>", "").replace(" ", "")
                             )
                             smiles = sf.decoder(rejected_selfies)
                             mol = Chem.MolFromSmiles(smiles)

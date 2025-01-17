@@ -1653,7 +1653,7 @@ def get_dataset(task_name, raw_data_root):
 
 
 if __name__ == "__main__":
-    args_path = "Mol-LLM/configs/download/qm9.yaml"
+    args_path = "Mol-LLM/configs/download/qm9_4tasks.yaml"
     # read config file
     with open(args_path, "r") as f:
         args = yaml.safe_load(f)
@@ -1668,9 +1668,7 @@ if __name__ == "__main__":
 
     args = from_dict(args)
 
-    split = "test"
-    mode = "test"
-    raw_data_root = "/data/data/Mol-LLM-qm9"
+    raw_data_root = args.raw_data_root
 
     if not os.path.exists(raw_data_root):
         os.makedirs(raw_data_root)
@@ -1904,30 +1902,118 @@ if __name__ == "__main__":
                     f"{raw_data_root}/{task_name}_subtask-{subtask_idx}_{split}"
                 )
 
-    if False:
-        trainsets = []
-        testsets = []
-        trainsets_dict = {}
-        testsets_dict = {}
 
-        for task_subtask_pair in task_subtask_pairs:
-            task, subtask_idx = task_subtask_pair
-            trainset = datasets.Dataset.load_from_disk(
-                f"{raw_data_root}/{task}_subtask-{subtask_idx}_train"
-            )
-            trainsets.append(trainset)
-            trainsets_dict[task_subtask_pair] = trainset
-            testset = datasets.Dataset.load_from_disk(
-                f"{raw_data_root}/{task}_subtask-{subtask_idx}_test"
-            )
-            testsets.append(testset)
-            testsets_dict[task_subtask_pair] = testset
+    trainsets = []
+    testsets = []
+    trainsets_dict = {}
+    testsets_dict = {}
 
-            print(f"{task}_{subtask_idx} loaded")
+    for task_subtask_pair in task_subtask_pairs:
+        task, subtask_idx = task_subtask_pair
+        trainset = datasets.Dataset.load_from_disk(
+            f"{raw_data_root}/{task}_subtask-{subtask_idx}_train"
+        )
+        trainsets.append(trainset)
+        trainsets_dict[task_subtask_pair] = trainset
+        testset = datasets.Dataset.load_from_disk(
+            f"{raw_data_root}/{task}_subtask-{subtask_idx}_test"
+        )
+        testsets.append(testset)
+        testsets_dict[task_subtask_pair] = testset
 
-        concat_trainset = datasets.concatenate_datasets(trainsets)
-        concat_testset = datasets.concatenate_datasets(testsets)
-        concat_trainset.save_to_disk(f"{raw_data_root}/qn9_additional_label_trainset")
-        concat_testset.save_to_disk(f"{raw_data_root}/qn9_additional_label_testset")
+        print(f"{task}_{subtask_idx} loaded")
+
+    concat_trainset = datasets.concatenate_datasets(trainsets)
+    concat_testset = datasets.concatenate_datasets(testsets)
+        
+    from transformers import AutoTokenizer
+    system_prompt = "You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation."
+
+
+    def prepare_data_instance(
+            data_instance,
+            system_prompt,
+            mol_token="<mol>",
+            num_query_tokens=32,
+    ):
+        input_mol_string = data_instance["input_mol_string"]
+        input_mol_string = input_mol_string.replace("<SELFIES>", "<SELFIES> ").replace("</SELFIES>", " </SELFIES>")
+        input_prompt = data_instance["instruction"]
+
+
+        graph_sequence = "<GRAPH>" + mol_token * num_query_tokens + "</GRAPH>"
+        input_mol_string += graph_sequence
+        assert "<INPUT>" in input_prompt, f"llm_prompt should contain <INPUT_MOL>"
+
+        input_prompt = input_prompt.replace("<INPUT>", input_mol_string)
+
+        formatted_prompt_text = "<s>[INST] " + system_prompt + " \n\n" + input_prompt + " [INST]"
+        formatted_target_text = data_instance["label"] + " </s>"
+
+        convert_dict = {
+            'qm9_additional_label/mu' : "qm9_dipole_moment",
+            'qm9_additional_label/alpha' : "qm9_isotropic_polarizability",
+            'qm9_additional_label/r2' : "qm9_electronic_spatial_extent",
+            'qm9_additional_label/zpve' : "qm9_zero_point_vibrational_energy",
+
+        }
+        task = convert_dict[data_instance["task_subtask_pair"]]
+
+        data ={
+            "task": task,
+            "x": data_instance["x"],
+            "edge_index": data_instance["edge_index"],
+            "edge_attr": data_instance["edge_attr"],
+            "additional_x": data_instance["x"],
+            "additional_edge_index": data_instance["edge_index"],
+            "additional_edge_attr": data_instance["edge_attr"],
+            "prompt_text": formatted_prompt_text,
+            "target_text": formatted_target_text,
+        }
+        return data
+
+    
+    data_instance = concat_testset[0]
+    a = prepare_data_instance(
+        data_instance,
+        system_prompt=system_prompt,
+    )
+    remove_keys = set(concat_testset.column_names)
+    remove_keys -= {
+        "task",
+        "x",
+        "edge_index",
+        "edge_attr",
+        "additional_x",
+        "additional_edge_index",
+        "additional_edge_attr",
+    }
+    mapped_trainset = concat_trainset.map(
+        lambda x: prepare_data_instance(
+            x, system_prompt=system_prompt,
+        ),
+            # use 36 processes
+            num_proc=36
+    )
+    mapped_testset = concat_testset.map(
+        lambda x: prepare_data_instance(
+            x, system_prompt=system_prompt,
+        ),
+            # use 36 processes
+            num_proc=4
+    )
+    llm_model = "mistralai/Mistral-7B-Instruct-v0.3"
+    mol_representation = "string+graph"
+    num_query_token = 32
+    base_model = llm_model.replace("/", "-")
+    tags = [base_model, mol_representation]
+    if "graph" in mol_representation:
+        tags += [f"q{num_query_token}"]
+    
+    processed_file_name = "_".join(tags)
+
+    mapped_trainset.save_to_disk(f"{raw_data_root}/{processed_file_name}_train_qm9_4tasks")
+    mapped_testset.save_to_disk(f"{raw_data_root}/{processed_file_name}_test_qm9_4tasks")
+    mapped_testset.save_to_disk(f"{raw_data_root}/{processed_file_name}_validation_qm9_4tasks")
 
     a = 17

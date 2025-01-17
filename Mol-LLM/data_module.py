@@ -31,12 +31,12 @@ class Stage3DM(LightningDataModule):
         self.modality_randomization = args.modality_randomization
         self.tokenizer = tokenizer
 
-        self.test_dataset = get_dataset("test", tokenizer, args)
-        self.val_dataset = get_dataset("validation", tokenizer, args)
         if args.debug:
             self.train_dataset = get_dataset("test", tokenizer, args)
         else:
             self.train_dataset = get_dataset("train", tokenizer, args)
+        self.test_dataset = get_dataset("test", tokenizer, args)
+        self.val_dataset = get_dataset("validation", tokenizer, args)
 
         builder = load_dataset_builder(
             os.path.join(args.raw_data_root, "InstructGraph.py"),
