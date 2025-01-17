@@ -1705,7 +1705,7 @@ if __name__ == "__main__":
             for i in qm9_molinst_train_input_mol_strings
         ]
         qm9_molinst_train_smiles = [
-            Chem.MolToSmiles(i) for i in qm9_molinst_train_input_mol
+            Chem.MolToSmiles(i, canonical=True) for i in qm9_molinst_train_input_mol
         ]
 
         qm9_molinst_testset = datasets.Dataset.load_from_disk(
@@ -1721,7 +1721,7 @@ if __name__ == "__main__":
             for i in qm9_molinst_test_input_mol_strings
         ]
         qm9_molinst_test_smiles = [
-            Chem.MolToSmiles(i) for i in qm9_molinst_test_input_mol
+            Chem.MolToSmiles(i, canonical=True) for i in qm9_molinst_test_input_mol
         ]
 
     for task_subtask_pair in tqdm(
@@ -1782,7 +1782,6 @@ if __name__ == "__main__":
             "test": test_dataset,
             "train": train_dataset,
         }
-
         if task_name in "qm9_additional_label":
             # concat datasets using torch ConcatDataset
             concat_dataset = ConcatDataset([valid_dataset, test_dataset, train_dataset])
@@ -1848,16 +1847,18 @@ if __name__ == "__main__":
 
                 count = 0
                 iter_bar = tqdm(range(len(dataset)))
+                random.shuffle(qm9_molinst_train_smiles)
                 for i in iter_bar:
                     ex = dataset[i]["input_mol_string"]
                     exsmiles = sf.decoder(
                         ex.replace("<SELFIES>", "").replace("</SELFIES>", "")
                     )
                     exmol = Chem.MolFromSmiles(exsmiles)
-                    exsmiles = Chem.MolToSmiles(exmol)
-                    if exsmiles in qm9_molinst_test_smiles:
+                    exsmiles = Chem.MolToSmiles(exmol, canonical=True)
+                    if exsmiles in qm9_molinst_train_smiles:
                         count += 1
                     iter_bar.set_description(f"count: {count}")
+                    del ex, exsmiles, exmol
                     # print(exsmiles in qm9_molinst_train_smiles)
 
                 train_dataset = dataset.filter(
@@ -1877,6 +1878,7 @@ if __name__ == "__main__":
                     dataset.save_to_disk(
                         f"{raw_data_root}/{task_name}_subtask-{subtask_idx}_{split}"
                     )
+            '''
             # </DEBUG>
 
         else:
