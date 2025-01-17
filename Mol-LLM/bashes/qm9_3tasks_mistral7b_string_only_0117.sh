@@ -1,6 +1,6 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='qm9_tasks_mistral7b_string_only_0117'
+file_name='qm9_3tasks_mistral7b_string_only_0117'
 gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
@@ -16,8 +16,9 @@ trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string_only \
 trainer.total_batch_size=256 \
-trainer.max_epochs=5 \
+trainer.max_epochs=10 \
 trainer.val_check_interval=0.25 \
 trainer.skip_sanity_check=true \
 trainer.batch_size=6 \
-trainer.inference_batch_size=12
+trainer.inference_batch_size=12 \
+ckpt_path=/data/all_checkpoints/qm9_3tasks_mistral7b_string_only_0117/last.ckpt
