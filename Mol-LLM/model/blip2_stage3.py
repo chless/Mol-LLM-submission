@@ -566,6 +566,11 @@ class Blip2Stage3(pl.LightningModule):
             if instance_losses[i] != instance_losses[i]:
                 continue
             task_subtask_pair = task_subtask_pairs[i]
+            if task_subtask_pair not in self.eval_dataset_losses:
+                self.eval_dataset_losses[task_subtask_pair] = {
+                    "avg_loss": 0.0,
+                    "num_instances": 0,
+                }
             # calculate average loss
             self.eval_dataset_losses[task_subtask_pair][
                 "avg_loss"
