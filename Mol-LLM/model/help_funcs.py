@@ -186,7 +186,7 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
             failure_idxs.append(i)
             prediction_mol = None
             print(
-                f"Failed to convert smiles to mol, target : {target}, prediction : {prediction}"
+                f"When evaluating, failed to convert selfies to mol, target : {target}, prediction : {prediction}"
             )
             continue
 
