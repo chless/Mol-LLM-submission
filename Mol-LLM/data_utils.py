@@ -628,8 +628,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.tokenizer.padding_side = "left"
         features = self.tokenizer.pad(
             {"input_ids": full_input_ids, "attention_mask": full_attention_mask},
-            padding="max_length",
-            max_length=self.max_length,
+            padding=self.padding,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors=return_tensors,
         )
@@ -640,7 +639,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                     "input_ids": [p for p in prompt_tokenized["input_ids"]],
                     "attention_mask": [p for p in prompt_tokenized["attention_mask"]],
                 },
-                padding=True,
+                padding=self.padding ,
                 pad_to_multiple_of=self.pad_to_multiple_of,
                 return_tensors=return_tensors,
             )
@@ -655,7 +654,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                 {
                     "input_ids": [t for t in target_tokenized["input_ids"]],
                 },
-                padding=True,
+                padding=self.padding ,
                 pad_to_multiple_of=self.pad_to_multiple_of,
                 return_tensors=return_tensors,
             )
