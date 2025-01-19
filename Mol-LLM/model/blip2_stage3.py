@@ -412,7 +412,6 @@ class Blip2Stage3(pl.LightningModule):
             instance_loss = instance_loss[:chosen_len]
 
             tasks = [id2task(task_id.item()) for task_id in batch.tasks][:chosen_len]
-            attentions = gen_outputs.attentions[:chosen_len]
             predictions = gen_outputs.predictions[:chosen_len]
             prompt_input_ids = batch.prompt_input_ids[:chosen_len]
             input_ids = batch.input_ids[:chosen_len]
@@ -424,7 +423,11 @@ class Blip2Stage3(pl.LightningModule):
             input_ids = batch.input_ids
 
         if log_attn_score:
-            self.log_attn_score(prompt_input_ids=prompt_input_ids, mode=mode, is_mol_token=is_mol_token, attentions=attentions)
+            self.log_attn_score(
+                prompt_input_ids=prompt_input_ids, 
+                mode=mode, 
+                is_mol_token=is_mol_token, 
+                attentions=attentions)
 
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             input_ids, skip_special_tokens=False
@@ -490,6 +493,8 @@ class Blip2Stage3(pl.LightningModule):
 
             self.eval_dataset_losses[task_subtask_pair]["num_instances"] += 1
 
+        del target_ids, graphs, additional_graphs, is_mol_token, logits, labels, instance_loss, loss_dict, loss
+        del attentions, predictions, prompt_input_ids, input_ids, tasks, probs, prompts, targets
         return loss
 
     def log_attn_score(self, prompt_input_ids, mode, is_mol_token, attentions):
