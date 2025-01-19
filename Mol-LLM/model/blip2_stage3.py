@@ -494,8 +494,6 @@ class Blip2Stage3(pl.LightningModule):
 
             self.eval_dataset_losses[task_subtask_pair]["num_instances"] += 1
 
-        del target_ids, graphs, additional_graphs, is_mol_token, logits, labels, instance_loss, loss_dict, loss
-        del attentions, predictions, prompt_input_ids, input_ids, tasks, probs, prompts, targets
         return loss
 
     def log_attn_score(self, prompt_input_ids, mode, is_mol_token, attentions):
