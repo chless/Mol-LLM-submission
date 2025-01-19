@@ -26,10 +26,6 @@ class Stage3DM(LightningDataModule):
         self.max_length = args.max_length
         self.batch_size = args.batch_size
         self.inference_batch_size = args.inference_batch_size
-        if self.args.train_simpo:
-            self.batch_size //= 2
-        if self.args.eval_simpo:
-            self.inference_batch_size //= 2
 
         self.mol_representation = args.mol_representation
         self.tokenizer = tokenizer
