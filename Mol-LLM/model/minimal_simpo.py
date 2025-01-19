@@ -127,8 +127,7 @@ def get_batch_logps(
 def minimal_get_batch_loss_metrics(
     logits: torch.FloatTensor,
     labels: torch.LongTensor,
-    instance_loss: torch.FloatTensor,
-    is_chosen_rejected_different: torch.BoolTensor,
+    instance_loss: torch.FloatTensor = None,
     simpo_weight: float = 1.0,
     beta: float = 1.0,
     gamma_beta_ratio: float = 0.0,
@@ -162,7 +161,7 @@ def minimal_get_batch_loss_metrics(
     simpo_loss_mask = torch.where(
         (rejected_loss_mask.sum(-1) > 0) & (chosen_loss_mask.sum(-1) > 0), True, False
     )
-    simpo_loss_mask = simpo_loss_mask & is_chosen_rejected_different
+    simpo_loss_mask = simpo_loss_mask
 
     loss_simpo = losses_simpo[simpo_loss_mask]
     loss_simpo = loss_simpo.mean()
