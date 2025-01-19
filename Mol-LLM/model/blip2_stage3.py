@@ -411,6 +411,7 @@ class Blip2Stage3(pl.LightningModule):
             instance_loss = instance_loss[:chosen_len]
 
             tasks = [id2task(task_id.item()) for task_id in batch.tasks][:chosen_len]
+            attentions = gen_outputs.attentions
             predictions = gen_outputs.predictions[:chosen_len]
             prompt_input_ids = batch.prompt_input_ids[:chosen_len]
             input_ids = batch.input_ids[:chosen_len]
@@ -426,7 +427,8 @@ class Blip2Stage3(pl.LightningModule):
                 prompt_input_ids=prompt_input_ids, 
                 mode=mode, 
                 is_mol_token=is_mol_token, 
-                attentions=attentions)
+                attentions=attentions,
+                )
 
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             input_ids, skip_special_tokens=False
