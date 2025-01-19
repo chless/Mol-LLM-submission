@@ -588,6 +588,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                 mol_tokens_pattern = re.compile("(<mol>)+")
                 prompt_text[i] = mol_tokens_pattern.sub(num_nodes_mol, prompt_text[i])
 
+        self.tokenizer.padding_side = "left"
         prompt_tokenized = self.tokenizer(
             prompt_text,
             truncation=True,
@@ -616,7 +617,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             for p, t in zip(
                 prompt_tokenized["attention_mask"], target_tokenized["attention_mask"]
             )
-        ]
+            ]
 
         prompt_length = [len(p) for p in prompt_tokenized["input_ids"]]
         full_input_ids = [f_ids[: self.max_length] for f_ids in full_input_ids]
@@ -624,6 +625,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             f_ids[: self.max_length] for f_ids in full_attention_mask
         ]
 
+        self.tokenizer.padding_side = "left"
         features = self.tokenizer.pad(
             {"input_ids": full_input_ids, "attention_mask": full_attention_mask},
             padding=self.padding,
@@ -647,8 +649,19 @@ class DataCollator(DataCollatorForSeq2Seq):
                 prompt_features.attention_mask
             )  # ['attention_mask']
 
-        if self.tokenizer.padding_side == "right":
-            raise NotImplementedError("padding_side should be left")
+            self.tokenizer.padding_side = "right"
+            eval_features = self.tokenizer.pad(
+                {
+                    "input_ids": [t for t in target_tokenized["input_ids"]],
+                },
+                padding=self.padding,
+                pad_to_multiple_of=self.pad_to_multiple_of,
+                return_tensors=return_tensors,
+            )
+            eval_features.input_ids = eval_features.input_ids.masked_fill(
+                eval_features.input_ids == self.tokenizer.pad_token_id, -100
+            )
+            features["eval_labels"] = eval_features.input_ids
 
         labels_ids = torch.full_like(features["input_ids"], self.tokenizer.pad_token_id)
         for i, target in enumerate(target_tokenized["input_ids"]):

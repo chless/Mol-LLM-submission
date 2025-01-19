@@ -380,8 +380,13 @@ class Blip2Stage3(pl.LightningModule):
             output_attentions=log_attn_score,
         )
         logits = gen_outputs.logits
-        labels = batch.labels[:, -logits.shape[1] :] 
-        loss_dict = get_instance_loss(logits=logits, labels=labels)
+        labels = batch.eval_labels
+        comparable_len = min(logits.shape[1], labels.shape[1])
+
+        comparable_labels = labels[:, :comparable_len]
+        comparable_logits = logits[:, :comparable_len]
+
+        loss_dict = get_instance_loss(logits=comparable_logits, labels=comparable_labels)
         instance_loss = loss_dict["instance_loss"]
         loss = loss_dict["loss"]
 
@@ -389,8 +394,8 @@ class Blip2Stage3(pl.LightningModule):
             compute_loss_context_manager = torch.amp.autocast
             with compute_loss_context_manager(device_type="cuda"):
                 loss, metrics = minimal_simpo.minimal_get_batch_loss_metrics(
-                    logits=logits,
-                    labels=labels,
+                    logits=comparable_logits,
+                    labels=comparable_labels,
                     instance_loss=instance_loss,
                     simpo_weight=self.args.simpo_weight,
                     beta=self.args.beta,
