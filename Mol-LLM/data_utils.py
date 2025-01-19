@@ -629,6 +629,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         features = self.tokenizer.pad(
             {"input_ids": full_input_ids, "attention_mask": full_attention_mask},
             padding="max_length",
+            max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors=return_tensors,
         )
