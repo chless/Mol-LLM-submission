@@ -367,6 +367,10 @@ class Blip2Stage3(pl.LightningModule):
             additional_graphs = None
             is_mol_token = None
 
+        labels = batch.eval_labels
+        gen_max_length = min(self.gen_max_len, labels.shape[1])
+        gen_min_length = max(self.min_len, labels.shape[1] - 1)
+
         log_attn_score = self.args.log_attn_score
         gen_outputs = self.blip2model.generate(
             graphs=(graphs, additional_graphs),
@@ -375,12 +379,11 @@ class Blip2Stage3(pl.LightningModule):
             attention_mask=batch.prompt_attention_mask,
             is_mol_token=is_mol_token,
             num_beams=self.num_beams,
-            max_length=self.gen_max_len,
-            min_length=self.min_len,
+            max_length=gen_max_length,
+            min_length=gen_min_length,
             output_attentions=log_attn_score,
         )
         logits = gen_outputs.logits
-        labels = batch.eval_labels
         comparable_len = min(logits.shape[1], labels.shape[1])
 
         comparable_labels = labels[:, :comparable_len]
