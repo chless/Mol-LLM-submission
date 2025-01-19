@@ -37,8 +37,8 @@ skip_sanity_check: false
 
 # accumulate_grad_batches: 11
 total_batch_size: 2048
-batch_size: 5
-inference_batch_size: 10
+batch_size: 11
+inference_batch_size: 22
 
 truncation: 1
 padding: max_length
@@ -68,13 +68,15 @@ test_on_trainset: false
 
 # multimodal training
 mol_representation: string_only
-modality_randomization: false
 mol_string_randomization_ratio: -1
-mdpo: true
-simpo_weight: 0.5
-simpo_modality: graph
-beta: 2.0
-gamma_beta_ratio: 1.0
-loss_type: sigmoid
-
 log_attn_score: true
+
+# simpo
+train_simpo: true
+eval_simpo: true
+
+simpo_modality: graph
+beta: 1.0
+gamma_beta_ratio: 1.0
+simpo_weight: 0.3
+loss_type: sigmoid
