@@ -87,12 +87,8 @@ def main(cfg):
         elif cfg.strategy_name == "deepspeed":
             strategy = strategies.DeepSpeedStrategy(stage=3)
         else:
-            if hasattr(cfg, "modality_randomization") and cfg.modality_randomization:
-                find_unused_parameters = True
-            else:
-                find_unused_parameters = False
             strategy = MyDDPStrategy(
-                find_unused_parameters=find_unused_parameters,
+                find_unused_parameters=False,
                 start_method="spawn",
                 timeout=timedelta(minutes=90),
             )

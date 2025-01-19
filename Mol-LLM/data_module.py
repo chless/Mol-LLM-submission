@@ -32,7 +32,6 @@ class Stage3DM(LightningDataModule):
             self.inference_batch_size //= 2
 
         self.mol_representation = args.mol_representation
-        self.modality_randomization = args.modality_randomization
         self.tokenizer = tokenizer
 
         if args.debug:
