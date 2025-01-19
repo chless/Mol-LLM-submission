@@ -674,33 +674,13 @@ for p in dataset_paths:
     dataset = load_from_disk(p)
     datasets.append(dataset)
 
-import random
-
-# use functools.partial to create a function with default arguments
 from functools import partial
 map_by_substructure_replacement = partial(map_by_substructure_replacement, replace_ratio=0.2)
 
-# testset
-random.seed(42)
-dataset = datasets[0].map(
-    map_by_substructure_replacement, batched=False, num_proc=10
-    )
-dataset.save_to_disk(dataset_paths[0] + "_substructure_offline")
-print('done with', dataset_paths[0])
-
-# validationset
-random.seed(42)
-dataset = datasets[1].map(
-    map_by_substructure_replacement, batched=False, num_proc=10
-    )
-dataset.save_to_disk(dataset_paths[1] + "_substructure_offline")
-print('done with', dataset_paths[1])
-
-
-# trainset
-random.seed(42)
-dataset = datasets[2].map(
-    map_by_substructure_replacement, batched=False, num_proc=100
-    )
-dataset.save_to_disk(dataset_paths[2] + "_substructure_offline")
-print('done with', dataset_paths[2])
+for i in range(3):
+    random.seed(42)
+    dataset = datasets[i].map(
+        map_by_substructure_replacement, batched=False, num_proc=10 if i != 2 else 100
+        )
+    dataset.save_to_disk(dataset_paths[i] + "_substructure_offline")
+    print('done with', dataset_paths[i])
