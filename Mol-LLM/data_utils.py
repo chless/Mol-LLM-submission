@@ -599,7 +599,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         target_tokenized = self.tokenizer(
             target_text,
             truncation=True,
-            max_length=self.max_length - len(prompt_tokenized["input_ids"]),
+            max_length=self.max_length,
             padding=False,
             return_tensors=None,
             add_special_tokens=False,
