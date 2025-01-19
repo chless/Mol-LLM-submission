@@ -52,6 +52,9 @@ class MyDDPStrategy(strategies.DDPStrategy):
 
 @hydra.main(config_path="configs", config_name="default.yaml", version_base=None)
 def main(cfg):
+    import nltk
+    nltk.download("wordnet")
+    
     cfg = flatten_dictconfig(cfg)
     pl.seed_everything(cfg.seed)
 
