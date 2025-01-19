@@ -369,7 +369,6 @@ class Blip2Stage3(pl.LightningModule):
 
         labels = batch.eval_labels
         gen_max_length = min(self.gen_max_len, labels.shape[1])
-        gen_min_length = max(self.min_len, labels.shape[1] - 1)
 
         log_attn_score = self.args.log_attn_score
         gen_outputs = self.blip2model.generate(
@@ -380,7 +379,7 @@ class Blip2Stage3(pl.LightningModule):
             is_mol_token=is_mol_token,
             num_beams=self.num_beams,
             max_length=gen_max_length,
-            min_length=gen_min_length,
+            min_length=self.min_len,
             output_attentions=log_attn_score,
         )
         logits = gen_outputs.logits
