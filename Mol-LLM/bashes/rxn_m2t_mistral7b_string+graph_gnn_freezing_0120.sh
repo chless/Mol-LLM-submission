@@ -21,4 +21,5 @@ trainer.max_epochs=15 \
 trainer.val_check_interval=0.25 \
 trainer.skip_sanity_check=false \
 trainer.train_simpo=false \
-trainer.eval_simpo=true
+trainer.eval_simpo=true \
+trainer.inference_batch_size=12
