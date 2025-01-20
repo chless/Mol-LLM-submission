@@ -98,7 +98,6 @@ class Blip2Stage3(pl.LightningModule):
             args,
         )
         self.tokenizer = self.blip2model.init_tokenizer()
-        self.num_moving_samples = 32
         self.save_hyperparameters(args)
 
     def load_from_stage1_checkpoint(self, path):
@@ -271,44 +270,63 @@ class Blip2Stage3(pl.LightningModule):
         self.task_specific_logging(
             outputs=outputs,
             tasks=[id2task(task_id.item()) for task_id in batch.tasks],
-            split="train",
+            mode="train",
+            epoch_end=False,
+            task_specific_outputs=self.task_specific_outputs,
+            num_moving_samples=32,
         )
 
         return loss
 
-    def task_specific_logging(self, outputs, tasks, split):
-        # log dataset specific losses
-        new_outputs = {k: v for k, v in outputs.items() if v.shape != torch.Size([])}
+    def task_specific_logging(
+        self,
+        outputs,
+        tasks,
+        mode,
+        epoch_end,
+        task_specific_outputs: Dict[str, Dict[str, list]],
+        num_moving_samples=32,
+    ):
 
-        for task in tasks:
-            self.task_specific_outputs.setdefault(
-                task, {k: [] for k in new_outputs.keys()}
-            )
+        if mode == "train":
+            assert epoch_end == False
 
-        for metric, v in new_outputs.items():
+        if (mode == "train") or not epoch_end:
+            # log dataset specific losses
+            new_outputs = {
+                k: v for k, v in outputs.items() if v.shape != torch.Size([])
+            }
 
-            for i in range(v.shape[0]):
-                if torch.isnan(v[i]):
-                    continue
+            for task in tasks:
+                task_specific_outputs.setdefault(
+                    task, {k: [] for k in new_outputs.keys()}
+                )
 
-                task = tasks[i]
-                self.task_specific_outputs[task][metric].append(v[i].item())
+            for metric, v in new_outputs.items():
 
-                if (
-                    len(self.task_specific_outputs[task][metric])
-                    > self.num_moving_samples
-                ):
-                    self.task_specific_outputs[task][metric].pop(0)
+                for i in range(v.shape[0]):
+                    if torch.isnan(v[i]):
+                        continue
 
-        for task, metric_dict in self.task_specific_outputs.items():
-            for metric, vs in metric_dict.items():
-                if vs:
-                    self.log(
-                        f"{split}/{task}/{metric}",
-                        sum(vs) / len(vs),
-                        batch_size=len(vs),
-                        sync_dist=False,
-                    )
+                    task = tasks[i]
+                    task_specific_outputs[task][metric].append(v[i].item())
+
+                    if num_moving_samples is not None and (
+                        len(self.task_specific_outputs[task][metric])
+                        > num_moving_samples
+                    ):
+                        task_specific_outputs[task][metric].pop(0)
+
+        if mode == "train" or epoch_end:
+            for task, metric_dict in task_specific_outputs.items():
+                for metric, vs in metric_dict.items():
+                    if vs:
+                        self.log(
+                            f"{mode}/{task}/{metric}",
+                            sum(vs) / len(vs),
+                            batch_size=len(vs),
+                            sync_dist=False,
+                        )
 
     def on_train_epoch_start(self) -> None:
         if self.blip2model.llm_tokenizer.mol_string_randomization_ratio > 0:
@@ -356,6 +374,7 @@ class Blip2Stage3(pl.LightningModule):
             task_subtask_pair: {"avg_loss": 0.0, "num_instances": 0}
             for task_subtask_pair in self.task_subtask_name_pairs
         }
+        self.eval_task_specific_outputs = {}
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
         if "graph" in self.args.mol_representation:
@@ -388,7 +407,9 @@ class Blip2Stage3(pl.LightningModule):
         comparable_labels = labels[:, :comparable_len]
         comparable_logits = logits[:, :comparable_len]
 
-        loss_dict = get_instance_loss(logits=comparable_logits, labels=comparable_labels)
+        loss_dict = get_instance_loss(
+            logits=comparable_logits, labels=comparable_labels
+        )
         instance_loss = loss_dict["instance_loss"]
         loss = loss_dict["loss"]
 
@@ -404,7 +425,7 @@ class Blip2Stage3(pl.LightningModule):
                     gamma_beta_ratio=self.args.gamma_beta_ratio,
                 )
 
-            chosen_len = metrics['rewards/chosen'].shape[0]
+            chosen_len = metrics["rewards/chosen"].shape[0]
 
             logits = logits[:chosen_len]
             labels = labels[:chosen_len]
@@ -424,11 +445,11 @@ class Blip2Stage3(pl.LightningModule):
 
         if log_attn_score:
             self.log_attn_score(
-                prompt_input_ids=prompt_input_ids, 
-                mode=mode, 
-                is_mol_token=is_mol_token, 
+                prompt_input_ids=prompt_input_ids,
+                mode=mode,
+                is_mol_token=is_mol_token,
                 attentions=attentions,
-                )
+            )
 
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             input_ids, skip_special_tokens=False
@@ -445,7 +466,6 @@ class Blip2Stage3(pl.LightningModule):
         targets = [
             t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
         ]
-
 
         probs = convert_logit2binary_prob(
             logits=logits,
@@ -465,9 +485,7 @@ class Blip2Stage3(pl.LightningModule):
         batch_size = input_ids.shape[0]
 
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
-        self.total_avg_loss += (
-            loss.item() - self.total_avg_loss
-        ) * new_data_weight
+        self.total_avg_loss += (loss.item() - self.total_avg_loss) * new_data_weight
         self.total_seen_data_size += batch_size
 
         task_subtask_pairs = tasks
@@ -494,17 +512,27 @@ class Blip2Stage3(pl.LightningModule):
 
             self.eval_dataset_losses[task_subtask_pair]["num_instances"] += 1
 
+        if self.args.eval_simpo:
+            self.task_specific_logging(
+                outputs=metrics,
+                tasks=tasks,
+                mode=mode,
+                epoch_end=False,
+                task_specific_outputs=self.eval_task_specific_outputs,
+                num_moving_samples=None,
+            )
+
         return loss
 
     def log_attn_score(self, prompt_input_ids, mode, is_mol_token, attentions):
         num_steps = len(attentions)
         seq_lengths = prompt_input_ids.shape[1]
         all_layers_attn = [
-                torch.stack(attentions[step_idx])[..., :seq_lengths]
-                for step_idx in range(1, num_steps)
-            ]
+            torch.stack(attentions[step_idx])[..., :seq_lengths]
+            for step_idx in range(1, num_steps)
+        ]
 
-            # [num_steps, num_heads, max_generated_length, max_generated_length] -> [num_steps, batch_size, max_generated_length]
+        # [num_steps, num_heads, max_generated_length, max_generated_length] -> [num_steps, batch_size, max_generated_length]
         full_attn_mean = torch.stack(all_layers_attn).mean(dim=(1, 3)).squeeze()
 
         selfies_start_token_id = 35743
@@ -512,11 +540,11 @@ class Blip2Stage3(pl.LightningModule):
 
         selfies_mask = torch.zeros_like(prompt_input_ids, dtype=torch.bool)
         st_batch_indices, start_indices = (
-                prompt_input_ids == selfies_start_token_id
-            ).nonzero(as_tuple=True)
+            prompt_input_ids == selfies_start_token_id
+        ).nonzero(as_tuple=True)
         end_batch_indices, end_indices = (
-                prompt_input_ids == selfies_end_token_id
-            ).nonzero(as_tuple=True)
+            prompt_input_ids == selfies_end_token_id
+        ).nonzero(as_tuple=True)
 
         valid_start_mask = torch.isin(st_batch_indices, end_batch_indices)
         st_batch_indices = st_batch_indices[valid_start_mask]
@@ -525,25 +553,25 @@ class Blip2Stage3(pl.LightningModule):
         start_indices += 1
         end_indices -= 1
 
-        seq_range = torch.arange(
-                seq_lengths, device=prompt_input_ids.device
-            ).unsqueeze(0)
+        seq_range = torch.arange(seq_lengths, device=prompt_input_ids.device).unsqueeze(
+            0
+        )
 
         broadcasted_start = start_indices.unsqueeze(1)
         broadcasted_end = end_indices.unsqueeze(1)
 
         sequence_masks = (seq_range >= broadcasted_start) & (
-                seq_range <= broadcasted_end
-            )
+            seq_range <= broadcasted_end
+        )
         temp_mask = torch.zeros_like(prompt_input_ids, dtype=torch.bool)
         temp_mask.scatter_add_(
-                0,
-                end_batch_indices.unsqueeze(1).expand(-1, seq_lengths),
-                sequence_masks,
-            )
+            0,
+            end_batch_indices.unsqueeze(1).expand(-1, seq_lengths),
+            sequence_masks,
+        )
         selfies_mask = selfies_mask | temp_mask
 
-            # mol_attn_score = full_attn_mean[:, mol_token_mask]
+        # mol_attn_score = full_attn_mean[:, mol_token_mask]
 
         mol_mean_scores = []
         mol_sum_scores = []
@@ -553,74 +581,84 @@ class Blip2Stage3(pl.LightningModule):
         for i in range(prompt_input_ids.shape[0]):
             if "graph" in self.args.mol_representation:
                 mol_mean_scores.append(
-                        full_attn_mean[:, i, is_mol_token[i]].mean(dim=-1).mean(dim=0)
-                    )
+                    full_attn_mean[:, i, is_mol_token[i]].mean(dim=-1).mean(dim=0)
+                )
                 mol_sum_scores.append(
-                        full_attn_mean[:, i, is_mol_token[i]].sum(dim=-1).sum(dim=0)
-                    )
+                    full_attn_mean[:, i, is_mol_token[i]].sum(dim=-1).sum(dim=0)
+                )
             if "string" in self.args.mol_representation:
                 selfies_mean_scores.append(
-                        full_attn_mean[:, i, selfies_mask[i]].mean(dim=-1).mean(dim=0)
-                    )
+                    full_attn_mean[:, i, selfies_mask[i]].mean(dim=-1).mean(dim=0)
+                )
                 selfies_sum_scores.append(
-                        full_attn_mean[:, i, selfies_mask[i]].sum(dim=-1).sum(dim=0)
-                    )
+                    full_attn_mean[:, i, selfies_mask[i]].sum(dim=-1).sum(dim=0)
+                )
         if "graph" in self.args.mol_representation:
             mol_mean_scores = torch.stack(mol_mean_scores)
             mol_mean_scores = torch.where(
-                    torch.isnan(mol_mean_scores),
-                    torch.zeros_like(mol_mean_scores),
-                    mol_mean_scores,
-                )
+                torch.isnan(mol_mean_scores),
+                torch.zeros_like(mol_mean_scores),
+                mol_mean_scores,
+            )
             mol_sum_scores = torch.stack(mol_sum_scores)
             mol_sum_scores = torch.where(
-                    torch.isnan(mol_sum_scores),
-                    torch.zeros_like(mol_sum_scores),
-                    mol_sum_scores,
-                )
+                torch.isnan(mol_sum_scores),
+                torch.zeros_like(mol_sum_scores),
+                mol_sum_scores,
+            )
 
             self.log(
-                    f"{mode}/graph_attn_mean_score",
-                    mol_mean_scores.mean().item(),
-                    sync_dist=False,
-                    batch_size=prompt_input_ids.shape[0],
-                )
+                f"{mode}/graph_attn_mean_score",
+                mol_mean_scores.mean().item(),
+                sync_dist=False,
+                batch_size=prompt_input_ids.shape[0],
+            )
             self.log(
-                    f"{mode}/graph_attn_sum_score",
-                    mol_sum_scores.mean().item(),
-                    sync_dist=False,
-                    batch_size=prompt_input_ids.shape[0],
-                )
+                f"{mode}/graph_attn_sum_score",
+                mol_sum_scores.mean().item(),
+                sync_dist=False,
+                batch_size=prompt_input_ids.shape[0],
+            )
 
         if "string" in self.args.mol_representation:
             selfies_mean_scores = torch.stack(selfies_mean_scores)
             selfies_mean_scores = torch.where(
-                    torch.isnan(selfies_mean_scores),
-                    torch.zeros_like(selfies_mean_scores),
-                    selfies_mean_scores,
-                )
+                torch.isnan(selfies_mean_scores),
+                torch.zeros_like(selfies_mean_scores),
+                selfies_mean_scores,
+            )
             selfies_sum_scores = torch.stack(selfies_sum_scores)
             selfies_sum_scores = torch.where(
-                    torch.isnan(selfies_sum_scores),
-                    torch.zeros_like(selfies_sum_scores),
-                    selfies_sum_scores,
-                )
+                torch.isnan(selfies_sum_scores),
+                torch.zeros_like(selfies_sum_scores),
+                selfies_sum_scores,
+            )
 
             self.log(
-                    f"{mode}/selfies_attn_mean_score",
-                    selfies_mean_scores.mean().item(),
-                    sync_dist=False,
-                    batch_size=prompt_input_ids.shape[0],
-                )
+                f"{mode}/selfies_attn_mean_score",
+                selfies_mean_scores.mean().item(),
+                sync_dist=False,
+                batch_size=prompt_input_ids.shape[0],
+            )
             self.log(
-                    f"{mode}/selfies_attn_sum_score",
-                    selfies_sum_scores.mean().item(),
-                    sync_dist=False,
-                    batch_size=prompt_input_ids.shape[0],
-                )
+                f"{mode}/selfies_attn_sum_score",
+                selfies_sum_scores.mean().item(),
+                sync_dist=False,
+                batch_size=prompt_input_ids.shape[0],
+            )
 
     def on_evaluation_epoch_end(self, mode="val") -> None:
         print(f"\nDevice {self.device} on_evaluation_epoch_end start")
+
+        if self.args.eval_simpo:
+            self.task_specific_logging(
+                outputs=None,
+                tasks=None,
+                mode=mode,
+                epoch_end=True,
+                task_specific_outputs=self.eval_task_specific_outputs,
+                num_moving_samples=None,
+            )
 
         evaluation_results, failed_cases = per_device_evaluate(
             predictions=self.list_logs["predictions"],
@@ -899,6 +937,7 @@ def check_model_parameters(model, keyword):
         if param.requires_grad and keyword in name:
             trainable_params_dict[name] = param
     return trainable_params_dict
+
 
 def get_instance_loss(logits, labels):
     shift_logits = logits[..., :-1, :].contiguous()
