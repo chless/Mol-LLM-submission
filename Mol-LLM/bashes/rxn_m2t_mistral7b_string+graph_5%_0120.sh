@@ -1,13 +1,13 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='rxn_m2t_mistral7b_string+graph_gnn_tuning_0120'
-gpus="'0,1,2,3,4,5,6,7'"
+file_name='rxn_m2t_mistral7b_string+graph_5%_0120'
+gpus="'1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
 data=rxn_m2t \
-data.data_tag=rxn_m2t_substructure_offline \
+data.data_tag=rxn_m2t_substructure-5%_offline \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=moleculeSTM \
 gnn.tune_gnn=true \
@@ -21,6 +21,6 @@ trainer.max_epochs=15 \
 trainer.val_check_interval=0.50 \
 trainer.skip_sanity_check=false \
 trainer.train_simpo=false \
-trainer.batch_size=10 \
+trainer.batch_size=5 \
 trainer.eval_simpo=true \
-ckpt_path="'/data/all_checkpoints/rxn_m2t_mistral7b_string+graph_gnn_tuning_0120/last.ckpt'"
+trainer.inference_batch_size=5
