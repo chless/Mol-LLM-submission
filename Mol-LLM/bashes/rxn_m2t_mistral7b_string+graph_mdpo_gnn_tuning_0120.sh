@@ -21,4 +21,5 @@ trainer.max_epochs=15 \
 trainer.val_check_interval=0.50 \
 trainer.skip_sanity_check=false \
 trainer.train_simpo=true \
-trainer.eval_simpo=true
+trainer.eval_simpo=true \
+ckpt_path="'/data/all_checkpoints/rxn_m2t_mistral7b_string+graph_mdpo_gnn_tuning_0120/last.ckpt'"

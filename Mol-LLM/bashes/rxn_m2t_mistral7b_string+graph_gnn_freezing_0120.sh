@@ -23,4 +23,5 @@ trainer.skip_sanity_check=false \
 trainer.train_simpo=false \
 trainer.batch_size=5 \
 trainer.eval_simpo=true \
-trainer.inference_batch_size=5
+trainer.inference_batch_size=5 \
+ckpt_path="'/data/all_checkpoints/rxn_m2t_mistral7b_string+graph_gnn_freezing_0120/last.ckpt'"
