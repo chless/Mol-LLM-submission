@@ -14,4 +14,5 @@ wandb_log_freq: 100
 wandb_id: null
 
 ckpt_path: null
+pretrained_ckpt_path: null
 debug: false
