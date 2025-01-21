@@ -1,13 +1,11 @@
 from datasets import load_from_disk
 from rdkit import Chem
-import selfies as sf
-from rdkit.Chem import Draw, MACCSkeys
+from rdkit.Chem import MACCSkeys
 from data_utils import mol2graph, graph2data
 import numpy as np
 import copy
 import re
 import random
-import selfies
 from ogb.utils.features import (
     allowable_features,
     atom_to_feature_vector,
@@ -15,10 +13,17 @@ from ogb.utils.features import (
     atom_feature_vector_to_dict,
     bond_feature_vector_to_dict,
 )
-import numpy as np
-import random
-
+import selfies as sf
+from tqdm import tqdm
 from collections import Counter
+from data_utils import (
+    CLASSIFICATION_BENCHMARKS,
+    REGRESSION_BENCHMARKS,
+    REACTION_BENCHMARKS,
+    TEXT2MOL_BENCHMARKS,
+    MOL2TEXT_BENCHMARKS,
+    NAME_CONVERSION_BENCHMARKS,
+)
 
 # [1, 42, 44, 46, 103, 125, 162, 166] -> Noting to convert
 # [2, 49, 59, 65, 90, 91, 101, 113, 120, 121, 128, 129, 135, 137, 144, 165] -> Error occured when converting
@@ -496,7 +501,7 @@ def extract_and_modify(selfies, replace_ratio=0.1, modify_num=0):
     # Convert SELFIES to SMILES
     smiles = sf.decoder(selfies)
     if not smiles:
-        raise ValueError("Invalid SELFIES string provided.")
+        raise ValueError(f"Invalid SELFIES, SMILES provided: {selfies}, {smiles}")
 
     # Convert SMILES to RDKit Molecule
     mol = Chem.MolFromSmiles(smiles)
@@ -651,25 +656,6 @@ def extract_and_modify(selfies, replace_ratio=0.1, modify_num=0):
         "modified_smiles": modified_smiles,
         "modified_graph": modified_graph,
     }
-
-
-from datasets import load_from_disk
-from rdkit import Chem
-import selfies as sf
-from rdkit.Chem import Draw
-from data_utils import mol2graph, graph2data
-import numpy as np
-import copy
-import re
-from tqdm import tqdm
-from data_utils import (
-    CLASSIFICATION_BENCHMARKS,
-    REGRESSION_BENCHMARKS,
-    REACTION_BENCHMARKS,
-    TEXT2MOL_BENCHMARKS,
-    MOL2TEXT_BENCHMARKS,
-    NAME_CONVERSION_BENCHMARKS,
-)
 
 
 def size_augmentation_single_mol(mol, min_r=0.3, max_r=0.9):
@@ -869,7 +855,7 @@ def add_atoms_based_on_mol(mol, num_atoms_to_add):
 
 
 def substructure_replacement_single_mol(selfies, replace_ratio=0.1):
-    modified_result = extract_and_modify(selfies, replace_ratio=0.1)
+    modified_result = extract_and_modify(selfies, replace_ratio=replace_ratio)
     rejected_graph = modified_result["modified_graph"]
     return rejected_graph
 
@@ -904,7 +890,7 @@ def map_by_substructure_replacement(data_point, replace_ratio=0.1):
             rejected_graph = mol2graph(rejected_mol["mol"])
             additional_rejected_graph = mol2graph(rejected_mol["mol"])
 
-    elif task in ["reagent_prediction"]:
+    elif "|>>|" in selfies:
         pair_selfies = selfies.split("|>>|")
         rejected_graph = substructure_replacement_single_mol(
             pair_selfies[0], replace_ratio=replace_ratio
@@ -912,7 +898,10 @@ def map_by_substructure_replacement(data_point, replace_ratio=0.1):
         additional_rejected_graph = substructure_replacement_single_mol(
             pair_selfies[1], replace_ratio=replace_ratio
         )
-    elif task in TEXT2MOL_BENCHMARKS:
+    elif task in TEXT2MOL_BENCHMARKS + [
+        "smol-name_conversion-i2s",
+        "smol-name_conversion-i2f",
+    ]:
         # dummy graph for text2mol tasks
         dummy_selfies = "[C][C][C]"
         rejected_graph = substructure_replacement_single_mol(
@@ -939,35 +928,6 @@ def map_by_substructure_replacement(data_point, replace_ratio=0.1):
     data_point["additional_rejected_edge_attr"] = additional_rejected_graph["edge_feat"]
 
     return data_point
-
-
-def substitute_atoms_based_on_selfies(selfies, min_r=0.3, max_r=0.9):
-    edit_selfies = copy.copy(selfies)
-    atoms = [
-        atom
-        for atom in re.findall("\[.+?\]", selfies)
-        if "Ring" not in atom and "Branch" not in atom
-    ]
-    min_atoms = max(1, int(min_r * len(atoms)))
-    max_atoms = min(int(max_r * len(atoms)), len(atoms) - 1)
-    if min_atoms >= max_atoms:
-        return edit_selfies + edit_selfies
-    else:
-        num_atoms_to_substitute = np.random.randint(min_atoms, max_atoms)
-        while num_atoms_to_substitute > 0:
-            selected_atom = np.random.choice(atoms).item()
-            edit_selfies_parts = list(re.finditer("\[.+?\]", edit_selfies))
-            edit_part = np.random.choice(edit_selfies_parts)
-            new_selfies = (
-                edit_selfies[: edit_part.start()]
-                + selected_atom
-                + edit_selfies[edit_part.end() :]
-            )
-
-            edit_selfies = new_selfies
-            num_atoms_to_substitute -= 1
-
-        return edit_selfies
 
 
 if __name__ == "__main__":
