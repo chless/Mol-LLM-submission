@@ -237,7 +237,7 @@ class Blip2Stage3(pl.LightningModule):
             with compute_loss_context_manager(device_type="cuda"):
                 loss, metrics = minimal_simpo.minimal_get_batch_loss_metrics(
                     logits=logits,
-                    labels=batch.labels,
+                    labels=batch.simpo_labels,
                     instance_loss=outputs["instance_loss"],
                     simpo_weight=self.args.simpo_weight,
                     beta=self.args.beta,
@@ -405,6 +405,7 @@ class Blip2Stage3(pl.LightningModule):
         comparable_len = min(logits.shape[1], labels.shape[1])
 
         comparable_labels = labels[:, :comparable_len]
+        comparable_simpo_labels = batch.simpo_labels[:, :comparable_len]
         comparable_logits = logits[:, :comparable_len]
 
         loss_dict = get_instance_loss(
@@ -418,7 +419,7 @@ class Blip2Stage3(pl.LightningModule):
             with compute_loss_context_manager(device_type="cuda"):
                 loss, metrics = minimal_simpo.minimal_get_batch_loss_metrics(
                     logits=comparable_logits,
-                    labels=comparable_labels,
+                    labels=comparable_simpo_labels,
                     instance_loss=instance_loss,
                     simpo_weight=self.args.simpo_weight,
                     beta=self.args.beta,

@@ -511,6 +511,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             return_tensors = self.return_tensors
 
         tasks = [task2id(sample.pop("task")) for sample in batch]  # task id
+        task_names = [id2task(task) for task in tasks]
         prompt_text = [sample["prompt_text"] for sample in batch]
         target_text = [sample["target_text"] for sample in batch]
 
@@ -678,6 +679,10 @@ class DataCollator(DataCollatorForSeq2Seq):
             labels_ids == self.tokenizer.pad_token_id, -100
         )
         features["labels"] = labels_ids
+        simpo_labels_ids = labels_ids.clone()
+        for simpo_mask_id in self.tokenizer.simpo_mask_ids:
+            simpo_labels_ids = simpo_labels_ids.masked_fill(simpo_labels_ids == simpo_mask_id, -100)
+        features["simpo_labels"] = simpo_labels_ids
 
         assert (
             features.input_ids.size(1) <= self.max_length
