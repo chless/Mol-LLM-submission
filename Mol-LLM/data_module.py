@@ -118,7 +118,6 @@ def get_dataset(split, tokenizer, args):
     preprocessed_data_path = os.path.join(data_path, processed_file_name)
 
     if args.data_tag is not None:
-        assert args.tasks is not None, "data_tag is only used when tasks are specified"
         taged_preprocessed_data_path = preprocessed_data_path + f"_{args.data_tag}"
     else:
         taged_preprocessed_data_path = None
