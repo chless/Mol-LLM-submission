@@ -663,6 +663,10 @@ class DataCollator(DataCollatorForSeq2Seq):
                 eval_features.input_ids == self.tokenizer.pad_token_id, -100
             )
             features["eval_labels"] = eval_features.input_ids
+            eval_simpo_labels = eval_features.input_ids.clone()
+            for simpo_mask_id in self.tokenizer.simpo_mask_ids:
+                eval_simpo_labels = eval_simpo_labels.masked_fill(eval_simpo_labels == simpo_mask_id, -100)
+            features["eval_simpo_labels"] = eval_simpo_labels
 
         labels_ids = torch.full_like(features["input_ids"], self.tokenizer.pad_token_id)
         for i, target in enumerate(target_tokenized["input_ids"]):

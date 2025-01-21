@@ -387,6 +387,7 @@ class Blip2Stage3(pl.LightningModule):
             is_mol_token = None
 
         labels = batch.eval_labels
+        simpo_labels = batch.eval_simpo_labels
         gen_max_length = min(self.gen_max_len, labels.shape[1])
 
         log_attn_score = self.args.log_attn_score
@@ -405,7 +406,7 @@ class Blip2Stage3(pl.LightningModule):
         comparable_len = min(logits.shape[1], labels.shape[1])
 
         comparable_labels = labels[:, :comparable_len]
-        comparable_simpo_labels = batch.simpo_labels[:, :comparable_len]
+        comparable_simpo_labels = simpo_labels[:, :comparable_len]
         comparable_logits = logits[:, :comparable_len]
 
         loss_dict = get_instance_loss(
