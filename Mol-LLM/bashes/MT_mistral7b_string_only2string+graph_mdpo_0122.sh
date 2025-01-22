@@ -17,6 +17,7 @@ trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.skip_sanity_check=false \
-pretrained_ckpt_path="'/data/all_checkpoints/string_only-resume-last/epoch=11-val_loss=0.000000.ckpt'" \
-trainer.batch_size=5 \
-trainer.inference_batch_size=5
+pretrained_ckpt_path="'/data/all_checkpoints/string_only-resume-last/epoch=11-val_total_loss=0.000.ckpt'" \
+trainer.batch_size=2 \
+trainer.inference_batch_size=4
+find_unused_parameters=True

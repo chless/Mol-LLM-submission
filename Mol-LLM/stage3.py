@@ -88,7 +88,7 @@ def main(cfg):
             strategy = strategies.DeepSpeedStrategy(stage=3)
         else:
             strategy = MyDDPStrategy(
-                find_unused_parameters=False,
+                find_unused_parameters=cfg.find_unused_parameters,
                 start_method="spawn",
                 timeout=timedelta(minutes=90),
             )
