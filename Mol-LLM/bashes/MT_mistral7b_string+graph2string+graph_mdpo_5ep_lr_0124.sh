@@ -1,6 +1,6 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='MT_mistral7b_string+graph2string+graph_mdpo_5ep_0123'
+file_name='MT_mistral7b_string+graph2string+graph_mdpo_5ep_lr_0124'
 gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
