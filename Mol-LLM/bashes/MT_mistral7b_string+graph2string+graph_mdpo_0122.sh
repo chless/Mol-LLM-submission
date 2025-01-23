@@ -17,5 +17,5 @@ trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.skip_sanity_check=false \
-pretrained_ckpt_path="'/data/all_checkpoints/hug_test_sg_cls/all_checkpoints/hug_test_sg_cls/every_epochs/epoch=11-val_loss=0.000000.ckpt'"
-find_unused_parameters=True
+pretrained_ckpt_path="'/data/all_checkpoints/MT_mistral7b_string+graph2string+graph_mdpo_0122/last.ckpt'" \
+find_unused_parameters=true
