@@ -13,6 +13,7 @@ wandb_project: mol-llm
 wandb_log_freq: 100
 wandb_id: null
 
+debug: false
 ckpt_path: null
 pretrained_ckpt_path: null
 find_unused_parameters: true
