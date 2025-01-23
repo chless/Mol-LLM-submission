@@ -1,7 +1,7 @@
 
 export TOKENIZERS_PARALLELISM=false;
 file_name='MT_mistral7b_string_only2string+graph_mdpo_0122'
-gpus="'1,2,3,4,5,6,7'"
+gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
@@ -18,6 +18,4 @@ trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.skip_sanity_check=false \
 pretrained_ckpt_path="'/data/all_checkpoints/string_only-resume-last/epoch=11-val_total_loss=0.000.ckpt'" \
-trainer.batch_size=2 \
-trainer.inference_batch_size=4
 find_unused_parameters=True

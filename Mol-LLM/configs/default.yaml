@@ -16,3 +16,4 @@ wandb_id: null
 ckpt_path: null
 pretrained_ckpt_path: null
 debug: false
+find_unused_parameters: false
