@@ -1,61 +1,72 @@
+# Base image with CUDA and cuDNN
 FROM nvidia/cuda:12.2.2-cudnn8-devel-ubuntu22.04
 
+# Set environment variables
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.10
 ENV PATH=/miniconda/bin:${PATH}
+ARG HOME=/root
 
-# Install dependencies
-RUN apt-get update && apt-get install locales -y
-RUN locale-gen en_US.UTF-8
-RUN apt-get update \
-    && apt-get install -y python3-pip python3-dev golang-1.18 git wget curl zsh tmux vim htop \
-    && rm -rf /var/lib/apt/lists/*
-RUN ln -s /usr/bin/python3 /usr/bin/python
+# Install essential packages and dependencies
+RUN apt-get update && apt-get install -y \
+    locales \
+    python3-pip python3-dev \
+    golang-1.18 \
+    git wget curl \
+    zsh tmux vim htop \
+    clang-format clang-tidy \
+    swig \
+    qtdeclarative5-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set up locale and Python symlink
+RUN locale-gen en_US.UTF-8 && \
+    ln -s /usr/bin/python3 /usr/bin/python
+
+# Install Oh My Zsh
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
-ARG HOME=/root
+# Set up tmux configuration
 WORKDIR $HOME
-RUN git clone https://github.com/gpakosz/.tmux.git
-RUN ln -s -f .tmux/.tmux.conf
-RUN cp .tmux/.tmux.conf.local .
-RUN echo "set-option -g default-shell /bin/zsh" >> .tmux.conf.local
-RUN echo "set-option -g history-limit 10000" >> .tmux.conf.local
+RUN git clone https://github.com/gpakosz/.tmux.git && \
+    ln -s -f .tmux/.tmux.conf && \
+    cp .tmux/.tmux.conf.local . && \
+    echo "set-option -g default-shell /bin/zsh" >> .tmux.conf.local && \
+    echo "set-option -g history-limit 10000" >> .tmux.conf.local
 
+# Set up Oh My Zsh plugins and theme
+RUN git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting && \
+    git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions && \
+    sed -i '/^plugins=/c\plugins=(git zsh-autosuggestions zsh-syntax-highlighting zsh-completions)' ~/.zshrc && \
+    sed -i 's/^ZSH_THEME=".*"/ZSH_THEME="juanghurtado"/' ~/.zshrc
 
+# Add a new user with Zsh as the default shell
 RUN useradd -ms /bin/zsh github-action
 
-RUN apt-get update \
-    && apt-get install -y clang-format clang-tidy swig qtdeclarative5-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install conda
+# Install Miniconda
 RUN curl -LO https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
     bash Miniconda3-latest-Linux-x86_64.sh -p /miniconda -b && \
     rm Miniconda3-latest-Linux-x86_64.sh && \
     conda update -y conda
 
-
+# Install Python and clean up Conda cache
 RUN conda install --quiet --yes python=${PYTHON_VERSION} && \
     conda clean --yes --all
 
-
-# RUN conda install -y pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia && \
-    # conda install -y pyg=*=*cu* -c pyg && \
-    # conda clean -y --all
-
-# Upgrade pip, install py libs
+# Upgrade pip
 RUN pip install --upgrade pip
 
+# Set up application workspace
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY . .
 
-# PyTorch
-RUN pip install torch torchvision torchaudio
-RUN pip install --upgrade numpy thinc spacy opencv-python
+# Install PyTorch and additional Python libraries
+RUN pip install torch torchvision torchaudio && \
+    pip install --upgrade numpy thinc spacy opencv-python
 
-
-RUN printf "\nexport PATH=/miniconda/bin:${PATH}" >> /root/.zshrc
-RUN echo 'export SHELL=/bin/zsh' >> ~/.bash_profile
-RUN echo 'exec /bin/zsh -l' >> ~/.bash_profile
+# Update Zsh configuration
+RUN printf "\nexport PATH=/miniconda/bin:${PATH}" >> /root/.zshrc && \
+    echo 'export SHELL=/bin/zsh' >> ~/.bash_profile && \
+    echo 'exec /bin/zsh -l' >> ~/.bash_profile
