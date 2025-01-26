@@ -25,7 +25,7 @@ accelerator: gpu
 devices: "0,1,2,3,4,5,6,7"
 precision: bf16-mixed
 max_steps: -1
-max_epochs: 3
+max_epochs: 5
 every_n_epochs: 1
 task: null
 save_top_k: 10
@@ -51,9 +51,9 @@ apply_sequence_packing: false
 max_packing_size: -1
 
 weight_decay: 0.05
-min_lr: 0.000005
-init_lr: 0.00005
-warmup_lr: 0.000005
+min_lr: 0.000002
+init_lr: 0.00002
+warmup_lr: 0.000002
 warmup_steps: 1000
 scheduler: linear_warmup_cosine_lr
 optimizer: adamw
@@ -80,3 +80,4 @@ beta: 1.0
 gamma_beta_ratio: 1.0
 simpo_weight: 0.3
 loss_type: sigmoid
+find_unused_parameters: true
