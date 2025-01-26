@@ -19,10 +19,8 @@ from collections import Counter
 from data_utils import (
     CLASSIFICATION_BENCHMARKS,
     REGRESSION_BENCHMARKS,
-    REACTION_BENCHMARKS,
     TEXT2MOL_BENCHMARKS,
     MOL2TEXT_BENCHMARKS,
-    NAME_CONVERSION_BENCHMARKS,
 )
 
 # [1, 42, 44, 46, 103, 125, 162, 166] -> Noting to convert
