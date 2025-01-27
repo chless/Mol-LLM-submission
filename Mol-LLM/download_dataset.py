@@ -23,6 +23,14 @@ from pytorch_lightning import LightningDataModule
 import pandas as pd
 import datasets
 
+from data_utils import (
+    CLASSIFICATION_BENCHMARKS,
+    MOL2TEXT_BENCHMARKS,
+    REGRESSION_BENCHMARKS,
+    REACTION_BENCHMARKS,
+    TEXT2MOL_BENCHMARKS,
+)
+
 # token added to implement a custom sequence tokenization. This token is added at
 # corpus cleaning step and removed in pretokenization. The digits are added to increase the chance
 # that they do not occur in the corpus. The digits are escaped so that the token does not appear
@@ -205,51 +213,6 @@ def get_attention_mask_for_packed_sequence(x, eos_token_id, include_eos: bool = 
         1
     )  # to fit the shape [B, 1, T, T]
     return mask
-
-
-# binary classification
-CLASSIFICATION_BENCHMARKS = [
-    "bace",  # 1 task # molca, biot5+, instructmol
-    "tox21",  # 12 tasks # molca
-    "toxcast",  # 617 # molca
-    "smol-property_prediction-bbbp",  # 1 task # molca, biot5+, instructmol, llasmol
-    "smol-property_prediction-clintox",  # 2 tasks # molca, biot5+, llasmol
-    "smol-property_prediction-hiv",  # 1 tasks # biot5+, instructmol, llasmol
-    "smol-property_prediction-sider",  # 27 # molca, llasmol
-]
-REGRESSION_BENCHMARKS = [
-    "qm9_homo",
-    "qm9_lumo",
-    "qm9_homo_lumo_gap",
-    "qm9_additional_label",
-    "smol-property_prediction-esol",  # 1 task # llasmol
-    "smol-property_prediction-lipo",  # 1 task # llasmol
-    "hopv"
-]
-
-MOL2TEXT_BENCHMARKS = [
-    # "molecular_description_generation",
-    "chebi-20-mol2text",
-    "smol-name_conversion-s2f",
-    "smol-name_conversion-s2i",
-    "smol-molecule_captioning",
-]
-
-TEXT2MOL_BENCHMARKS = [
-    # "description_guided_molecule_design",
-    "chebi-20-text2mol",
-    "smol-name_conversion-i2f",
-    "smol-name_conversion-i2s",
-    "smol-molecule_generation",
-]
-
-REACTION_BENCHMARKS = [
-    "reagent_prediction",
-    "forward_reaction_prediction",
-    "retrosynthesis",
-    "smol-forward_synthesis",
-    "smol-retrosynthesis",
-]
 
 
 def wrap_label(label, task):
