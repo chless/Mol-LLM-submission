@@ -36,6 +36,8 @@ REGRESSION_BENCHMARKS = [
     "qm9_internal_energy_298K",
     "qm9_enthalpy_298K",
     "qm9_free_energy_298K",
+    "hopv_homo",
+    "hopv_lumo"
 ]
 REACTION_BENCHMARKS = [
     "forward_reaction_prediction",
@@ -511,7 +513,6 @@ class DataCollator(DataCollatorForSeq2Seq):
             return_tensors = self.return_tensors
 
         tasks = [task2id(sample.pop("task")) for sample in batch]  # task id
-        task_names = [id2task(task) for task in tasks]
         prompt_text = [sample["prompt_text"] for sample in batch]
         target_text = [sample["target_text"] for sample in batch]
 
