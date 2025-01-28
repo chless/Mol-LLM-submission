@@ -1,7 +1,7 @@
 
 export TOKENIZERS_PARALLELISM=false;
 file_name='mol_llm_mdpo_generalization_presto-forward_reaction_prediction'
-gpus="'0,1,2,3,4,5,6,7'"
+gpus="'0'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
@@ -20,4 +20,4 @@ trainer.mol_representation=string+graph \
 trainer.skip_sanity_check=false \
 ckpt_path="'/data/all_checkpoints/MT_mistral7b_string+graph2string+graph_mdpo_5ep_lr_0124/epoch=01-step=4861.ckpt'" \
 trainer.eval_simpo=false \
-trainer.inference_batch_size=7
+trainer.inference_batch_size=12
