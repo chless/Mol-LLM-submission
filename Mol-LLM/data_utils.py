@@ -45,6 +45,9 @@ REACTION_BENCHMARKS = [
     "retrosynthesis",
     "smol-retrosynthesis",
     "reagent_prediction",
+    "presto-forward_reaction_prediction",
+    "presto-retrosynthesis",
+    "presto-reagent_prediction",
 ]
 TEXT2MOL_BENCHMARKS = [
     "chebi-20-text2mol",
