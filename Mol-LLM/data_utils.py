@@ -36,8 +36,9 @@ REGRESSION_BENCHMARKS = [
     "qm9_internal_energy_298K",
     "qm9_enthalpy_298K",
     "qm9_free_energy_298K",
-    "hopv_homo",
-    "hopv_lumo"
+    "alchemy_homo",
+    "alchemy_lumo",
+    "alchemy_homo_lumo_gap",
 ]
 REACTION_BENCHMARKS = [
     "forward_reaction_prediction",
