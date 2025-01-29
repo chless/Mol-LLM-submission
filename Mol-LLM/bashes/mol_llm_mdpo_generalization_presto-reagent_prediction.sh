@@ -18,6 +18,6 @@ trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.skip_sanity_check=false \
-ckpt_path="'/data/all_checkpoints/MT_mistral7b_string+graph2string+graph_mdpo_5ep_lr_0124/epoch=03-step=8508.ckpt'" \
+ckpt_path="'/data/all_checkpoints/MT_mistral7b_string+graph2string+graph_mdpo_5ep_lr_0124/epoch=02-step=6685.ckpt'" \
 trainer.eval_simpo=false \
 trainer.inference_batch_size=12
