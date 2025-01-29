@@ -609,10 +609,6 @@ def regression_evaluate(predictions, targets, prompts):
                 .group()
                 .replace(" ", "")
             )
-            # <DEBUG>
-            prediction = prediction.split("<FLOAT>")[-1]
-            prediction = prediction.split("</FLOAT>")[0]
-            # </DEBUG>
 
             prediction = prediction.replace("<|", "").replace("|>", "")
             prediction = float(prediction)
