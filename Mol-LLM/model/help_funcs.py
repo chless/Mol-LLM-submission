@@ -169,10 +169,15 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
             else:
                 prediction_selfies = re.search(r"(?<=<SELFIES>).*", prediction).group()
 
+            #<DEBUG>
+            prediction_selfies = prediction_selfies.split("<SELFIES>")[-1]
+            prediction_selfies = prediction_selfies.split("</SELFIES>")[0]
+
             assert (
                 "<SELFIES>" not in prediction_selfies
                 and "</SELFIES>" not in prediction_selfies
             )
+            #</DEBUG>
 
             prediction_smiles = selfies.decoder(prediction_selfies)
             prediction_mol = Chem.MolFromSmiles(prediction_smiles)
@@ -604,6 +609,11 @@ def regression_evaluate(predictions, targets, prompts):
                 .group()
                 .replace(" ", "")
             )
+            # <DEBUG>
+            prediction = prediction.split("<FLOAT>")[-1]
+            prediction = prediction.split("</FLOAT>")[0]
+            # </DEBUG>
+
             prediction = prediction.replace("<|", "").replace("|>", "")
             prediction = float(prediction)
 
