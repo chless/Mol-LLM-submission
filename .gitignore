@@ -168,4 +168,4 @@ MolCA/results
 wandb
 outputs
 *.pth
-.csv
+*.csv
