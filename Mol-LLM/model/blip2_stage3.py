@@ -353,6 +353,8 @@ class Blip2Stage3(pl.LightningModule):
         self.train_total_avg_loss = 0.0
         self.train_total_seen_data_size = 0
 
+        self.trainer.train_dataloader.collate_fn.current_epoch = self.trainer.current_epoch
+
     def on_evaluation_epoch_start(self):
         self.list_logs = {
             "predictions": [],
