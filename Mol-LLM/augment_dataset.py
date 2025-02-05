@@ -858,7 +858,9 @@ def substructure_replacement_single_mol(selfies, replace_ratio=0.1):
     return rejected_graph
 
 
-def map_by_substructure_replacement(data_point, replace_ratio=0.1):
+def map_by_substructure_replacement(data_point, 
+                                    replace_ratio=0.1,
+                                    num_rejected_graphs=10):
 
     task = data_point["task"]
     input_mol_string = data_point["input_mol_string"]
@@ -872,58 +874,59 @@ def map_by_substructure_replacement(data_point, replace_ratio=0.1):
         replace_ratio *= 2
         replace_ratio = min(replace_ratio, 1.0)
 
-    if task in REGRESSION_BENCHMARKS:
-        prob = np.random.rand()
-        if prob < 0.5:
+    for i in range(num_rejected_graphs):
+        if task in REGRESSION_BENCHMARKS:
+            prob = np.random.rand()
+            if prob < 0.5:
+                rejected_graph = substructure_replacement_single_mol(
+                    selfies, replace_ratio=replace_ratio
+                )
+                additional_rejected_graph = substructure_replacement_single_mol(
+                    selfies, replace_ratio=replace_ratio
+                )
+            else:
+                smiles = sf.decoder(selfies)
+                mol = Chem.MolFromSmiles(smiles)
+                rejected_mol = size_augmentation_single_mol(mol)
+                rejected_graph = mol2graph(rejected_mol["mol"])
+                additional_rejected_graph = mol2graph(rejected_mol["mol"])
+
+        elif "|>>|" in selfies:
+            pair_selfies = selfies.split("|>>|")
+            rejected_graph = substructure_replacement_single_mol(
+                pair_selfies[0], replace_ratio=replace_ratio
+            )
+            additional_rejected_graph = substructure_replacement_single_mol(
+                pair_selfies[1], replace_ratio=replace_ratio
+            )
+        elif task in TEXT2MOL_BENCHMARKS + [
+            "smol-name_conversion-i2s",
+            "smol-name_conversion-i2f",
+        ]:
+            # dummy graph for text2mol tasks
+            dummy_selfies = "[C][C][C]"
+            rejected_graph = substructure_replacement_single_mol(
+                dummy_selfies, replace_ratio=replace_ratio
+            )
+            additional_rejected_graph = substructure_replacement_single_mol(
+                dummy_selfies, replace_ratio=replace_ratio
+            )
+        else:
             rejected_graph = substructure_replacement_single_mol(
                 selfies, replace_ratio=replace_ratio
             )
             additional_rejected_graph = substructure_replacement_single_mol(
                 selfies, replace_ratio=replace_ratio
             )
-        else:
-            smiles = sf.decoder(selfies)
-            mol = Chem.MolFromSmiles(smiles)
-            rejected_mol = size_augmentation_single_mol(mol)
-            rejected_graph = mol2graph(rejected_mol["mol"])
-            additional_rejected_graph = mol2graph(rejected_mol["mol"])
 
-    elif "|>>|" in selfies:
-        pair_selfies = selfies.split("|>>|")
-        rejected_graph = substructure_replacement_single_mol(
-            pair_selfies[0], replace_ratio=replace_ratio
-        )
-        additional_rejected_graph = substructure_replacement_single_mol(
-            pair_selfies[1], replace_ratio=replace_ratio
-        )
-    elif task in TEXT2MOL_BENCHMARKS + [
-        "smol-name_conversion-i2s",
-        "smol-name_conversion-i2f",
-    ]:
-        # dummy graph for text2mol tasks
-        dummy_selfies = "[C][C][C]"
-        rejected_graph = substructure_replacement_single_mol(
-            dummy_selfies, replace_ratio=replace_ratio
-        )
-        additional_rejected_graph = substructure_replacement_single_mol(
-            dummy_selfies, replace_ratio=replace_ratio
-        )
-    else:
-        rejected_graph = substructure_replacement_single_mol(
-            selfies, replace_ratio=replace_ratio
-        )
-        additional_rejected_graph = substructure_replacement_single_mol(
-            selfies, replace_ratio=replace_ratio
-        )
-
-    data_point["rejected_x"] = rejected_graph["node_feat"]
-    data_point["rejected_edge_index"] = rejected_graph["edge_index"]
-    data_point["rejected_edge_attr"] = rejected_graph["edge_feat"]
-    data_point["additional_rejected_x"] = additional_rejected_graph["node_feat"]
-    data_point["additional_rejected_edge_index"] = additional_rejected_graph[
-        "edge_index"
-    ]
-    data_point["additional_rejected_edge_attr"] = additional_rejected_graph["edge_feat"]
+        data_point[f"{i}-th_rejected_x"] = rejected_graph["node_feat"]
+        data_point[f"{i}-th_rejected_edge_index"] = rejected_graph["edge_index"]
+        data_point[f"{i}-th_rejected_edge_attr"] = rejected_graph["edge_feat"]
+        data_point[f"{i}-th_additional_rejected_x"] = additional_rejected_graph["node_feat"]
+        data_point[f"{i}-th_additional_rejected_edge_index"] = additional_rejected_graph[
+            "edge_index"
+        ]
+        data_point[f"{i}-th_additional_rejected_edge_attr"] = additional_rejected_graph["edge_feat"]
 
     return data_point
 
