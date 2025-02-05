@@ -555,49 +555,30 @@ class DataCollator(DataCollatorForSeq2Seq):
             if self.apply_simpo:
                 if "graph" in self.simpo_modality:
                     if self.train:
-                        list_rejected_graphs = [
+                        cardinal_number = self.current_epoch
+                    else:
+                        cardinal_number = 0
+                    list_rejected_graphs = [
+                    Data(
+                        x=torch.tensor(sample[f"{cardinal_number}-th_rejected_x"], dtype=torch.int64),
+                        edge_index=torch.tensor(sample[f"{cardinal_number}-th_rejected_edge_index"], dtype=torch.int64),
+                        edge_attr=torch.tensor(sample[f"{cardinal_number}-th_rejected_edge_attr"], dtype=torch.int64),
+                    )
+                    for sample in batch
+                    ]
+                    # for reagent prediction
+                    list_rejected_additional_graphs = [
                         Data(
-                            x=torch.tensor(sample[f"{self.current_epoch}-th_rejected_x"], dtype=torch.int64),
-                            edge_index=torch.tensor(sample[f"{self.current_epoch}-th_rejected_edge_index"], dtype=torch.int64),
-                            edge_attr=torch.tensor(sample[f"{self.current_epoch}-th_rejected_edge_attr"], dtype=torch.int64),
+                            x=torch.tensor(sample[f"{cardinal_number}-th_additional_rejected_x"], dtype=torch.int64),
+                            edge_index=torch.tensor(
+                                sample[f"{cardinal_number}-th_additional_rejected_edge_index"], dtype=torch.int64
+                            ),
+                            edge_attr=torch.tensor(
+                                sample[f"{cardinal_number}-th_additional_rejected_edge_attr"], dtype=torch.int64
+                            ),
                         )
                         for sample in batch
-                        ]
-                        # for reagent prediction
-                        list_rejected_additional_graphs = [
-                            Data(
-                                x=torch.tensor(sample[f"{self.current_epoch}-th_additional_rejected_x"], dtype=torch.int64),
-                                edge_index=torch.tensor(
-                                    sample[f"{self.current_epoch}-th_additional_rejected_edge_index"], dtype=torch.int64
-                                ),
-                                edge_attr=torch.tensor(
-                                    sample[f"{self.current_epoch}-th_additional_rejected_edge_attr"], dtype=torch.int64
-                                ),
-                            )
-                            for sample in batch
-                        ]
-                    else:
-                        list_rejected_graphs = [
-                            Data(
-                                x=torch.tensor(sample["rejected_x"], dtype=torch.int64),
-                                edge_index=torch.tensor(sample["rejected_edge_index"], dtype=torch.int64),
-                                edge_attr=torch.tensor(sample["rejected_edge_attr"], dtype=torch.int64),
-                            )
-                            for sample in batch
-                        ]
-                        # for reagent prediction
-                        list_rejected_additional_graphs = [
-                            Data(
-                                x=torch.tensor(sample["additional_rejected_x"], dtype=torch.int64),
-                                edge_index=torch.tensor(
-                                    sample["additional_rejected_edge_index"], dtype=torch.int64
-                                ),
-                                edge_attr=torch.tensor(
-                                    sample["additional_rejected_edge_attr"], dtype=torch.int64
-                                ),
-                            )
-                            for sample in batch
-                        ]
+                    ]
                 else:
                     list_rejected_graphs = copy.deepcopy(list_graphs)
                     list_rejected_additional_graphs = copy.deepcopy(
