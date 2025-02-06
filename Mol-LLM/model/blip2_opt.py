@@ -106,9 +106,6 @@ class Blip2OPT(Blip2Base):
             use_fast=False,
             padding_side="left",
         )
-        self.llm_tokenizer.mol_string_randomization_ratio = (
-            args.mol_string_randomization_ratio
-        )
         self.add_necessary_tokens()
 
         self.set_llm_model(llm_model)
@@ -229,7 +226,7 @@ class Blip2OPT(Blip2Base):
             self.llm_tokenizer.add_tokens(selfies_tokens)
             # get token id of the selfies_tokens
             self.llm_tokenizer.selfies_token_ids = [
-                self.llm_tokenizer(token, add_special_tokens=False).input_ids[0]
+                self.llm_tokenizer.convert_tokens_to_ids(token)
                 for token in selfies_tokens
             ]
             self.llm_tokenizer.added_selfies_tokens = selfies_tokens
@@ -304,29 +301,6 @@ class Blip2OPT(Blip2Base):
             pass
         else:
             raise NotImplementedError()
-
-    def random_replace_mol_string(self, input_tokens_input_ids):
-        ids = input_tokens_input_ids
-        tokenizer = self.llm_tokenizer
-        mol_string_randomization_ratio = tokenizer.mol_string_randomization_ratio
-        total_selfies_token_ids = tokenizer.selfies_token_ids
-
-        selfies_min_id = min(total_selfies_token_ids)
-        selfies_max_id = max(total_selfies_token_ids)
-        # if ids are correspond to total_selfies_token_ids, replace them with random token by mol_string_randomization_ratio
-        full_random_replaced = torch.where(
-            (ids >= selfies_min_id) & (ids <= selfies_max_id),
-            torch.randint(
-                selfies_min_id, selfies_max_id + 1, ids.shape, device=ids.device
-            ),
-            ids,
-        )
-        partial_random_replaced = torch.where(
-            torch.rand(ids.shape, device=ids.device) < mol_string_randomization_ratio,
-            full_random_replaced,
-            ids,
-        )
-        return partial_random_replaced
 
     def forward(self, batch):
         input_ids = batch.input_ids  # ['input_ids']

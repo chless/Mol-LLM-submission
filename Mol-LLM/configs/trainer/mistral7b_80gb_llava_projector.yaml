@@ -70,7 +70,6 @@ test_on_trainset: false
 # multimodal training
 mol_representation: string_only
 modality_randomization: false
-mol_string_randomization_ratio: -1
 mdpo: false
 
 log_attn_score: true

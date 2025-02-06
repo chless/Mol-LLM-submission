@@ -68,7 +68,6 @@ test_on_trainset: false
 
 # multimodal training
 mol_representation: string_only
-mol_string_randomization_ratio: -1
 log_attn_score: true
 
 # simpo

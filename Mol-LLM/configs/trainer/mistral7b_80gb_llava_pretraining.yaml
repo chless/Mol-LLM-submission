@@ -70,5 +70,4 @@ testset_resize: -1
 test_on_trainset: false
 
 # multimodal training
-mol_string_randomization_ratio: -1
 mdpo: false
