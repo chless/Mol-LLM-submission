@@ -486,7 +486,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.tokenizer.padding_side = "left"
         self.mol_representation = args.mol_representation
 
-        self.apply_simpo = args.train_simpo if self.train else args.eval_simpo
+        self.apply_molpo = args.train_simpo if self.train else args.eval_simpo
 
         self.projector_type = args.projector_type
         if hasattr(args, "simpo_modality"):
@@ -524,7 +524,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             prompt_text, mol_representation=self.mol_representation
         )
 
-        if self.apply_simpo:
+        if self.apply_molpo:
             prompt_text = prompt_text + prompt_text
             target_text = target_text + target_text
             tasks = tasks + tasks
@@ -552,7 +552,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                 for sample in batch
             ]
 
-            if self.apply_simpo:
+            if self.apply_molpo:
                 if "graph" in self.simpo_modality:
                     if self.train:
                         cardinal_number = self.current_epoch
