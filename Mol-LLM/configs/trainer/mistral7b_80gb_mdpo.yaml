@@ -76,5 +76,5 @@ eval_simpo: true
 
 beta: 1.0
 gamma_beta_ratio: 1.0
-simpo_weight: 0.3
+molpo_weight: 0.3
 loss_type: sigmoid
