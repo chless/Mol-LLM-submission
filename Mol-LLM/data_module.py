@@ -7,7 +7,7 @@ from pytorch_lightning import LightningDataModule
 
 from datasets import load_dataset, load_from_disk, load_dataset_builder
 
-from data_utils import DataCollator, generate_and_tokenize_prompt, generate_text
+from data_utils import DataCollator
 
 
 class Stage3DM(LightningDataModule):
