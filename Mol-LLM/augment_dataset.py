@@ -852,13 +852,6 @@ def add_atoms_based_on_mol(mol, num_atoms_to_add):
     return out
 
 
-def substructure_replacement_single_mol(selfies, replace_ratio=0.1):
-    modified_result = extract_and_modify(selfies, replace_ratio=replace_ratio)
-    #rejected_graph = modified_result["modified_graph"]
-    #rejected_smiles = modified_result["modified_smiles"]
-    return modified_result
-
-
 def map_by_substructure_replacement(data_point, 
                                     replace_ratio=0.1,
                                     num_rejected_graphs=10):
@@ -879,75 +872,55 @@ def map_by_substructure_replacement(data_point,
         if task in REGRESSION_BENCHMARKS:
             prob = np.random.rand()
             if prob < 0.5:
-                modified_result = substructure_replacement_single_mol(
+                rejected_graph = extract_and_modify(
                     selfies, replace_ratio=replace_ratio
-                )
-                rejected_graph = modified_result["modified_graph"]
-                rejected_smiles = modified_result["modified_smiles"]
-                additional_modified_result = substructure_replacement_single_mol(
+                )["modified_graph"]
+                additional_rejected_graph = extract_and_modify(
                     selfies, replace_ratio=replace_ratio
-                )
-                additional_rejected_graph = additional_modified_result["modified_graph"]
-                additional_rejected_smiles = additional_modified_result["modified_smiles"]
+                )["modified_graph"]
             else:
                 smiles = sf.decoder(selfies)
                 mol = Chem.MolFromSmiles(smiles)
                 rejected_mol = size_augmentation_single_mol(mol)
                 rejected_graph = mol2graph(rejected_mol["mol"])
-                rejected_smiles = Chem.MolToSmiles(rejected_mol["mol"])
                 additional_rejected_graph = mol2graph(rejected_mol["mol"])
-                additional_rejected_smiles = Chem.MolToSmiles(rejected_mol["mol"])
 
         elif "|>>|" in selfies:
             pair_selfies = selfies.split("|>>|")
-            modified_result = substructure_replacement_single_mol(
+            rejected_graph = extract_and_modify(
                 pair_selfies[0], replace_ratio=replace_ratio
-            )
-            rejected_graph = modified_result["modified_graph"]
-            rejected_smiles = modified_result["modified_smiles"]
-            additional_modified_result = substructure_replacement_single_mol(
+            )["modified_graph"]
+            additional_rejected_graph = extract_and_modify(
                 pair_selfies[1], replace_ratio=replace_ratio
-            )
-            additional_rejected_graph = additional_modified_result["modified_graph"]
-            additional_rejected_smiles = additional_modified_result["modified_smiles"]
+            )["modified_graph"]
         elif task in TEXT2MOL_BENCHMARKS + [
             "smol-name_conversion-i2s",
             "smol-name_conversion-i2f",
         ]:
             # dummy graph for text2mol tasks
             dummy_selfies = "[C][C][C]"
-            modified_result = substructure_replacement_single_mol(
+            rejected_graph = extract_and_modify(
                 dummy_selfies, replace_ratio=replace_ratio
-            )
-            rejected_graph = modified_result["modified_graph"]
-            rejected_smiles = modified_result["modified_smiles"]
-            additional_modified_result = substructure_replacement_single_mol(
+            )["modified_graph"]
+            additional_rejected_graph = extract_and_modify(
                 dummy_selfies, replace_ratio=replace_ratio
-            )
-            additional_rejected_graph = additional_modified_result["modified_graph"]
-            additional_rejected_smiles = additional_modified_result["modified_smiles"]
+            )["modified_graph"]
         else:
-            modified_result = substructure_replacement_single_mol(
+            rejected_graph = extract_and_modify(
                 selfies, replace_ratio=replace_ratio
-            )
-            rejected_graph = modified_result["modified_graph"]
-            rejected_smiles = modified_result["modified_smiles"]
-            additional_modified_result = substructure_replacement_single_mol(
+            )["modified_graph"]
+            additional_rejected_graph = extract_and_modify(
                 selfies, replace_ratio=replace_ratio
-            )
-            additional_rejected_graph = additional_modified_result["modified_graph"]
-            additional_rejected_smiles = additional_modified_result["modified_smiles"]
+            )["modified_graph"]
 
         data_point[f"{i}-th_rejected_x"] = rejected_graph["node_feat"]
         data_point[f"{i}-th_rejected_edge_index"] = rejected_graph["edge_index"]
         data_point[f"{i}-th_rejected_edge_attr"] = rejected_graph["edge_feat"]
-        data_point[f"{i}-th_rejected_smiles"] = rejected_smiles
         data_point[f"{i}-th_additional_rejected_x"] = additional_rejected_graph["node_feat"]
         data_point[f"{i}-th_additional_rejected_edge_index"] = additional_rejected_graph[
             "edge_index"
         ]
         data_point[f"{i}-th_additional_rejected_edge_attr"] = additional_rejected_graph["edge_feat"]
-        data_point[f"{i}-th_additional_rejected_smiles"] = additional_rejected_smiles
 
     return data_point
 
