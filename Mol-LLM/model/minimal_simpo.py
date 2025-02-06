@@ -26,7 +26,7 @@ def simpo_loss(
     pi_logratios = pi_logratios.to(device)
     logits = pi_logratios - gamma_beta_ratio
     # avoid overflow
-    logits = torch.clamp(logits, min=-10, max=10)
+    #logits = torch.clamp(logits, min=-10, max=10)
 
     if loss_type == "sigmoid":
         losses = -F.logsigmoid(beta * logits)
