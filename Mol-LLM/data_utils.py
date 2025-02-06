@@ -159,15 +159,23 @@ class DataCollator(DataCollatorForSeq2Seq):
             # sft tuple (gw, sw, q, y)
             # molpo chosen tuple (gw, sl, q, y)
             # molpo rejected tuple (gl, sl, q, y)
+            input_mol_strings = [sample["input_mol_string"] for sample in batch]
+            list_selfies = [
+                i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
+                for i in input_mol_strings
+            ]
 
-            prompt_text_sl = []
-            for i in range(len(prompt_text)):
-                sw = batch[i]["input_mol_string"].replace('<SELFIES>', "").replace('</SELFIES>', "").replace(' ', '')
+            prompt_text_sl = prompt_text.copy()
+
+            for i in range(len(prompt_text_sl)):
+                sw = list_selfies[i]
                 sl = random_noise_selfies(selfies=sw, tokenizer=self.tokenizer)
-                prompt_sl = input_mol_string_pattern.sub(
-                    f"<SELFIES> {sl} </SELFIES>", prompt_text[i]
+                assert (
+                    sw in prompt_text_sl[i]
+                ), f"{sw} not in {prompt_text_sl[i]}"
+                prompt_text_sl[i] = prompt_text_sl[i].replace(
+                    sw, sl
                 )
-                prompt_text_sl.append(prompt_sl)
 
             prompt_text = prompt_text + prompt_text_sl * 2 # ((q, sw), (q, sl), (q, sl))
             target_text = target_text * 3 # (y, y, y)
