@@ -152,8 +152,8 @@ def main(cfg):
             model.load_state_dict(ckpt["state_dict"], strict=False)
             print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
         
-        if cfg.mode == "post-ft":
-            outputs = trainer.test(model, datamodule=dm)
+        #if cfg.mode == "post-ft":
+        #    outputs = trainer.test(model, datamodule=dm)
 
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         outputs = trainer.test(model, datamodule=dm)
