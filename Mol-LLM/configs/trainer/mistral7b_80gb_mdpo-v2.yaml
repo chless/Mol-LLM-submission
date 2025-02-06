@@ -76,6 +76,12 @@ eval_simpo: true
 
 beta: 1.0
 gamma_beta_ratio: 1.0
-simpo_weight: 0.3
+
+sft_weight: 1.0
+molpo_weight: 0.5
+anc_chosen_weight: 0.3
+anc_reject_weight: 0.3
+anc_lambda: 1.2
+
 loss_type: sigmoid
 find_unused_parameters: true
