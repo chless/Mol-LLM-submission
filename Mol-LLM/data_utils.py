@@ -489,9 +489,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.apply_molpo = args.train_simpo if self.train else args.eval_simpo
 
         self.projector_type = args.projector_type
-        if hasattr(args, "simpo_modality"):
-            self.simpo_modality = args.simpo_modality
-            assert self.simpo_modality == "graph"
+
         
         if self.mol_representation in ["string+graph", "graph_only"]:
             self.graph_collator = GraphCollater([], [])
@@ -553,37 +551,32 @@ class DataCollator(DataCollatorForSeq2Seq):
             ]
 
             if self.apply_molpo:
-                if "graph" in self.simpo_modality:
-                    if self.train:
-                        cardinal_number = self.current_epoch
-                    else:
-                        cardinal_number = 0
-                    list_rejected_graphs = [
+                if self.train:
+                    cardinal_number = self.current_epoch
+                else:
+                    cardinal_number = 0
+                list_rejected_graphs = [
+                Data(
+                    x=torch.tensor(sample[f"{cardinal_number}-th_rejected_x"], dtype=torch.int64),
+                    edge_index=torch.tensor(sample[f"{cardinal_number}-th_rejected_edge_index"], dtype=torch.int64),
+                    edge_attr=torch.tensor(sample[f"{cardinal_number}-th_rejected_edge_attr"], dtype=torch.int64),
+                )
+                for sample in batch
+                ]
+                # for reagent prediction
+                list_rejected_additional_graphs = [
                     Data(
-                        x=torch.tensor(sample[f"{cardinal_number}-th_rejected_x"], dtype=torch.int64),
-                        edge_index=torch.tensor(sample[f"{cardinal_number}-th_rejected_edge_index"], dtype=torch.int64),
-                        edge_attr=torch.tensor(sample[f"{cardinal_number}-th_rejected_edge_attr"], dtype=torch.int64),
+                        x=torch.tensor(sample[f"{cardinal_number}-th_additional_rejected_x"], dtype=torch.int64),
+                        edge_index=torch.tensor(
+                            sample[f"{cardinal_number}-th_additional_rejected_edge_index"], dtype=torch.int64
+                        ),
+                        edge_attr=torch.tensor(
+                            sample[f"{cardinal_number}-th_additional_rejected_edge_attr"], dtype=torch.int64
+                        ),
                     )
                     for sample in batch
-                    ]
-                    # for reagent prediction
-                    list_rejected_additional_graphs = [
-                        Data(
-                            x=torch.tensor(sample[f"{cardinal_number}-th_additional_rejected_x"], dtype=torch.int64),
-                            edge_index=torch.tensor(
-                                sample[f"{cardinal_number}-th_additional_rejected_edge_index"], dtype=torch.int64
-                            ),
-                            edge_attr=torch.tensor(
-                                sample[f"{cardinal_number}-th_additional_rejected_edge_attr"], dtype=torch.int64
-                            ),
-                        )
-                        for sample in batch
-                    ]
-                else:
-                    list_rejected_graphs = copy.deepcopy(list_graphs)
-                    list_rejected_additional_graphs = copy.deepcopy(
-                        list_additional_graphs
-                    )
+                ]
+
 
                 list_graphs = list_graphs + list_rejected_graphs
                 list_additional_graphs = (

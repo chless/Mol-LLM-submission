@@ -75,7 +75,6 @@ log_attn_score: true
 train_simpo: true
 eval_simpo: true
 
-simpo_modality: graph
 beta: 1.0
 gamma_beta_ratio: 1.0
 simpo_weight: 0.3
