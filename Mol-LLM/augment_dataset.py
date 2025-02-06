@@ -1,17 +1,13 @@
 from datasets import load_from_disk
 from rdkit import Chem
 from rdkit.Chem import MACCSkeys
-from data_utils import mol2graph, graph2data
 import numpy as np
-import copy
 import re
 import random
 from ogb.utils.features import (
     allowable_features,
     atom_to_feature_vector,
     bond_to_feature_vector,
-    atom_feature_vector_to_dict,
-    bond_feature_vector_to_dict,
 )
 import selfies as sf
 from tqdm import tqdm
