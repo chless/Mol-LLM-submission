@@ -329,20 +329,6 @@ class Blip2Stage3(pl.LightningModule):
                         )
 
     def on_train_epoch_start(self) -> None:
-        if self.blip2model.llm_tokenizer.mol_string_randomization_ratio > 0:
-            # conduct mol_string_randomization_ratio annealing, so that at max epochs, it is 0
-            self.blip2model.llm_tokenizer.mol_string_randomization_ratio = max(
-                0,
-                self.blip2model.llm_tokenizer.mol_string_randomization_ratio
-                * (1 - self.trainer.current_epoch / self.trainer.max_epochs),
-            )
-
-        self.log(
-            "mol_string_randomization_ratio",
-            self.blip2model.llm_tokenizer.mol_string_randomization_ratio,
-            sync_dist=False,
-        )
-
         self.task_specific_outputs = {}
 
         self.train_list_predictions = []
