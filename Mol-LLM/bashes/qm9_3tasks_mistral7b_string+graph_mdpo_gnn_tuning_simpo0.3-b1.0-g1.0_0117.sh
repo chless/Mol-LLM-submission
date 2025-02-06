@@ -21,7 +21,7 @@ trainer.val_check_interval=0.25 \
 trainer.skip_sanity_check=true \
 trainer.beta=1.0 \
 trainer.gamma_beta_ratio=1.0 \
-trainer.simpo_weight=0.3 \
+trainer.molpo_weight=0.3 \
 ckpt_path=/data/all_checkpoints/qm9_3tasks_mistral7b_string+graph_mdpo_gnn_tuning_0117/last.ckpt
 
 

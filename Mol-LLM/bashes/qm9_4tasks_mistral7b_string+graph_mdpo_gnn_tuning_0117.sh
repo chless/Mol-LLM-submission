@@ -22,6 +22,6 @@ trainer.val_check_interval=0.25 \
 trainer.skip_sanity_check=false \
 trainer.beta=1.0 \
 trainer.gamma_beta_ratio=1.0 \
-trainer.simpo_weight=0.3 \
+trainer.molpo_weight=0.3 \
 
 
