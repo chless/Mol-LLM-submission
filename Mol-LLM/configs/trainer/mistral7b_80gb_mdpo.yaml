@@ -33,7 +33,7 @@ logging_dir: "your logging path"
 llava_pretraining: 0
 second_stage_start_epoch: 4
 num_workers: 0
-skip_sanity_check: false
+skip_sanity_check: true
 
 # accumulate_grad_batches: 11
 total_batch_size: 2048
