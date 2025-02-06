@@ -169,8 +169,8 @@ class DataCollator(DataCollatorForSeq2Seq):
                 )
                 prompt_text_sl.append(prompt_sl)
 
-            prompt_text = prompt_text + prompt_text_sl * 2
-            target_text = target_text * 3
+            prompt_text = prompt_text + prompt_text_sl * 2 # ((q, sw), (q, sl), (q, sl))
+            target_text = target_text * 3 # (y, y, y)
             tasks = tasks * 3
 
         if "graph" in self.mol_representation:
@@ -219,11 +219,9 @@ class DataCollator(DataCollatorForSeq2Seq):
                     for sample in batch
                 ]
 
-
-                list_graphs = list_graphs + list_rejected_graphs
-                list_additional_graphs = (
-                    list_additional_graphs + list_rejected_additional_graphs
-                )
+                # (gw, gw, gl)
+                list_graphs = list_graphs * 2 + list_rejected_graphs
+                list_additional_graphs = list_additional_graphs * 2 + list_rejected_additional_graphs
 
         if self.projector_type == "mlp" and "graph" in self.mol_representation:
             # TODO: implement for reagent prediction
