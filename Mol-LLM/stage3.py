@@ -71,6 +71,7 @@ def main(cfg):
 
     callbacks = []
 
+    # TODO: save avg chosen rewards for resuming training
     callbacks.append(
         ModelCheckpoint(
             dirpath=os.path.join(cfg.logging_dir, cfg.filename),
@@ -134,11 +135,26 @@ def main(cfg):
         trainer_args["profiler"] = cfg.profiler
 
     trainer = Trainer(**trainer_args)
-    if cfg.mode in {"pretrain", "ft", "multi_task"}:
+    if cfg.mode in {"ft"}:
         if cfg.pretrained_ckpt_path is not None:
             ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
             model.load_state_dict(ckpt["state_dict"], strict=False)
             print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
+        
+        if cfg.mode == "post-ft":
+            outputs = trainer.test(model, datamodule=dm)
+
+        trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
+        outputs = trainer.test(model, datamodule=dm)
+    elif cfg.mode in {"post-ft"}:
+        if cfg.pretrained_ckpt_path is not None:
+            ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
+            model.load_state_dict(ckpt["state_dict"], strict=False)
+            print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
+        
+        if cfg.mode == "post-ft":
+            outputs = trainer.test(model, datamodule=dm)
+
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         outputs = trainer.test(model, datamodule=dm)
 
