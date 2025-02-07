@@ -116,7 +116,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.apply_molpo = args.train_simpo if self.train else args.eval_simpo
 
         self.projector_type = args.projector_type
-        self.noise_ratio = args.noise_ratio
+        self.sl_noise_ratio = args.sl_noise_ratio
 
         
         if self.mol_representation in ["string+graph", "graph_only"]:
@@ -168,13 +168,13 @@ class DataCollator(DataCollatorForSeq2Seq):
 
             prompt_text_sl = prompt_text.copy()
 
-            if self.noise_ratio > 0:
+            if self.sl_noise_ratio > 0:
                 for i in range(len(prompt_text_sl)):
                     sw = list_selfies[i]
                     sl = random_noise_selfies(
                         selfies=sw, 
                         tokenizer=self.tokenizer,
-                        noise_ratio=self.noise_ratio
+                        sl_noise_ratio=self.sl_noise_ratio
                         )
                     assert (
                         sw in prompt_text_sl[i]
@@ -370,10 +370,10 @@ class DataCollator(DataCollatorForSeq2Seq):
 
 
 
-def random_noise_selfies(selfies, tokenizer, noise_ratio=0.3):
+def random_noise_selfies(selfies, tokenizer, sl_noise_ratio=0.3):
     selfies_ids = tokenizer.encode(selfies, add_special_tokens=False)
     total_selfies_token_ids = tokenizer.selfies_token_ids
-    num_ids_to_replace = int(noise_ratio * len(selfies_ids))
+    num_ids_to_replace = int(sl_noise_ratio * len(selfies_ids))
     replacing_random_ids = np.random.choice(
         total_selfies_token_ids, num_ids_to_replace, replace=True
     )

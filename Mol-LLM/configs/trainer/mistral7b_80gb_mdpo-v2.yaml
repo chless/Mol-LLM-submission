@@ -82,6 +82,7 @@ molpo_weight: 0.5
 anc_chosen_weight: 0.5
 anc_reject_weight: 0.5
 anc_lambda: 1.2
+sl_noise_ratio: 0.3
 
 loss_type: sigmoid
 find_unused_parameters: true
