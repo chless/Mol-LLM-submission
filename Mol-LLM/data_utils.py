@@ -116,6 +116,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.apply_molpo = args.train_simpo if self.train else args.eval_simpo
 
         self.projector_type = args.projector_type
+        self.noise_ratio = args.noise_ratio
 
         
         if self.mol_representation in ["string+graph", "graph_only"]:
@@ -167,15 +168,20 @@ class DataCollator(DataCollatorForSeq2Seq):
 
             prompt_text_sl = prompt_text.copy()
 
-            for i in range(len(prompt_text_sl)):
-                sw = list_selfies[i]
-                sl = random_noise_selfies(selfies=sw, tokenizer=self.tokenizer)
-                assert (
-                    sw in prompt_text_sl[i]
-                ), f"{sw} not in {prompt_text_sl[i]}"
-                prompt_text_sl[i] = prompt_text_sl[i].replace(
-                    sw, sl
-                )
+            if self.noise_ratio > 0:
+                for i in range(len(prompt_text_sl)):
+                    sw = list_selfies[i]
+                    sl = random_noise_selfies(
+                        selfies=sw, 
+                        tokenizer=self.tokenizer,
+                        noise_ratio=self.noise_ratio
+                        )
+                    assert (
+                        sw in prompt_text_sl[i]
+                    ), f"{sw} not in {prompt_text_sl[i]}"
+                    prompt_text_sl[i] = prompt_text_sl[i].replace(
+                        sw, sl
+                    )
 
             prompt_text = prompt_text + prompt_text_sl * 2 # ((q, sw), (q, sl), (q, sl))
             target_text = target_text * 3 # (y, y, y)
