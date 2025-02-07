@@ -53,8 +53,9 @@ class MyDDPStrategy(strategies.DDPStrategy):
 @hydra.main(config_path="configs", config_name="default.yaml", version_base=None)
 def main(cfg):
     import nltk
+
     nltk.download("wordnet")
-    
+
     cfg = flatten_dictconfig(cfg)
     pl.seed_everything(cfg.seed)
 
@@ -140,9 +141,6 @@ def main(cfg):
             ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
             model.load_state_dict(ckpt["state_dict"], strict=False)
             print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
-        
-        if cfg.mode == "post-ft":
-            outputs = trainer.validate(model, datamodule=dm)
 
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         outputs = trainer.test(model, datamodule=dm)
@@ -151,8 +149,9 @@ def main(cfg):
             ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
             model.load_state_dict(ckpt["state_dict"], strict=False)
             print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
-        
-        #if cfg.mode == "post-ft":
+            cfg.ckpt_path = None
+
+        # if cfg.mode == "post-ft":
         #    outputs = trainer.test(model, datamodule=dm)
 
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
