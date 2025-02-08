@@ -98,6 +98,15 @@ class Blip2Stage3(pl.LightningModule):
         self.tokenizer = self.blip2model.init_tokenizer()
         self.save_hyperparameters(args)
 
+        self.beta=args.beta,
+        self.gamma_beta_ratio=args.gamma_beta_ratio,
+        self.sft_weight=args.sft_weight,
+        self.molpo_weight=args.molpo_weight,
+        self.anc_chosen_weight=args.anc_chosen_weight,
+        self.anc_reject_weight=args.anc_reject_weight,
+        self.chosen_lambda=args.chosen_lambda,
+        self.reject_lambda=args.reject_lambda,
+
     def load_from_stage1_checkpoint(self, path):
         ckpt = torch.load(path, map_location="cpu")
         state_dict = ckpt["state_dict"]
@@ -228,13 +237,6 @@ class Blip2Stage3(pl.LightningModule):
         labels: torch.LongTensor,
         tasks,
         instance_loss: torch.FloatTensor = None,
-        beta: float = 1.0,
-        gamma_beta_ratio: float = 0.0,
-        sft_weight: float = 1.0,
-        molpo_weight: float = 0.5,
-        anc_chosen_weight: float = 0.5,
-        anc_reject_weight: float = 0.5,
-        anc_lambda: float = 1.2,
         loss_type="sigmoid",
     ):
         """Compute the SimPO loss and other metrics for the given batch of inputs for train or test."""
@@ -258,8 +260,8 @@ class Blip2Stage3(pl.LightningModule):
         losses_simpo, chosen_rewards, rejected_rewards = simpo_loss(
             policy_chosen_logps=policy_chosen_logps,
             policy_rejected_logps=policy_rejected_logps,
-            beta=beta,
-            gamma_beta_ratio=gamma_beta_ratio,
+            beta=self.beta,
+            gamma_beta_ratio=self.gamma_beta_ratio,
             device=logits.device,
             loss_type=loss_type,
         )
@@ -284,22 +286,22 @@ class Blip2Stage3(pl.LightningModule):
             device=logits.device,
         )
         
-        anchor_chosen_logits = chosen_rewards - anchor_chosen_rewards
-        anchor_rejected_logits = rejected_rewards - anc_lambda * anchor_chosen_rewards
-        anchor_chosen_losses = -F.logsigmoid(beta * anchor_chosen_logits)
-        anchor_rejected_losses = -F.logsigmoid(beta * anchor_rejected_logits)
+        anchor_chosen_logits = chosen_rewards - self.chosen_lambda * anchor_chosen_rewards
+        anchor_rejected_logits = rejected_rewards - self.reject_lambda * anchor_chosen_rewards
+        anchor_chosen_losses = -F.logsigmoid(self.beta * anchor_chosen_logits)
+        anchor_rejected_losses = -F.logsigmoid(self.beta * anchor_rejected_logits)
         anchor_chosen_loss = anchor_chosen_losses.mean()
         anchor_rejected_loss = anchor_rejected_losses.mean()
         clamped_anchor_chosen_loss = torch.clamp(anchor_chosen_loss, max=sft_loss)
         clamped_anchor_rejected_loss = torch.clamp(anchor_rejected_loss, max=sft_loss)
 
-        if molpo_weight > 0.0:
-            loss = sft_weight * sft_loss \
-                + molpo_weight * loss_simpo \
-                + anc_chosen_weight * clamped_anchor_chosen_loss \
-                    + anc_reject_weight * clamped_anchor_rejected_loss
+        if self.molpo_weight > 0.0:
+            loss = self.sft_weight * sft_loss \
+                + self.molpo_weight * loss_simpo \
+                + self.anc_chosen_weight * clamped_anchor_chosen_loss \
+                    + self.anc_reject_weight * clamped_anchor_rejected_loss
         else:
-            loss = sft_weight * sft_loss
+            loss = self.sft_weight * sft_loss
 
         if torch.isnan(loss):
             assert not torch.isnan(loss), "loss is nan"
@@ -365,14 +367,7 @@ class Blip2Stage3(pl.LightningModule):
                     logits=logits,
                     labels=batch.simpo_labels,
                     instance_loss=outputs["instance_loss"],
-                    beta=self.args.beta,
-                    gamma_beta_ratio=self.args.gamma_beta_ratio,
                     tasks=tasks,
-                    sft_weight=self.args.sft_weight,
-                    molpo_weight=self.args.molpo_weight,
-                    anc_chosen_weight=self.args.anc_chosen_weight,
-                    anc_reject_weight=self.args.anc_reject_weight,
-                    anc_lambda=self.args.anc_lambda,
                 )
             outputs.update(metrics)
 
@@ -556,11 +551,8 @@ class Blip2Stage3(pl.LightningModule):
                 loss, metrics = self.get_total_molpo_loss(
                     logits=comparable_logits,
                     labels=comparable_simpo_labels,
+                    tasks=tasks,
                     instance_loss=instance_loss,
-                    molpo_weight=self.args.molpo_weight,
-                    beta=self.args.beta,
-                    gamma_beta_ratio=self.args.gamma_beta_ratio,
-                    tasks=tasks
                 )
 
             logits = logits[:len_tuple]
