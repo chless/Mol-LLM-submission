@@ -1,6 +1,6 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='qm9_molpo_lambda1.5_anc0.5_0207'
+file_name='qm9_molpo_lambda3_anc0.5_ckpt-string+graph_0208'
 gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
@@ -24,5 +24,4 @@ trainer.batch_size=4 \
 trainer.inference_batch_size=7 \
 trainer.anc_chosen_weight=0.5 \
 trainer.anc_reject_weight=0.5 \
-trainer.reject_lambda=1.5 \
-ckpt_path="'/data/all_checkpoints/qm9_molpo_lambda1.5_anc0.5_0207/last.ckpt'"
+trainer.reject_lambda=3.0

@@ -24,5 +24,5 @@ trainer.batch_size=4 \
 trainer.inference_batch_size=7 \
 trainer.anc_chosen_weight=0.0 \
 trainer.anc_reject_weight=0.0 \
-trainer.anc_lambda=1.5 \
+trainer.reject_lambda=1.5 \
 pretrained_ckpt_path="'/data/all_checkpoints/hug_test_sg_cls/all_checkpoints/hug_test_sg_cls/every_epochs/epoch=11-val_loss=0.000000.ckpt'"
