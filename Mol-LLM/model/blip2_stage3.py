@@ -278,7 +278,7 @@ class Blip2Stage3(pl.LightningModule):
             alpha=0.9,
         )
 
-        anchor_chosen_rewards = torch.tensor(
+        avg_chosen_rewards = torch.tensor(
             [
                 self.task_specific_chosen_reward[task]
                 for task in tasks
@@ -286,14 +286,12 @@ class Blip2Stage3(pl.LightningModule):
             device=logits.device,
         )
         
-        anchor_chosen_logits = chosen_rewards - self.chosen_lambda * anchor_chosen_rewards
-        anchor_rejected_logits = rejected_rewards - self.reject_lambda * anchor_chosen_rewards
-        anchor_chosen_losses = -F.logsigmoid(self.beta * anchor_chosen_logits)
-        anchor_rejected_losses = -F.logsigmoid(self.beta * anchor_rejected_logits)
+        anchor_chosen_losses = -F.logsigmoid(chosen_rewards - self.chosen_lambda * self.beta * avg_chosen_rewards)
+        anchor_rejected_losses = -F.logsigmoid(rejected_rewards - self.reject_lambda * self.beta * avg_chosen_rewards)
         anchor_chosen_loss = anchor_chosen_losses.mean()
         anchor_rejected_loss = anchor_rejected_losses.mean()
-        clamped_anchor_chosen_loss = torch.clamp(anchor_chosen_loss, max=sft_loss)
-        clamped_anchor_rejected_loss = torch.clamp(anchor_rejected_loss, max=sft_loss)
+        clamped_anchor_chosen_loss = torch.clamp(anchor_chosen_loss, max=loss_simpo)
+        clamped_anchor_rejected_loss = torch.clamp(anchor_rejected_loss, max=loss_simpo)
 
         if self.molpo_weight > 0.0:
             loss = self.sft_weight * sft_loss \
