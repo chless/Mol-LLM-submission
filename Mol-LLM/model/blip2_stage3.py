@@ -98,14 +98,14 @@ class Blip2Stage3(pl.LightningModule):
         self.tokenizer = self.blip2model.init_tokenizer()
         self.save_hyperparameters(args)
 
-        self.beta=args.beta,
-        self.gamma_beta_ratio=args.gamma_beta_ratio,
-        self.sft_weight=args.sft_weight,
-        self.molpo_weight=args.molpo_weight,
-        self.anc_chosen_weight=args.anc_chosen_weight,
-        self.anc_reject_weight=args.anc_reject_weight,
-        self.chosen_lambda=args.chosen_lambda,
-        self.reject_lambda=args.reject_lambda,
+        self.beta=args.beta
+        self.gamma_beta_ratio=args.gamma_beta_ratio
+        self.sft_weight=args.sft_weight
+        self.molpo_weight=args.molpo_weight
+        self.anc_chosen_weight=args.anc_chosen_weight
+        self.anc_reject_weight=args.anc_reject_weight
+        self.chosen_lambda=args.chosen_lambda
+        self.reject_lambda=args.reject_lambda
 
     def load_from_stage1_checkpoint(self, path):
         ckpt = torch.load(path, map_location="cpu")
