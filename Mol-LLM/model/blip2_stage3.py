@@ -290,11 +290,16 @@ class Blip2Stage3(pl.LightningModule):
         anchor_rejected_losses = -F.logsigmoid(beta * anchor_rejected_logits)
         anchor_chosen_loss = anchor_chosen_losses.mean()
         anchor_rejected_loss = anchor_rejected_losses.mean()
+        clamped_anchor_chosen_loss = torch.clamp(anchor_chosen_loss, max=sft_loss)
+        clamped_anchor_rejected_loss = torch.clamp(anchor_rejected_loss, max=sft_loss)
 
         if molpo_weight > 0.0:
-            loss = sft_loss + molpo_weight * loss_simpo + anc_chosen_weight * anchor_chosen_loss + anc_reject_weight * anchor_rejected_loss
+            loss = sft_weight * sft_loss \
+                + molpo_weight * loss_simpo \
+                + anc_chosen_weight * clamped_anchor_chosen_loss \
+                    + anc_reject_weight * clamped_anchor_rejected_loss
         else:
-            loss = sft_loss
+            loss = sft_weight * sft_loss
 
         if torch.isnan(loss):
             assert not torch.isnan(loss), "loss is nan"
@@ -312,8 +317,8 @@ class Blip2Stage3(pl.LightningModule):
         metrics[f"logps/chosen"] = policy_chosen_logps.clone().detach().cpu()
         metrics[f"logps/rejected"] = policy_rejected_logps.clone().detach().cpu()
 
-        metrics[f"anchor/chosen"] = anchor_chosen_losses.clone().detach().cpu()
-        metrics[f"anchor/rejected"] = anchor_rejected_losses.clone().detach().cpu()
+        metrics[f"anchor_loss/chosen"] = anchor_chosen_losses.clone().detach().cpu()
+        metrics[f"anchor_loss/rejected"] = anchor_rejected_losses.clone().detach().cpu()
 
         return loss, metrics
     
@@ -401,6 +406,15 @@ class Blip2Stage3(pl.LightningModule):
             task_specific_outputs=self.task_specific_outputs,
             num_moving_samples=32,
         )
+        if self.args.train_simpo:
+            # bar r logging
+            for k, v in self.task_specific_chosen_reward.items():
+                self.log(
+                    f"train/{k}/bar_reward",
+                    v,
+                    batch_size=self.args.batch_size,
+                    sync_dist=False,
+                )
 
         return loss
 
@@ -640,6 +654,14 @@ class Blip2Stage3(pl.LightningModule):
                 task_specific_outputs=self.eval_task_specific_outputs,
                 num_moving_samples=None,
             )
+
+            for k, v in self.task_specific_chosen_reward.items():
+                self.log(
+                    f"train/{k}/bar_reward",
+                    v,
+                    batch_size=self.args.batch_size,
+                    sync_dist=False,
+                )
 
         return loss
 
