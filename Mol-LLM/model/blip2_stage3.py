@@ -290,9 +290,10 @@ class Blip2Stage3(pl.LightningModule):
         anchor_rejected_losses = -F.logsigmoid(rejected_rewards - self.reject_lambda * self.beta * avg_chosen_rewards)
         anchor_chosen_loss = anchor_chosen_losses.mean()
         anchor_rejected_loss = anchor_rejected_losses.mean()
+
         if self.args.anchor_clamp:
             clamped_anchor_chosen_loss = torch.clamp(anchor_chosen_loss, max=loss_simpo)
-            clamped_anchor_chosen_loss = torch.clamp(anchor_rejected_loss, max=loss_simpo)
+            clamped_anchor_rejected_loss = torch.clamp(anchor_rejected_loss, max=loss_simpo)
         else:
             clamped_anchor_chosen_loss = anchor_chosen_loss
             clamped_anchor_rejected_loss = anchor_rejected_loss
