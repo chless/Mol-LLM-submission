@@ -1,6 +1,6 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='qm9_molpo_anc-clamp1.0'
+file_name='qm9_molpo_anc-cho0.5-rej0.05'
 gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
@@ -22,9 +22,9 @@ trainer.val_check_interval=0.25 \
 trainer.skip_sanity_check=true \
 trainer.batch_size=4 \
 trainer.inference_batch_size=7 \
-trainer.anc_chosen_weight=1.0 \
-trainer.anc_reject_weight=1.0 \
+trainer.anc_chosen_weight=0.5 \
+trainer.anc_reject_weight=0.05 \
 trainer.chosen_lambda=1.0 \
 trainer.reject_lambda=1.5 \
-trainer.anchor_clamp=1.0 \
+trainer.anchor_clamp=-1 \
 pretrained_ckpt_path="'/data/all_checkpoints/epoch=11-val_loss=0.000000.ckpt'"
