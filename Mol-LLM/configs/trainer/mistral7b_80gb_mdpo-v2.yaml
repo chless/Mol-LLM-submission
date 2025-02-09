@@ -78,11 +78,12 @@ beta: 1.0
 gamma_beta_ratio: 1.0
 
 sft_weight: 1.0
-molpo_weight: 0.5
-anc_chosen_weight: 0.5
-anc_reject_weight: 0.5
+molpo_weight: 0.5 
+anc_chosen_weight: 0.5 
+anc_reject_weight: 0.5 
 chosen_lambda: 1.5
 reject_lambda: 3.0
+anchor_clamp: false
 sl_noise_ratio: 0.3
 
 loss_type: sigmoid
