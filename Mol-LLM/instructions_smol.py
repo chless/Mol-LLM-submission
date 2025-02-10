@@ -197,22 +197,6 @@ qm9_homo = [
     "A molecule <INPUT> is given; what could be the HOMO energy?",
 ]
 
-hopv_homo = [
-    "<INPUT> Based on the molecule given above, suggest the HOMO energy.",
-    "Based on the given molecule: <INPUT>, what HOMO energy could potentially be measured?",
-    "Given the following molecule, please provide the HOMO energy. <INPUT>",
-    "<INPUT> Given the above molecule, what could be the probable HOMO energy?",
-    "Please provide the HOMO energy value for this molecule: <INPUT>.",
-    "Consider that for this molecule, if <INPUT> is given, what is the HOMO energy?",
-    "Propose the HOMO energy value given this molecule. <INPUT>",
-    "Predict the HOMO energy of the molecule <INPUT>.",
-    "Can you tell me the HOMO energy of the molecule that uses <INPUT>?",
-    "Using <INPUT> as the molecule, tell me the HOMO energy value.",
-    "Predict the possible HOMO energy for the listed molecule. <INPUT>",
-    "<INPUT> Considering the given molecule, what might be the HOMO energy?",
-    "A molecule <INPUT> is given; what could be the HOMO energy?",
-]
-
 qm9_lumo = [
     "<INPUT> Based on the molecule given above, suggest the LUMO energy.",
     "Based on the given molecule: <INPUT>, what LUMO energy could potentially be measured?",
