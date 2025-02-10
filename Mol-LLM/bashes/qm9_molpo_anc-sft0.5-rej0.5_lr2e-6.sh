@@ -27,6 +27,6 @@ trainer.anc_reject_weight=0.5 \
 trainer.sft_lambda=1.0 \
 trainer.reject_lambda=2.0 \
 trainer.min_lr=0.0000002 \
-trainer.init_lr=0.0000002 \
+trainer.init_lr=0.000002 \
 trainer.warmup_lr=0.0000002 \
 pretrained_ckpt_path="'/data/all_checkpoints/epoch=11-val_loss=0.000000.ckpt'"
