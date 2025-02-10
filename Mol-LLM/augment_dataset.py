@@ -850,7 +850,7 @@ def add_atoms_based_on_mol(mol, num_atoms_to_add):
 
 def map_by_substructure_replacement(data_point, 
                                     replace_ratio=0.1,
-                                    num_rejected_graphs=10):
+                                    num_rejected_graphs=5):
 
     task = data_point["task"]
     input_mol_string = data_point["input_mol_string"]
