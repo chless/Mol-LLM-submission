@@ -290,10 +290,19 @@ class Blip2Stage3(pl.LightningModule):
                 alpha=0.99,
             )
 
+        # get average sft rewards
+        avg_sft_rewards_list = []
+        for task in tasks:
+            if task in self.task_specific_sft_reward:
+                avg_sft_rewards_list.append(self.task_specific_sft_reward[task])
+            else:
+                avg_sft_rewards_list.append(0.0)
+
         avg_sft_rewards = torch.tensor(
-            [self.task_specific_sft_reward[task] for task in tasks],
+            avg_sft_rewards_list,
             device=logits.device,
         )
+
         # calculate anchor losses
         anchor_sft_losses, anchor_rejected_losses = anchor_loss(
             avg_sft_rewards=avg_sft_rewards,
