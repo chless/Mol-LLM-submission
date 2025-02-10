@@ -22,9 +22,9 @@ trainer.val_check_interval=0.25 \
 trainer.skip_sanity_check=true \
 trainer.batch_size=4 \
 trainer.inference_batch_size=7 \
-trainer.anc_chosen_weight=0.5 \
+trainer.anc_sft_weight=0.5 \
 trainer.anc_reject_weight=0.05 \
-trainer.chosen_lambda=1.0 \
+trainer.sft_lambda=1.0 \
 trainer.reject_lambda=1.5 \
 trainer.anchor_clamp=-1 \
 pretrained_ckpt_path="'/data/all_checkpoints/epoch=11-val_loss=0.000000.ckpt'"
