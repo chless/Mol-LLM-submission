@@ -294,10 +294,10 @@ class Blip2Stage3(pl.LightningModule):
             [self.task_specific_sft_reward[task] for task in tasks],
             device=logits.device,
         )
-
+        # calculate anchor losses
         anchor_sft_losses, anchor_rejected_losses = anchor_loss(
             avg_sft_rewards=avg_sft_rewards,
-            sft_rewards=avg_sft_rewards,
+            sft_rewards=sft_rewards,
             sft_lambda=self.sft_lambda,
             rejected_rewards=rejected_rewards,
             reject_lambda=self.reject_lambda,
