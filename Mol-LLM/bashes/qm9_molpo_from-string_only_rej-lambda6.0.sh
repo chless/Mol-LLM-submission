@@ -1,14 +1,14 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='qm9_molpo_anc-sft0.5-rej0.5'
-gpus="'0,1,2,3,4,5,6,7'"
+file_name='qm9_molpo_from-string_only_rej-lambda6.0'
+gpus="'0,1,2,3'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
 mode=post-ft \
 data=multi_task \
-data.data_tag=qm9_0207_augmented \
+data.data_tag=qm9_0211_augmented \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=moleculeSTM \
 gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
@@ -18,13 +18,9 @@ trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.total_batch_size=256 \
 trainer.max_epochs=5 \
-trainer.val_check_interval=0.25 \
+trainer.val_check_interval=0.2 \
 trainer.skip_sanity_check=true \
 trainer.batch_size=4 \
 trainer.inference_batch_size=7 \
-trainer.anc_sft_weight=0.5 \
-trainer.anc_reject_weight=0.5 \
-trainer.sft_lambda=1.0 \
-trainer.reject_lambda=2.0 \
-trainer.anchor_clamp=-1 \
+trainer.reject_lambda=6.0 \
 pretrained_ckpt_path="'/data/all_checkpoints/epoch=11-val_loss=0.000000.ckpt'"
