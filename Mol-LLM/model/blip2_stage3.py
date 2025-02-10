@@ -317,21 +317,21 @@ class Blip2Stage3(pl.LightningModule):
         if torch.isnan(loss):
             assert not torch.isnan(loss), "loss is nan"
 
-        reward_accuracies = (chosen_rewards > rejected_rewards).float()
-
         metrics[f"rewards/chosen"] = chosen_rewards.cpu()
         metrics[f"rewards/rejected"] = rejected_rewards.cpu()
         metrics[f"rewards/sft"] = sft_rewards.cpu()
-        metrics[f"rewards/accuracies"] = reward_accuracies.cpu()
+        metrics[f"rewards/accuracies"] = (
+            (chosen_rewards > rejected_rewards).float().cpu()
+        )
         metrics[f"rewards/margins"] = (chosen_rewards - rejected_rewards).cpu()
 
-        metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
-        metrics[f"instance_loss"] = sft_instance_loss.clone().detach().cpu()
-        metrics[f"simpo_loss"] = losses_molpo.clone().detach().cpu()
         metrics["logps/sft"] = policy_sft_logps.clone().detach().cpu()
         metrics[f"logps/chosen"] = policy_chosen_logps.clone().detach().cpu()
         metrics[f"logps/rejected"] = policy_rejected_logps.clone().detach().cpu()
 
+        metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
+        metrics[f"instance_loss"] = sft_instance_loss.clone().detach().cpu()
+        metrics[f"simpo_loss"] = losses_molpo.clone().detach().cpu()
         metrics[f"anchor_loss/sft"] = anchor_sft_losses.clone().detach().cpu()
         metrics[f"anchor_loss/rejected"] = anchor_rejected_losses.clone().detach().cpu()
 
