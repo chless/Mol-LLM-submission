@@ -1,7 +1,7 @@
 
 export TOKENIZERS_PARALLELISM=false;
 file_name='qm9_molpo_from-string+graph'
-gpus="'4,5,6,7'"
+gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
