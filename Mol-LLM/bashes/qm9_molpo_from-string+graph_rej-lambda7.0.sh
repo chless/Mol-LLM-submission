@@ -23,4 +23,4 @@ trainer.skip_sanity_check=true \
 trainer.batch_size=7 \
 trainer.inference_batch_size=12 \
 trainer.reject_lambda=7.0 \
-pretrained_ckpt_path="'/data/all_checkpoints/qm9_molpo_from-string+graph_rej-lambda7.0/last.ckpt'"
+ckpt_path="'/data/all_checkpoints/qm9_molpo_from-string+graph_rej-lambda7.0/last.ckpt'"
