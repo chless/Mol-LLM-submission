@@ -1,7 +1,7 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='qm9_molpo_from-string+graph_reject-sw'
-gpus="'4,5,6,7'"
+file_name='qm9_molpo_from-string+graph_rej-lambda5.0'
+gpus="'0,1,2,3'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
@@ -22,6 +22,5 @@ trainer.val_check_interval=0.2 \
 trainer.skip_sanity_check=true \
 trainer.batch_size=4 \
 trainer.inference_batch_size=7 \
-trainer.reject_lambda=3.0 \
-trainer.sl_noise_ratio=-1 \
+trainer.reject_lambda=5.0 \
 pretrained_ckpt_path="'/data/all_checkpoints/hug_test_sg_cls/all_checkpoints/hug_test_sg_cls/every_epochs/epoch=11-val_loss=0.000000.ckpt'"

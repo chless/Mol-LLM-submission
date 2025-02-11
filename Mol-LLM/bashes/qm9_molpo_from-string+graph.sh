@@ -1,14 +1,14 @@
 
 export TOKENIZERS_PARALLELISM=false;
 file_name='qm9_molpo_from-string+graph'
-gpus="'0,1,2,3,4,5,6,7'"
+gpus="'0,1,2,3'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
 mode=post-ft \
 data=multi_task \
-data.data_tag=qm9_0211_augmented \
+data.data_tag=qm9_homo_0211_augmented \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=moleculeSTM \
 gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
