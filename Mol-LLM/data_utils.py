@@ -171,17 +171,18 @@ class DataCollator(DataCollatorForSeq2Seq):
             if self.sl_noise_ratio > 0:
                 for i in range(len(prompt_text_sl)):
                     sw = list_selfies[i]
-                    sl = random_noise_selfies(
-                        selfies=sw, 
-                        tokenizer=self.tokenizer,
-                        sl_noise_ratio=self.sl_noise_ratio
+                    if input_mol_string_pattern.search(prompt_text_sl[i]):
+                        sl = random_noise_selfies(
+                            selfies=sw, 
+                            tokenizer=self.tokenizer,
+                            sl_noise_ratio=self.sl_noise_ratio
+                            )
+                        assert (
+                            sw in prompt_text_sl[i]
+                        ), f"{sw} not in {prompt_text_sl[i]}"
+                        prompt_text_sl[i] = prompt_text_sl[i].replace(
+                            sw, sl
                         )
-                    assert (
-                        sw in prompt_text_sl[i]
-                    ), f"{sw} not in {prompt_text_sl[i]}"
-                    prompt_text_sl[i] = prompt_text_sl[i].replace(
-                        sw, sl
-                    )
 
             prompt_text = prompt_text + prompt_text_sl * 2 # ((q, sw), (q, sl), (q, sl))
             target_text = target_text * 3 # (y, y, y)
