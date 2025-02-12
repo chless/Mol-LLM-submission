@@ -30,12 +30,15 @@ class Stage3DM(LightningDataModule):
         self.mol_representation = args.mol_representation
         self.tokenizer = tokenizer
 
-        if args.debug:
-            self.train_dataset = get_dataset("test", tokenizer, args)
+        if self.mode in ["test"]:
+            self.test_dataset = get_dataset("test", tokenizer, args)
         else:
-            self.train_dataset = get_dataset("train", tokenizer, args)
-        self.test_dataset = get_dataset("test", tokenizer, args)
-        self.val_dataset = get_dataset("validation", tokenizer, args)
+            if args.debug:
+                self.train_dataset = get_dataset("test", tokenizer, args)
+            else:
+                self.train_dataset = get_dataset("train", tokenizer, args)
+            self.test_dataset = get_dataset("test", tokenizer, args)
+            self.val_dataset = get_dataset("validation", tokenizer, args)
 
         builder = load_dataset_builder(
             os.path.join(args.raw_data_root, "InstructGraph.py"),
