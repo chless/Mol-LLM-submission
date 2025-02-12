@@ -8,6 +8,74 @@ from datasets import load_dataset
 import pandas as pd
 import os
 from rdkit import Chem
+import instructions_smol
+import model.added_tokens as added_tokens
+from data_utils import (
+    CLASSIFICATION_BENCHMARKS,
+    MOL2TEXT_BENCHMARKS,
+    REGRESSION_BENCHMARKS,
+    REACTION_BENCHMARKS,
+    TEXT2MOL_BENCHMARKS,
+)
+from rdkit import Chem
+import selfies as sf
+
+system_prompt = "You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation."
+
+
+def wrap_label(label, task):
+
+    if task in CLASSIFICATION_BENCHMARKS:
+        label_tokens = added_tokens.BOOL
+    elif task in REGRESSION_BENCHMARKS:
+        label_tokens = added_tokens.FLOAT
+    elif task in ["smol-name_conversion-s2f", "smol-name_conversion-i2f"]:
+        label_tokens = added_tokens.MOLFORMULA
+    elif task == "smol-name_conversion-s2i":
+        label_tokens = added_tokens.IUPAC
+    elif task in MOL2TEXT_BENCHMARKS:
+        label_tokens = added_tokens.DESCRIPTION
+    elif task in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS:
+        label_tokens = added_tokens.SELFIES
+    else:
+        raise NotImplementedError
+
+    if task in CLASSIFICATION_BENCHMARKS:
+        if isinstance(label, str):
+            if "true" in label.lower() or "yes" in label.lower():
+                label = "True"
+            elif "false" in label.lower() or "no" in label.lower():
+                label = "False"
+            else:
+                raise NotImplementedError(
+                    f"Label: {label} is not supported in classification task"
+                )
+            label = label_tokens[0] + label + label_tokens[1]
+        elif isinstance(label, list):
+            label_language = ", ".join(label)
+            label_boolean = "True" * len(label)
+            label = label_language + label_tokens[0] + label_boolean + label_tokens[1]
+        else:
+            label = "True" if label else "False"
+            label = label_tokens[0] + label + label_tokens[1]
+        return label
+    elif task in REGRESSION_BENCHMARKS:
+        if isinstance(label, float):
+            label = "{:.10f}".format(label)
+        else:
+            label = format(float(label), ".10f")
+
+        # force to predict the sign of label first
+        if "-" not in label and "+" not in label:
+            label = "+" + label
+        # unify the length of label to 7
+        label = label[:7]
+        converted_label = "".join([f"<|{char}|>" for char in label])
+        return label_tokens[0] + " " + converted_label + " " + label_tokens[1]
+    elif task in REACTION_BENCHMARKS + MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
+        return label_tokens[0] + label + label_tokens[1]
+    else:
+        raise NotImplementedError
 
 
 def mol2graph(mol):
@@ -57,11 +125,6 @@ def mol2graph(mol):
 
     return graph 
 
-from rdkit import Chem
-import selfies as sf
-from download_dataset import wrap_label
-
-system_prompt = "You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation."
 
 def prepare_data_instance(
         mol,
@@ -127,7 +190,7 @@ def prepare_data_instance(
 
 
 def get_data_list(
-        list_mol, list_label, task, instruction_templates, system_prompt
+        list_mol, list_label, task, instruction_templates
 ):
     list_data = []
     iter_bar = tqdm(range(len(list_mol)))
