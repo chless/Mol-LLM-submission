@@ -1,14 +1,14 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='qm9_string_only_test'
-gpus="'0,1,2,3,4,5,6,7'"
+file_name='qm9_string_only_test-v2'
+gpus="'0,1,2,3'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
 mode=test \
 data=multi_task \
-data.data_tag=qm9_0211_augmented \
+data.data_tag=qm9_0211-v2 \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=moleculeSTM \
 gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
@@ -29,4 +29,6 @@ trainer.reject_lambda=2.0 \
 trainer.min_lr=0.0000002 \
 trainer.init_lr=0.000002 \
 trainer.warmup_lr=0.0000002 \
+trainer.train_simpo=false \
+trainer.eval_simpo=false \
 ckpt_path="'/data/all_checkpoints/string_only-resume/all_checkpoints/string_only-resume/epoch=11-val_total_loss=0.000.ckpt'"
