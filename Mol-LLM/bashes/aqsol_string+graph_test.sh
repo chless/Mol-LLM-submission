@@ -1,6 +1,6 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='aqsol_string+graph_test'
+file_name='aqsol_molpo-string+graph_test'
 gpus="'6,7'"
 
 python Mol-LLM/stage3.py \
@@ -18,4 +18,4 @@ trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.train_simpo=false \
 trainer.eval_simpo=false \
-ckpt_path="'/data/all_checkpoints/hug_test_sg_cls/all_checkpoints/hug_test_sg_cls/every_epochs/epoch=11-val_loss=0.000000.ckpt'"
+ckpt_path="'/data/all_checkpoints/MT_from-string+graph_0211/epoch=00-step=486.ckpt'"
