@@ -604,6 +604,7 @@ def regression_evaluate(predictions, targets, prompts):
         # only calculate metrics if the prediction is a float
         # else, increment the failure count
         try:
+            assert "<|.|>" in predictions[i], f"Prediction should include <|.|> token for proper magnitude of order, but {predictions[i]}"
             prediction = (
                 re.search(r"(?<=<FLOAT>).*?(?=</FLOAT>)", predictions[i])
                 .group()
