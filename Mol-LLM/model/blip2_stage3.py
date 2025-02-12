@@ -735,6 +735,10 @@ class Blip2Stage3(pl.LightningModule):
         selfies_mean_scores = []
         selfies_sum_scores = []
 
+        # exception for batch size 1
+        if len(full_attn_mean.shape) == 2:
+            full_attn_mean = full_attn_mean.unsqueeze(1)
+
         for i in range(prompt_input_ids.shape[0]):
             if "graph" in self.args.mol_representation:
                 mol_mean_scores.append(
