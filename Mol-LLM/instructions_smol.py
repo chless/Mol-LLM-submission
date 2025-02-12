@@ -627,6 +627,7 @@ property_prediction_esol = [
     "<INPUT> Could you tell me the log solubility in water for the molecule given above?",
 ]
 
+# this version is used in v7.1 dataset
 property_prediction_esol_used_later = [
     "What is the log solubility of <INPUT> in water?",
     "Please predict the log solubility of <INPUT> in water.",
