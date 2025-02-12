@@ -91,7 +91,7 @@ def wrap_label(label, task):
         # unify the length of label to 7
         label = label[:7]
         converted_label = "".join([f"<|{char}|>" for char in label])
-        return label_tokens[0] + converted_label + label_tokens[1]
+        return label_tokens[0] + " " + converted_label + " " + label_tokens[1]
     elif task in REACTION_BENCHMARKS + MOL2TEXT_BENCHMARKS + TEXT2MOL_BENCHMARKS:
         return label_tokens[0] + label + label_tokens[1]
     else:
@@ -234,8 +234,8 @@ class MoleculeNetDatasetDeepChem(Dataset):
 class MolInstructionDatset(Dataset):
     def __init__(self, data, task_subtask_pair, **kwargs):
         self.data = data
-        self.task_subtask_pair = task_subtask_pair
-        self.task, self.subtask = task_subtask_pair.split("/")
+        self.task = task_subtask_pair
+        #self.task, self.subtask = task_subtask_pair.split("/")
 
         self.set_necesary_data()
 
@@ -330,7 +330,7 @@ class MolInstructionDatset(Dataset):
         input_mol_string = self.input_mol_string_list[index]
         instruction = self.instruction_list[index]
 
-        return graph, label, input_mol_string, self.task_subtask_pair, instruction
+        return graph, label, input_mol_string, self.task, instruction
 
 
 class ChEBIDataset(Dataset):
@@ -804,17 +804,17 @@ if __name__ == "__main__":
 
         valid_dataset = dataset(
             data=data_split[1],
-            task_subtask_pair=task_subtask_pair,
+            task_subtask_pair=task_name,
             subtask_idx=subtask_idx,
         )
         test_dataset = dataset(
             data=data_split[2],
-            task_subtask_pair=task_subtask_pair,
+            task_subtask_pair=task_name,
             subtask_idx=subtask_idx,
         )
         train_dataset = dataset(
             data=data_split[0],
-            task_subtask_pair=task_subtask_pair,
+            task_subtask_pair=task_name,
             subtask_idx=subtask_idx,
         )
         dataset_splits = {
