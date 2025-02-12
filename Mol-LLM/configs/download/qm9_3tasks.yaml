@@ -1,0 +1,9 @@
+raw_data_root: "/data/data/Mol-LLM-v7.1"
+data_tag: "qm9_gap_0211_debug2"
+
+target_benchmarks:
+  - qm9_homo_lumo_gap
+
+ignore_eval:
+
+duplication_check:
