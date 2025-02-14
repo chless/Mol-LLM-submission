@@ -1,6 +1,6 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='ood_from-string_only_step2430'
+file_name='ood_from-string_only_12ep'
 gpus="'1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
@@ -19,4 +19,4 @@ trainer.mol_representation=string+graph \
 trainer.train_simpo=false \
 trainer.eval_simpo=false \
 trainer.inference_batch_size=12 \
-ckpt_path="'/data/all_checkpoints/MT_from-string_only_0211/epoch=00-step=2430.ckpt'"
+ckpt_path="'/data/all_checkpoints/epoch=11-val_loss=0.000000.ckpt'"
