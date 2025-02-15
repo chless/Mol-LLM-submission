@@ -50,14 +50,18 @@ REACTION_BENCHMARKS = [
     "presto-forward_reaction_prediction",
     "presto-retrosynthesis",
     "presto-reagent_prediction",
+    'orderly-forward_reaction_prediction',
+    'orderly-retrosynthesis',
 ]
 TEXT2MOL_BENCHMARKS = [
     "chebi-20-text2mol",
     "smol-molecule_generation",
+    'lpm-24-molecule_generation'
 ]
 MOL2TEXT_BENCHMARKS = [
     "chebi-20-mol2text",
     "smol-molecule_captioning",
+    'lpm-24-molecule_captioning',
 ]
 NAME_CONVERSION_BENCHMARKS = [
     "smol-name_conversion-i2s",
