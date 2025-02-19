@@ -14,60 +14,55 @@ import re
 import copy
 
 CLASSIFICATION_BENCHMARKS = [
-    "smol-bbbp",
-    "smol-clintox",
-    "smol-hiv",
-    "smol-sider",
+    "smol-property_prediction-bbbp",
+    "smol-property_prediction-clintox",
+    "smol-property_prediction-hiv",
+    "smol-property_prediction-sider",
     "bace",
     "tox21",
     "toxcast",
 ]
 REGRESSION_BENCHMARKS = [
-    "smol-logS",
-    "smol-logD",
-    "molinst-homo",
-    "molinst-lumo",
-    "molinst-homo_lumo_gap",
-    "qm9-dipole_moment",
-    "qm9-isotropic_polarizability",
-    "qm9-electronic_spatial_extent",
-    "qm9-zero_point_vibrational_energy",
-    "qm9-heat_capacity_298K",
-    "qm9-internal_energy_298K",
-    "qm9-enthalpy_298K",
-    "qm9-free_energy_298K",
-    "alchemy-homo",
-    "alchemy-lumo",
-    "alchemy-homo_lumo_gap",
-    "aqsol-logs",
+    "smol-property_prediction-esol",
+    "smol-property_prediction-lipo",
+    "qm9_homo",
+    "qm9_lumo",
+    "qm9_homo_lumo_gap",
+    "qm9_dipole_moment",
+    "qm9_isotropic_polarizability",
+    "qm9_electronic_spatial_extent",
+    "qm9_zero_point_vibrational_energy",
+    "qm9_heat_capacity_298K",
+    "qm9_internal_energy_298K",
+    "qm9_enthalpy_298K",
+    "qm9_free_energy_298K",
+    "alchemy_homo",
+    "alchemy_lumo",
+    "alchemy_homo_lumo_gap",
 ]
 REACTION_BENCHMARKS = [
-    "molinst-forward_reaction_prediction",
-    "molinst-retrosynthesis",
-    "molinst-reagent_prediction",
+    "forward_reaction_prediction",
     "smol-forward_synthesis",
+    "retrosynthesis",
     "smol-retrosynthesis",
+    "reagent_prediction",
     "presto-forward_reaction_prediction",
     "presto-retrosynthesis",
     "presto-reagent_prediction",
-    'orderly-forward_reaction_prediction',
-    'orderly-retrosynthesis',
 ]
 TEXT2MOL_BENCHMARKS = [
-    "chebi-molecule_generation",
+    "chebi-20-text2mol",
     "smol-molecule_generation",
-    'lpm-molecule_generation'
 ]
 MOL2TEXT_BENCHMARKS = [
-    "chebi-molecule_captioning",
+    "chebi-20-mol2text",
     "smol-molecule_captioning",
-    'lpm-molecule_captioning',
 ]
 NAME_CONVERSION_BENCHMARKS = [
-    "smol-i2s",
-    "smol-i2f",
-    "smol-s2f",
-    "smol-s2i",
+    "smol-name_conversion-i2s",
+    "smol-name_conversion-i2f",
+    "smol-name_conversion-s2f",
+    "smol-name_conversion-s2i",
 ]
 
 
@@ -123,7 +118,6 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.projector_type = args.projector_type
         self.sl_noise_ratio = args.sl_noise_ratio
 
-        
         if self.mol_representation in ["string+graph", "graph_only"]:
             self.graph_collator = GraphCollater([], [])
 
@@ -178,19 +172,19 @@ class DataCollator(DataCollatorForSeq2Seq):
                     sw = list_selfies[i]
                     if input_mol_string_pattern.search(prompt_text_sl[i]):
                         sl = random_noise_selfies(
-                            selfies=sw, 
+                            selfies=sw,
                             tokenizer=self.tokenizer,
-                            sl_noise_ratio=self.sl_noise_ratio
-                            )
+                            sl_noise_ratio=self.sl_noise_ratio,
+                        )
                         assert (
                             sw in prompt_text_sl[i]
                         ), f"{sw} not in {prompt_text_sl[i]}"
-                        prompt_text_sl[i] = prompt_text_sl[i].replace(
-                            sw, sl
-                        )
+                        prompt_text_sl[i] = prompt_text_sl[i].replace(sw, sl)
 
-            prompt_text = prompt_text + prompt_text_sl * 2 # ((q, sw), (q, sl), (q, sl))
-            target_text = target_text * 3 # (y, y, y)
+            prompt_text = (
+                prompt_text + prompt_text_sl * 2
+            )  # ((q, sw), (q, sl), (q, sl))
+            target_text = target_text * 3  # (y, y, y)
             tasks = tasks * 3
 
         if "graph" in self.mol_representation:
@@ -218,22 +212,40 @@ class DataCollator(DataCollatorForSeq2Seq):
 
             if self.apply_molpo:
                 list_rejected_graphs = [
-                Data(
-                    x=torch.tensor(sample[f"{self.reject_cardinal}-th_rejected_x"], dtype=torch.int64),
-                    edge_index=torch.tensor(sample[f"{self.reject_cardinal}-th_rejected_edge_index"], dtype=torch.int64),
-                    edge_attr=torch.tensor(sample[f"{self.reject_cardinal}-th_rejected_edge_attr"], dtype=torch.int64),
-                )
-                for sample in batch
+                    Data(
+                        x=torch.tensor(
+                            sample[f"{self.reject_cardinal}-th_rejected_x"],
+                            dtype=torch.int64,
+                        ),
+                        edge_index=torch.tensor(
+                            sample[f"{self.reject_cardinal}-th_rejected_edge_index"],
+                            dtype=torch.int64,
+                        ),
+                        edge_attr=torch.tensor(
+                            sample[f"{self.reject_cardinal}-th_rejected_edge_attr"],
+                            dtype=torch.int64,
+                        ),
+                    )
+                    for sample in batch
                 ]
                 # for reagent prediction
                 list_rejected_additional_graphs = [
                     Data(
-                        x=torch.tensor(sample[f"{self.reject_cardinal}-th_additional_rejected_x"], dtype=torch.int64),
+                        x=torch.tensor(
+                            sample[f"{self.reject_cardinal}-th_additional_rejected_x"],
+                            dtype=torch.int64,
+                        ),
                         edge_index=torch.tensor(
-                            sample[f"{self.reject_cardinal}-th_additional_rejected_edge_index"], dtype=torch.int64
+                            sample[
+                                f"{self.reject_cardinal}-th_additional_rejected_edge_index"
+                            ],
+                            dtype=torch.int64,
                         ),
                         edge_attr=torch.tensor(
-                            sample[f"{self.reject_cardinal}-th_additional_rejected_edge_attr"], dtype=torch.int64
+                            sample[
+                                f"{self.reject_cardinal}-th_additional_rejected_edge_attr"
+                            ],
+                            dtype=torch.int64,
                         ),
                     )
                     for sample in batch
@@ -241,7 +253,9 @@ class DataCollator(DataCollatorForSeq2Seq):
 
                 # (gw, gw, gl)
                 list_graphs = list_graphs * 2 + list_rejected_graphs
-                list_additional_graphs = list_additional_graphs * 2 + list_rejected_additional_graphs
+                list_additional_graphs = (
+                    list_additional_graphs * 2 + list_rejected_additional_graphs
+                )
 
         if self.projector_type == "mlp" and "graph" in self.mol_representation:
             # TODO: implement for reagent prediction
@@ -280,7 +294,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             for p, t in zip(
                 prompt_tokenized["attention_mask"], target_tokenized["attention_mask"]
             )
-            ]
+        ]
 
         prompt_length = [len(p) for p in prompt_tokenized["input_ids"]]
         full_input_ids = [f_ids[: self.max_length] for f_ids in full_input_ids]
@@ -302,7 +316,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                     "input_ids": [p for p in prompt_tokenized["input_ids"]],
                     "attention_mask": [p for p in prompt_tokenized["attention_mask"]],
                 },
-                padding=self.padding ,
+                padding=self.padding,
                 pad_to_multiple_of=self.pad_to_multiple_of,
                 return_tensors=return_tensors,
             )
@@ -317,7 +331,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                 {
                     "input_ids": [t for t in target_tokenized["input_ids"]],
                 },
-                padding=self.padding ,
+                padding=self.padding,
                 pad_to_multiple_of=self.pad_to_multiple_of,
                 return_tensors=return_tensors,
             )
@@ -327,7 +341,9 @@ class DataCollator(DataCollatorForSeq2Seq):
             features["eval_labels"] = eval_features.input_ids
             eval_simpo_labels = eval_features.input_ids.clone()
             for simpo_mask_id in self.tokenizer.simpo_mask_ids:
-                eval_simpo_labels = eval_simpo_labels.masked_fill(eval_simpo_labels == simpo_mask_id, -100)
+                eval_simpo_labels = eval_simpo_labels.masked_fill(
+                    eval_simpo_labels == simpo_mask_id, -100
+                )
             features["eval_simpo_labels"] = eval_simpo_labels
 
         labels_ids = torch.full_like(features["input_ids"], self.tokenizer.pad_token_id)
@@ -347,7 +363,9 @@ class DataCollator(DataCollatorForSeq2Seq):
         features["labels"] = labels_ids
         simpo_labels_ids = labels_ids.clone()
         for simpo_mask_id in self.tokenizer.simpo_mask_ids:
-            simpo_labels_ids = simpo_labels_ids.masked_fill(simpo_labels_ids == simpo_mask_id, -100)
+            simpo_labels_ids = simpo_labels_ids.masked_fill(
+                simpo_labels_ids == simpo_mask_id, -100
+            )
         features["simpo_labels"] = simpo_labels_ids
 
         assert (
@@ -375,7 +393,6 @@ class DataCollator(DataCollatorForSeq2Seq):
         return features
 
 
-
 def random_noise_selfies(selfies, tokenizer, sl_noise_ratio=0.3):
     selfies_ids = tokenizer.encode(selfies, add_special_tokens=False)
     total_selfies_token_ids = tokenizer.selfies_token_ids
@@ -392,6 +409,7 @@ def random_noise_selfies(selfies, tokenizer, sl_noise_ratio=0.3):
     for i, replance_idx in enumerate(position_to_replace):
         noised_selfies_ids[replance_idx] = replacing_random_ids[i]
 
-
-    noised_selfies = tokenizer.decode(noised_selfies_ids, skip_special_tokens=True).replace(' ', '')
+    noised_selfies = tokenizer.decode(
+        noised_selfies_ids, skip_special_tokens=True
+    ).replace(" ", "")
     return noised_selfies
