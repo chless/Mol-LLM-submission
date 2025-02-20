@@ -40,6 +40,7 @@ REGRESSION_BENCHMARKS = [
     "alchemy_lumo",
     "alchemy_homo_lumo_gap",
     "aqsol-logS",
+    "pcqm_homo_lumo_gap",
 ]
 REACTION_BENCHMARKS = [
     "forward_reaction_prediction",
