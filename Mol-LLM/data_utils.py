@@ -39,6 +39,7 @@ REGRESSION_BENCHMARKS = [
     "alchemy_homo",
     "alchemy_lumo",
     "alchemy_homo_lumo_gap",
+    "aqsol-logS",
 ]
 REACTION_BENCHMARKS = [
     "forward_reaction_prediction",
@@ -117,6 +118,7 @@ class DataCollator(DataCollatorForSeq2Seq):
 
         self.projector_type = args.projector_type
         self.sl_noise_ratio = args.sl_noise_ratio
+        self.args = args
 
         if self.mol_representation in ["string+graph", "graph_only"]:
             self.graph_collator = GraphCollater([], [])
@@ -180,6 +182,15 @@ class DataCollator(DataCollatorForSeq2Seq):
                             sw in prompt_text_sl[i]
                         ), f"{sw} not in {prompt_text_sl[i]}"
                         prompt_text_sl[i] = prompt_text_sl[i].replace(sw, sl)
+
+            if self.args.apply_preference_system_prompt:
+                for i in range(len(prompt_text_sl)):
+                    preference_system_prompt = "In the following problems, molecular graph is either accurate or inaccurate. Your predictions should be based primarily on careful understanding of the provided graph."
+                    prompt_text_sl[i] = re.sub(
+                        r"(?<=\[INST\]).*(?=\n\n)",
+                        preference_system_prompt,
+                        prompt_text_sl[i],
+                    )
 
             prompt_text = (
                 prompt_text + prompt_text_sl * 2
