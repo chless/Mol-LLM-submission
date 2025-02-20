@@ -152,6 +152,7 @@ class Blip2Stage3(pl.LightningModule):
             )
 
             max_step = int(self.args.max_epochs * self.steps_per_epoch)
+            warmup_steps = self.steps_per_epoch * self.args.warmup_epochs
 
             if self.args.scheduler == "linear_warmup_cosine_lr":
                 self.scheduler = LinearWarmupCosineLRScheduler(
@@ -159,7 +160,7 @@ class Blip2Stage3(pl.LightningModule):
                     max_step=max_step,
                     min_lr=self.args.min_lr,
                     init_lr=self.args.init_lr,
-                    warmup_steps=self.args.warmup_steps,
+                    warmup_steps=warmup_steps,
                     warmup_start_lr=self.args.warmup_lr,
                 )
             elif self.args.scheduler == "linear_warmup_step_lr":
