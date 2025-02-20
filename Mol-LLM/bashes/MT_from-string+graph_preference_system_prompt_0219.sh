@@ -1,6 +1,6 @@
 
 export TOKENIZERS_PARALLELISM=false;
-file_name='MT_from-string+graph_system_prompt_0219'
+file_name='MT_from-string+graph_preference_system_prompt_0219'
 gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
