@@ -147,7 +147,7 @@ def prepare_data_instance(
     graph_sequence = "<GRAPH>" + mol_token * num_query_tokens + "</GRAPH>"
 
     if "reagent_prediction" in task:
-        smiles = Chem.MolToSmiles(mol[0])
+        smiles = Chem.MolToSmiles(mol[0]).replace("->", "").replace("<-", "")
         selfies = sf.encoder(smiles)
         input_mol_string = "<SELFIES> " + selfies + " </SELFIES>"
         input_mol_string_graph = input_mol_string + graph_sequence
@@ -179,7 +179,7 @@ def prepare_data_instance(
             mol, Chem.Mol
         ), f"mol should be a RDKit Mol object, but got {type(mol)}"
         mol = mol
-        smiles = Chem.MolToSmiles(mol)
+        smiles = Chem.MolToSmiles(mol).replace("->", "").replace("<-", "")
         selfies = sf.encoder(smiles)
         input_mol_string = "<SELFIES> " + selfies + " </SELFIES>"
         input_information = input_mol_string + graph_sequence
