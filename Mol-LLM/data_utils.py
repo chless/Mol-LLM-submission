@@ -121,7 +121,6 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.apply_molpo = args.train_simpo if self.train else args.eval_simpo
 
         self.projector_type = args.projector_type
-        self.sl_noise_ratio = args.sl_noise_ratio
         self.args = args
 
         if self.mol_representation in ["string+graph", "graph_only"]:
@@ -173,7 +172,7 @@ class DataCollator(DataCollatorForSeq2Seq):
 
             prompt_text_sl = prompt_text.copy()
 
-            if self.sl_noise_ratio > 0:
+            if self.args.sl_noise_ratio > 0:
                 for i in range(len(prompt_text_sl)):
                     sw = list_selfies[i]
                     if input_mol_string_pattern.search(prompt_text_sl[i]):
