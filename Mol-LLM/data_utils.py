@@ -179,7 +179,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                         sl = random_noise_selfies(
                             selfies=sw,
                             tokenizer=self.tokenizer,
-                            sl_noise_ratio=self.sl_noise_ratio,
+                            sl_noise_ratio=self.args.sl_noise_ratio,
                         )
                         assert (
                             sw in prompt_text_sl[i]
