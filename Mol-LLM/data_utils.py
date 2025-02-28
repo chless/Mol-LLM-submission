@@ -277,6 +277,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                 num_nodes_in_graph = list_graphs[i].x.size(0)
                 num_nodes_mol = "<mol>" * num_nodes_in_graph
                 mol_tokens_pattern = re.compile("(<mol>)+")
+                assert mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
                 prompt_text[i] = mol_tokens_pattern.sub(num_nodes_mol, prompt_text[i])
 
         self.tokenizer.padding_side = "left"
