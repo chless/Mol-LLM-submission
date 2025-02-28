@@ -10,6 +10,7 @@ data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=moleculeSTM \
 gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
 trainer=mistral7b_80gb \
+trainer.max_epochs=24 \
 trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=graph_only \
