@@ -272,13 +272,25 @@ class DataCollator(DataCollatorForSeq2Seq):
                 )
 
         if self.projector_type == "mlp" and "graph" in self.mol_representation:
-            # TODO: implement for reagent prediction
             for i in range(len(prompt_text)):
-                num_nodes_in_graph = list_graphs[i].x.size(0)
-                num_nodes_mol = "<mol>" * num_nodes_in_graph
-                mol_tokens_pattern = re.compile("(<mol>)+")
-                assert mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
-                prompt_text[i] = mol_tokens_pattern.sub(num_nodes_mol, prompt_text[i])
+                if '|>>|' in prompt_text[i]:
+                    num_nodes_in_graph = list_graphs[i].x.size(0)
+                    num_nodes_mol = "<mol>" * num_nodes_in_graph
+                    mol_tokens_pattern = re.compile(r"(<mol>)+(?=</GRAPH>\|>>\|)")
+                    assert mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
+                    prompt_text[i] = mol_tokens_pattern.sub(num_nodes_mol, prompt_text[i])
+
+                    num_additional_nodes_in_graph = list_additional_graphs[i].x.size(0)
+                    num_additional_nodes_mol = "<mol>" * num_additional_nodes_in_graph
+                    additional_mol_tokens_pattern = re.compile(r"(?<=\|>>\|<GRAPH>)(<mol>)+")
+                    assert additional_mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
+                    prompt_text[i] = additional_mol_tokens_pattern.sub(num_additional_nodes_mol, prompt_text[i])
+                else:
+                    num_nodes_in_graph = list_graphs[i].x.size(0)
+                    num_nodes_mol = "<mol>" * num_nodes_in_graph
+                    mol_tokens_pattern = re.compile("(<mol>)+")
+                    assert mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
+                    prompt_text[i] = mol_tokens_pattern.sub(num_nodes_mol, prompt_text[i])
 
         self.tokenizer.padding_side = "left"
         prompt_tokenized = self.tokenizer(
