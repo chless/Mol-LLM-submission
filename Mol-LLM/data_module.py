@@ -199,4 +199,7 @@ def get_dataset(split, tokenizer, args):
             load_from_cache_file=False,
         )
         dataset.save_to_disk(preprocessed_data_path)
+
+    #if args.tasks is not None:
+    #    dataset = dataset.filter(lambda x: x["task"] in args.tasks)
     return dataset
