@@ -169,10 +169,15 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
             else:
                 prediction_selfies = re.search(r"(?<=<SELFIES>).*", prediction).group()
 
+            #<DEBUG>
+            prediction_selfies = prediction_selfies.split("<SELFIES>")[-1]
+            prediction_selfies = prediction_selfies.split("</SELFIES>")[0]
+
             assert (
                 "<SELFIES>" not in prediction_selfies
                 and "</SELFIES>" not in prediction_selfies
             )
+            #</DEBUG>
 
             prediction_smiles = selfies.decoder(prediction_selfies)
             prediction_mol = Chem.MolFromSmiles(prediction_smiles)
@@ -186,7 +191,7 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
             failure_idxs.append(i)
             prediction_mol = None
             print(
-                f"Failed to convert smiles to mol, target : {target}, prediction : {prediction}"
+                f"When evaluating, failed to convert selfies to mol, target : {target}, prediction : {prediction}"
             )
             continue
 
@@ -599,11 +604,13 @@ def regression_evaluate(predictions, targets, prompts):
         # only calculate metrics if the prediction is a float
         # else, increment the failure count
         try:
+            assert "<|.|>" in predictions[i], f"Prediction should include <|.|> token for proper magnitude of order, but {predictions[i]}"
             prediction = (
                 re.search(r"(?<=<FLOAT>).*?(?=</FLOAT>)", predictions[i])
                 .group()
                 .replace(" ", "")
             )
+
             prediction = prediction.replace("<|", "").replace("|>", "")
             prediction = float(prediction)
 

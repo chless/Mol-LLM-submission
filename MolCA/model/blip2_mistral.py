@@ -137,7 +137,7 @@ class MistralForCausalLM_custom(MistralForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         # <DEBUG>
-        #self.model = MistralModel_sequence_packing(config)
+        # self.model = MistralModel_sequence_packing(config)
         self.model = MistralModel(config)
 
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
@@ -252,7 +252,7 @@ class MistralForCausalLM_custom(MistralForCausalLM):
             instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
                 dim=-1
             ) / instance_non_pad_tokens.sum(dim=-1)
-            instance_loss = instance_loss.detach()
+
             # cross entropy aggregate not row-wise, but sum of all instances
             loss = (
                 loss_not_reduced * instance_non_pad_tokens

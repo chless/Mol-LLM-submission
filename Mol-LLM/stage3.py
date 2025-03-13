@@ -7,16 +7,15 @@ from pytorch_lightning import Trainer, strategies
 from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger, WandbLogger, TensorBoardLogger
 from data_module import Stage3DM
-
 from model.blip2_stage3 import Blip2Stage3
 import json
 import hydra
 from omegaconf import OmegaConf, DictConfig
 from datetime import timedelta
 import wandb
+import nltk
 
-# from pytorch_lightning.profilers import AdvancedProfiler
-
+nltk.download("wordnet")
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -57,9 +56,9 @@ def main(cfg):
     pl.seed_everything(cfg.seed)
 
     model = Blip2Stage3(cfg)
-
     print("total params:", sum(p.numel() for p in model.parameters()))
 
+    # datamodule
     dm = Stage3DM(
         mode=cfg.mode,
         num_workers=cfg.num_workers,
@@ -68,11 +67,10 @@ def main(cfg):
     )
 
     callbacks = []
-
     callbacks.append(
         ModelCheckpoint(
             dirpath=os.path.join(cfg.logging_dir, cfg.filename),
-            filename="{epoch:02d}-{val_total_loss:.3f}",
+            filename="{epoch:02d}-{step}",
             every_n_epochs=cfg.every_n_epochs,
             save_last=True,
             save_top_k=-1,
@@ -86,7 +84,7 @@ def main(cfg):
             strategy = strategies.DeepSpeedStrategy(stage=3)
         else:
             strategy = MyDDPStrategy(
-                find_unused_parameters=False,
+                find_unused_parameters=cfg.find_unused_parameters,
                 start_method="spawn",
                 timeout=timedelta(minutes=90),
             )
@@ -124,8 +122,6 @@ def main(cfg):
         "check_val_every_n_epoch": cfg.check_val_every_n_epoch,
         "accumulate_grad_batches": cfg.accumulate_grad_batches,
         "log_every_n_steps": cfg.log_every_n_steps,
-        # "num_sanity_val_steps": 0,
-        # "profiler": profiler,
     }
 
     if cfg.skip_sanity_check:
@@ -134,18 +130,21 @@ def main(cfg):
         trainer_args["profiler"] = cfg.profiler
 
     trainer = Trainer(**trainer_args)
-    if cfg.mode in {"pretrain", "ft", "multi_task"}:
+
+    # load pretrained model for model parameter initialization
+    if cfg.pretrained_ckpt_path is not None:
+        assert cfg.ckpt_path is None, "only one ckpt path should be provided"
+        ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
+        model.load_state_dict(ckpt["state_dict"], strict=False)
+        print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
+
+    if cfg.mode in {"ft"}:
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         outputs = trainer.test(model, datamodule=dm)
-
-        # wandb_logger.experiment.save("./wandb_profiling_logs/profiler_trace.json")
-        # profiler_summary = profiler.summary()
-        # wandb_logger.log_metrics({"Profiler Summary": profiler_summary})
-
     elif cfg.mode == "test":
         ckpt = torch.load(cfg.ckpt_path, map_location="cpu")
         model.load_state_dict(ckpt["state_dict"], strict=False)
-        print(f"loaded stage2 model from {cfg.ckpt_path}")
+        print(f"loaded trained model from {cfg.ckpt_path}")
         outputs = trainer.test(model, datamodule=dm)
     else:
         raise NotImplementedError()

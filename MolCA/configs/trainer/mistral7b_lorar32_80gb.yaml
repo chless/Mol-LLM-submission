@@ -28,12 +28,12 @@ devices: "0,1,2,3,4,5,6,7"
 precision: bf16-mixed
 max_steps: -1
 max_epochs: 12
-second_stage_start_step: 1000
+second_stage_start_epoch: 1000
 every_n_train_steps: 100
 task: null
 save_top_k: 10
 logging_dir: "/home/chanhui-lee/text-mol/MolCA/all_checkpoints/"
-llava_style: 0
+llava_pretraining: 0
 num_workers: 0
 skip_sanity_check: false
 

@@ -20,6 +20,8 @@ import json
 from data_utils import CLASSIFICATION_BENCHMARKS, id2task
 from transformers.utils import logging
 
+from torch.nn import CrossEntropyLoss
+
 logger = logging.get_logger(__name__)
 logging.set_verbosity_info()
 
@@ -54,6 +56,13 @@ class Blip2Stage3(pl.LightningModule):
                 to_be_removed.append(key)
         for key in to_be_removed:
             checkpoint["state_dict"].pop(key)
+
+        if hasattr(self, "task_specific_sft_reward"):
+            checkpoint[f"task_specific_sft_reward"] = self.task_specific_sft_reward
+
+    def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
+        if hasattr(self, "task_specific_sft_reward"):
+            self.task_specific_sft_reward = checkpoint["task_specific_sft_reward"]
 
     def __init__(self, args):
         super().__init__()
@@ -94,8 +103,17 @@ class Blip2Stage3(pl.LightningModule):
             args,
         )
         self.tokenizer = self.blip2model.init_tokenizer()
-        self.num_moving_samples = 32
         self.save_hyperparameters(args)
+
+        if self.args.eval_simpo or self.args.train_simpo:
+            self.beta = args.beta
+            self.gamma_beta_ratio = args.gamma_beta_ratio
+            self.sft_weight = args.sft_weight
+            self.molpo_weight = args.molpo_weight
+            self.anc_sft_weight = args.anc_sft_weight
+            self.anc_reject_weight = args.anc_reject_weight
+            self.sft_lambda = args.sft_lambda
+            self.reject_lambda = args.reject_lambda
 
     def load_from_stage1_checkpoint(self, path):
         ckpt = torch.load(path, map_location="cpu")
@@ -130,15 +148,12 @@ class Blip2Stage3(pl.LightningModule):
                 lr=self.args.init_lr,
                 weight_decay=self.args.weight_decay,
             )
-
-            steps_per_epoch = len(self.trainer.train_dataloader)
-            max_step = int(
-                self.args.max_epochs
-                * steps_per_epoch
-                / self.args.accumulate_grad_batches
+            self.steps_per_epoch = (
+                len(self.trainer.train_dataloader) / self.args.accumulate_grad_batches
             )
-            # get total training steps
-            num_total_steps = self.trainer.max_steps
+
+            max_step = int(self.args.max_epochs * self.steps_per_epoch)
+            warmup_steps = self.steps_per_epoch * self.args.warmup_epochs
 
             if self.args.scheduler == "linear_warmup_cosine_lr":
                 self.scheduler = LinearWarmupCosineLRScheduler(
@@ -146,7 +161,7 @@ class Blip2Stage3(pl.LightningModule):
                     max_step=max_step,
                     min_lr=self.args.min_lr,
                     init_lr=self.args.init_lr,
-                    warmup_steps=self.args.warmup_steps,
+                    warmup_steps=warmup_steps,
                     warmup_start_lr=self.args.warmup_lr,
                 )
             elif self.args.scheduler == "linear_warmup_step_lr":
@@ -208,7 +223,8 @@ class Blip2Stage3(pl.LightningModule):
 
     def apply_separated_stage(self):
         if (
-            self.trainer.global_step >= self.args.second_stage_start_step
+            self.trainer.global_step
+            >= self.args.second_stage_start_epoch * self.steps_per_epoch
             and not self.on_second_stage
         ):
             self.blip2model.set_params_requires_grads(
@@ -220,85 +236,259 @@ class Blip2Stage3(pl.LightningModule):
             self.on_second_stage = True
             print("set lora weights trainable")
 
+    # a batch of 3 tuples
+    # sft tuple (gw, sw, q, y)
+    # molpo chosen tuple (gw, sl, q, y)
+    # molpo rejected tuple (gl, sl, q, y)
+    def get_total_molpo_loss(
+        self,
+        logits: torch.FloatTensor,
+        labels: torch.LongTensor,
+        instance_loss: torch.FloatTensor,
+        tasks,
+        is_train=True,
+    ):
+        metrics = {}
+        out = concatenated_forward(
+            all_logits=logits,
+            all_labels=labels,
+            label_pad_token_id=-100,
+            instance_loss=instance_loss,
+        )
+        sft_instance_loss = out["sft_instance_loss"]
+        policy_sft_logps = out["sft_logps"]
+        sft_loss_mask = out["sft_loss_mask"]
+        policy_chosen_logps = out["chosen_logps"]
+        chosen_loss_mask = out["chosen_loss_mask"]
+        policy_rejected_logps = out["rejected_logps"]
+        rejected_loss_mask = out["rejected_loss_mask"]
+
+        # calculate rewards
+        sft_rewards = self.beta * policy_sft_logps
+        chosen_rewards = self.beta * policy_chosen_logps
+        rejected_rewards = self.beta * policy_rejected_logps
+
+        # calculate sft loss
+        sft_loss = (sft_instance_loss * sft_loss_mask.sum(-1))[
+            sft_loss_mask.sum(-1) > 0
+        ].sum() / sft_loss_mask.sum()
+
+        # calculate molpo loss
+        loss_molpo, losses_molpo = molpo_loss(
+            chosen_rewards=chosen_rewards,
+            chosen_loss_mask=chosen_loss_mask,
+            rejected_rewards=rejected_rewards,
+            rejected_loss_mask=rejected_loss_mask,
+            beta=self.beta,
+            gamma_beta_ratio=self.gamma_beta_ratio,
+        )
+
+        # update and get task specific sft rewards
+        if is_train:
+            self.update_task_specific_sft_rewards_avg(
+                sft_rewards=sft_rewards,
+                tasks=tasks,
+                task_specific_outputs=self.task_specific_sft_reward,
+                alpha=0.99,
+            )
+
+        # get average sft rewards
+        avg_sft_rewards_list = []
+        for task in tasks:
+            if task in self.task_specific_sft_reward:
+                avg_sft_rewards_list.append(self.task_specific_sft_reward[task])
+            else:
+                avg_sft_rewards_list.append(0.0)
+
+        avg_sft_rewards = torch.tensor(
+            avg_sft_rewards_list,
+            device=logits.device,
+        )
+
+        # calculate anchor losses
+        anchor_sft_losses, anchor_rejected_losses = anchor_loss(
+            avg_sft_rewards=avg_sft_rewards,
+            sft_rewards=sft_rewards,
+            sft_lambda=self.sft_lambda,
+            rejected_rewards=rejected_rewards,
+            reject_lambda=self.reject_lambda,
+            beta=self.beta,
+        )
+
+        if self.molpo_weight > 0.0:
+            loss = (
+                self.sft_weight * sft_loss
+                + self.molpo_weight * loss_molpo
+                + self.anc_sft_weight * anchor_sft_losses.mean()
+                + self.anc_reject_weight * anchor_rejected_losses.mean()
+            )
+        else:
+            loss = self.sft_weight * sft_loss
+
+        if torch.isnan(loss):
+            assert not torch.isnan(loss), "loss is nan"
+
+        metrics[f"rewards/chosen"] = chosen_rewards.cpu()
+        metrics[f"rewards/rejected"] = rejected_rewards.cpu()
+        metrics[f"rewards/sft"] = sft_rewards.cpu()
+        metrics[f"rewards/accuracies"] = (
+            (chosen_rewards > rejected_rewards).float().cpu()
+        )
+        metrics[f"rewards/margins"] = (chosen_rewards - rejected_rewards).cpu()
+
+        metrics["logps/sft"] = policy_sft_logps.clone().detach().cpu()
+        metrics[f"logps/chosen"] = policy_chosen_logps.clone().detach().cpu()
+        metrics[f"logps/rejected"] = policy_rejected_logps.clone().detach().cpu()
+
+        metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
+        metrics[f"instance_loss"] = sft_instance_loss.clone().detach().cpu()
+        metrics[f"simpo_loss"] = losses_molpo.clone().detach().cpu()
+        metrics[f"anchor_loss/sft"] = anchor_sft_losses.clone().detach().cpu()
+        metrics[f"anchor_loss/rejected"] = anchor_rejected_losses.clone().detach().cpu()
+
+        return loss, metrics
+
+    def update_task_specific_sft_rewards_avg(
+        self,
+        sft_rewards,
+        tasks,
+        task_specific_outputs: Dict[str, Dict[str, list]],
+        alpha=0.99,
+    ):
+        for i in range(sft_rewards.shape[0]):
+            if torch.isnan(sft_rewards[i]):
+                continue
+
+            task = tasks[i]
+            task_specific_outputs.setdefault(task, sft_rewards[i].item())
+            task_specific_outputs[task] = (
+                alpha * task_specific_outputs[task]
+                + (1 - alpha) * sft_rewards[i].item()
+            )
+
     def training_step(self, batch, batch_idx):
-        # print(batch_idx, torch.cuda.memory_summary())
-        # torch.cuda.empty_cache()
-        if self.args.llava_style:
+        if self.args.llava_pretraining:
             self.apply_separated_stage()
 
         if self.scheduler:
             self.scheduler.step(cur_step=self.trainer.global_step)
 
-        batch_size = self.args.batch_size
+        tasks = [id2task(task_id.item()) for task_id in batch.tasks]
 
         outputs = self.blip2model(batch)
+        logits = outputs.pop("logits")
+        loss = outputs.pop("loss")
+
+        if hasattr(self.args, "train_simpo") and self.args.train_simpo:
+            compute_loss_context_manager = torch.amp.autocast
+            len_tuple = batch.labels.shape[0] // 3
+            tasks = tasks[:len_tuple]
+
+            with compute_loss_context_manager(device_type="cuda"):
+                loss, metrics = self.get_total_molpo_loss(
+                    logits=logits,
+                    labels=batch.simpo_labels,
+                    instance_loss=outputs["instance_loss"],
+                    tasks=tasks,
+                    is_train=True,
+                )
+            outputs.update(metrics)
 
         self.log(
             "lr",
             self.trainer.optimizers[0].param_groups[0]["lr"],
-            batch_size=batch_size,
+            batch_size=self.args.batch_size,
             sync_dist=False,
         )
-        # log dataset specific losses
-        # task_subtask_pairs = batch[0].task_subtask_pair
-        task_subtask_pairs = [id2task(task_id.item()) for task_id in batch.tasks]
 
-        
-        instance_losses = outputs["instance_loss"]
+        self.log(
+            f"train_total_loss",
+            loss.clone().detach().item(),
+            batch_size=self.args.batch_size,
+            sync_dist=False,
+        )
 
-        for task_subtask_pair in task_subtask_pairs:
-            if task_subtask_pair not in self.dataset_losses.keys():
-                self.dataset_losses[task_subtask_pair] = []
-
-        for i in range(instance_losses.shape[0]):
-            # if i th item is nan, skip
-            if instance_losses[i] != instance_losses[i]:
-                continue
-            
-            task_subtask_pair = task_subtask_pairs[i]
-            # calculate average loss
-            self.dataset_losses[task_subtask_pair].append(instance_losses[i].item())
-
-            while (
-                len(self.dataset_losses[task_subtask_pair])
-                > self.num_moving_samples
-            ):
-                self.dataset_losses[task_subtask_pair].pop(0)
-
-        for dataset in self.dataset_losses.keys():
+        for k, v in outputs.items():
             self.log(
-                f"train/{dataset}/loss",
-                sum(self.dataset_losses[dataset])
-                / len(self.dataset_losses[dataset]),
-                batch_size=len(self.dataset_losses[dataset]),
+                f"train/{k}",
+                float(v if len(v.shape) == 0 else v.mean()),
+                batch_size=self.args.batch_size,
                 sync_dist=False,
             )
 
-        loss = outputs["loss"]
-        self.log(
-            "train_total_loss",
-            float(loss),
-            batch_size=batch_size,
-            sync_dist=False,
+        self.task_specific_logging(
+            outputs=outputs,
+            tasks=tasks,
+            mode="train",
+            epoch_end=False,
+            task_specific_outputs=self.task_specific_outputs,
+            num_moving_samples=32,
         )
+        if self.args.train_simpo:
+            # bar r logging
+            for k, v in self.task_specific_sft_reward.items():
+                self.log(
+                    f"train/{k}/bar_reward",
+                    v,
+                    batch_size=self.args.batch_size,
+                    sync_dist=False,
+                )
+
         return loss
 
+    def task_specific_logging(
+        self,
+        outputs,
+        tasks,
+        mode,
+        epoch_end,
+        task_specific_outputs: Dict[str, Dict[str, list]],
+        num_moving_samples=32,
+    ):
+
+        if mode == "train":
+            assert epoch_end == False
+
+        if (mode == "train") or not epoch_end:
+            # log dataset specific losses
+            new_outputs = {
+                k: v for k, v in outputs.items() if v.shape != torch.Size([])
+            }
+
+            for task in tasks:
+                task_specific_outputs.setdefault(
+                    task, {k: [] for k in new_outputs.keys()}
+                )
+
+            for metric, v in new_outputs.items():
+
+                for i in range(v.shape[0]):
+                    if torch.isnan(v[i]):
+                        continue
+
+                    task = tasks[i]
+                    task_specific_outputs[task][metric].append(v[i].item())
+
+                    if num_moving_samples is not None and (
+                        len(self.task_specific_outputs[task][metric])
+                        > num_moving_samples
+                    ):
+                        task_specific_outputs[task][metric].pop(0)
+
+        if mode == "train" or epoch_end:
+            for task, metric_dict in task_specific_outputs.items():
+                for metric, vs in metric_dict.items():
+                    if vs:
+                        self.log(
+                            f"{mode}/{task}/{metric}",
+                            sum(vs) / len(vs),
+                            batch_size=len(vs),
+                            sync_dist=False,
+                        )
+
     def on_train_epoch_start(self) -> None:
-        if self.blip2model.llm_tokenizer.mol_string_randomization_ratio > 0:
-            # conduct mol_string_randomization_ratio annealing, so that at max epochs, it is 0
-            self.blip2model.llm_tokenizer.mol_string_randomization_ratio = max(
-                0,
-                self.blip2model.llm_tokenizer.mol_string_randomization_ratio
-                * (1 - self.trainer.current_epoch / self.trainer.max_epochs),
-            )
-
-        self.log(
-            "mol_string_randomization_ratio",
-            self.blip2model.llm_tokenizer.mol_string_randomization_ratio,
-            sync_dist=False,
-        )
-
-        self.dataset_losses = {}
+        self.task_specific_outputs = {}
+        self.task_specific_sft_reward = {}
 
         self.train_list_predictions = []
         self.train_list_targets = []
@@ -307,6 +497,10 @@ class Blip2Stage3(pl.LightningModule):
         self.train_list_probs = []
         self.train_total_avg_loss = 0.0
         self.train_total_seen_data_size = 0
+
+        self.trainer.train_dataloader.collate_fn.current_epoch = (
+            self.trainer.current_epoch
+        )
 
     def on_evaluation_epoch_start(self):
         self.list_logs = {
@@ -322,62 +516,115 @@ class Blip2Stage3(pl.LightningModule):
         # self.task_subtask_name_pairs = self.trainer.datamodule.dataset_split[
         #     "test"
         # ].task_subtask_name_pairs
-        
+
         self.task_subtask_name_pairs = self.trainer.datamodule.task_subtask_name_pairs
-        
+
         self.eval_dataset_losses = {
             task_subtask_pair: {"avg_loss": 0.0, "num_instances": 0}
             for task_subtask_pair in self.task_subtask_name_pairs
         }
+        self.eval_task_specific_outputs = {}
 
-        #<DEBUG>
-        self.accurate_count = 0
-        self.total_count = 0
-        self.cut_count = 0
-        #</DEBUG>
+        if not hasattr(self, "task_specific_sft_reward"):
+            self.task_specific_sft_reward = {}
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
-
-        target_ids = batch.labels
-        
         if "graph" in self.args.mol_representation:
-            graphs = batch['graphs']
-            additional_graphs = batch['additional_graphs']
-            is_mol_token = batch['prompt_is_mol_token']
+            graphs = batch["graphs"]
+            additional_graphs = batch["additional_graphs"]
+            is_mol_token = batch["prompt_is_mol_token"]
         else:
             graphs = None
             additional_graphs = None
             is_mol_token = None
-        
 
-        outputs = self.blip2model.generate(
+        labels = batch.eval_labels
+        simpo_labels = batch.eval_simpo_labels
+        gen_max_length = self.gen_max_len
+
+        log_attn_score = self.args.log_attn_score
+        gen_outputs = self.blip2model.generate(
             graphs=(graphs, additional_graphs),
             # input_tokens=prompt_tokens,
             input_ids=batch.prompt_input_ids,
             attention_mask=batch.prompt_attention_mask,
             is_mol_token=is_mol_token,
-            
             num_beams=self.num_beams,
-            max_length=self.gen_max_len,
+            max_length=gen_max_length,
             min_length=self.min_len,
+            output_attentions=log_attn_score,
         )
-        predictions = outputs.predictions
+        logits = gen_outputs.logits
+        comparable_len = min(logits.shape[1], labels.shape[1])
+
+        comparable_labels = labels[:, :comparable_len]
+        comparable_simpo_labels = simpo_labels[:, :comparable_len]
+        comparable_logits = logits[:, :comparable_len]
+
+        loss_dict = get_instance_loss(
+            logits=comparable_logits, labels=comparable_labels
+        )
+        instance_loss = loss_dict["instance_loss"]
+        loss = loss_dict["loss"]
+
+        if self.args.eval_simpo:
+            len_tuple = labels.shape[0] // 3
+            tasks = [id2task(task_id.item()) for task_id in batch.tasks][:len_tuple]
+
+            compute_loss_context_manager = torch.amp.autocast
+            with compute_loss_context_manager(device_type="cuda"):
+                loss, metrics = self.get_total_molpo_loss(
+                    logits=comparable_logits,
+                    labels=comparable_simpo_labels,
+                    tasks=tasks,
+                    instance_loss=instance_loss,
+                    is_train=False,
+                )
+
+            logits = logits[:len_tuple]
+            labels = labels[:len_tuple]
+            instance_loss = instance_loss[:len_tuple]
+
+            attentions = gen_outputs.attentions
+            predictions = gen_outputs.predictions[:len_tuple]
+            prompt_input_ids = batch.prompt_input_ids[:len_tuple]
+            input_ids = batch.input_ids[:len_tuple]
+        else:
+            tasks = [id2task(task_id.item()) for task_id in batch.tasks]
+            attentions = gen_outputs.attentions
+            predictions = gen_outputs.predictions
+            prompt_input_ids = batch.prompt_input_ids
+            input_ids = batch.input_ids
+
+        if log_attn_score:
+            self.log_attn_score(
+                prompt_input_ids=prompt_input_ids,
+                mode=mode,
+                is_mol_token=is_mol_token,
+                attentions=attentions,
+            )
+
         prompts = self.blip2model.llm_tokenizer.batch_decode(
-            batch.input_ids, skip_special_tokens=False
+            input_ids, skip_special_tokens=False
         )
         predictions = [
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions
         ]
-        target_ids = torch.where(target_ids == -100, 0, target_ids)
+        target_ids = torch.where(
+            labels == -100,
+            self.blip2model.llm_tokenizer.pad_token_id,
+            labels,
+        )
         targets = self.blip2model.llm_tokenizer.batch_decode(target_ids)
         targets = [
             t.replace(self.blip2model.llm_tokenizer.pad_token, "") for t in targets
         ]
 
-        # tasks = graphs.task_subtask_pair
-        tasks = [id2task(task_id.item()) for task_id in batch.tasks]
-        
-        probs = convert_logit2binary_prob(logits=outputs.logits, predictions=predictions, tokenizer=self.blip2model.llm_tokenizer)
+        probs = convert_logit2binary_prob(
+            logits=logits,
+            predictions=predictions,
+            tokenizer=self.blip2model.llm_tokenizer,
+        )
         prompts = [
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
         ]
@@ -388,55 +635,193 @@ class Blip2Stage3(pl.LightningModule):
         self.list_logs["probs"].extend(probs)
         self.list_logs["prompts"].extend(prompts)
 
-        # <DEBUG>
-        for i in range(len(predictions)):
-            self.total_count += 1
-            if "True" in targets[i] and "True" in predictions[i]:
-                self.accurate_count += 1
-            elif "False" in targets[i] and "False" in predictions[i]:
-                self.accurate_count += 1
-            elif targets[i] == '':
-                self.cut_count += 1
-            else:
-                pass
-        # </DEBUG>
-
-        batch_size = batch.input_ids.shape[0]
-        # TODO: IMPORTANT! this loss calculateion should be fixed, with the change of data collater in eval mode
-
-        del target_ids, graphs, additional_graphs, is_mol_token
-        
-        outputs = self.blip2model(batch)
-        ##============== Overall Loss ===================##
+        batch_size = input_ids.shape[0]
 
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
-        self.total_avg_loss += (outputs["loss"].item() - self.total_avg_loss) * new_data_weight
+        self.total_avg_loss += (loss.item() - self.total_avg_loss) * new_data_weight
         self.total_seen_data_size += batch_size
 
-        task_subtask_pairs = tasks
-        instance_losses = outputs["instance_loss"]
-
-        for i in range(instance_losses.shape[0]):
+        for i in range(instance_loss.shape[0]):
             # if i th item is nan, skip
-            if instance_losses[i] != instance_losses[i]:
+            if instance_loss[i] != instance_loss[i]:
                 continue
-            task_subtask_pair = task_subtask_pairs[i]
+            task_subtask_pair = tasks[i]
+            if task_subtask_pair not in self.eval_dataset_losses:
+                self.eval_dataset_losses[task_subtask_pair] = {
+                    "avg_loss": 0.0,
+                    "num_instances": 0,
+                }
             # calculate average loss
             self.eval_dataset_losses[task_subtask_pair][
                 "avg_loss"
             ] *= self.eval_dataset_losses[task_subtask_pair]["num_instances"] / (
                 self.eval_dataset_losses[task_subtask_pair]["num_instances"] + 1
             )
-            self.eval_dataset_losses[task_subtask_pair]["avg_loss"] += instance_losses[
+            self.eval_dataset_losses[task_subtask_pair]["avg_loss"] += instance_loss[
                 i
             ] / (self.eval_dataset_losses[task_subtask_pair]["num_instances"] + 1)
 
             self.eval_dataset_losses[task_subtask_pair]["num_instances"] += 1
 
-        return outputs["loss"]
+        if self.args.eval_simpo:
+            self.task_specific_logging(
+                outputs=metrics,
+                tasks=tasks,
+                mode=mode,
+                epoch_end=False,
+                task_specific_outputs=self.eval_task_specific_outputs,
+                num_moving_samples=None,
+            )
+
+            for k, v in self.task_specific_sft_reward.items():
+                self.log(
+                    f"train/{k}/bar_reward",
+                    v,
+                    batch_size=self.args.batch_size,
+                    sync_dist=False,
+                )
+
+        return loss
+
+    def log_attn_score(self, prompt_input_ids, mode, is_mol_token, attentions):
+        num_steps = len(attentions)
+        seq_lengths = prompt_input_ids.shape[1]
+        all_layers_attn = [
+            torch.stack(attentions[step_idx])[..., :seq_lengths]
+            for step_idx in range(1, num_steps)
+        ]
+
+        # [num_steps, num_heads, max_generated_length, max_generated_length] -> [num_steps, batch_size, max_generated_length]
+        full_attn_mean = torch.stack(all_layers_attn).mean(dim=(1, 3)).squeeze()
+
+        selfies_start_token_id = 35743
+        selfies_end_token_id = 35744
+
+        selfies_mask = torch.zeros_like(prompt_input_ids, dtype=torch.bool)
+        st_batch_indices, start_indices = (
+            prompt_input_ids == selfies_start_token_id
+        ).nonzero(as_tuple=True)
+        end_batch_indices, end_indices = (
+            prompt_input_ids == selfies_end_token_id
+        ).nonzero(as_tuple=True)
+
+        valid_start_mask = torch.isin(st_batch_indices, end_batch_indices)
+        st_batch_indices = st_batch_indices[valid_start_mask]
+        start_indices = start_indices[valid_start_mask]
+
+        start_indices += 1
+        end_indices -= 1
+
+        seq_range = torch.arange(seq_lengths, device=prompt_input_ids.device).unsqueeze(
+            0
+        )
+
+        broadcasted_start = start_indices.unsqueeze(1)
+        broadcasted_end = end_indices.unsqueeze(1)
+
+        sequence_masks = (seq_range >= broadcasted_start) & (
+            seq_range <= broadcasted_end
+        )
+        temp_mask = torch.zeros_like(prompt_input_ids, dtype=torch.bool)
+        temp_mask.scatter_add_(
+            0,
+            end_batch_indices.unsqueeze(1).expand(-1, seq_lengths),
+            sequence_masks,
+        )
+        selfies_mask = selfies_mask | temp_mask
+
+        # mol_attn_score = full_attn_mean[:, mol_token_mask]
+
+        mol_mean_scores = []
+        mol_sum_scores = []
+        selfies_mean_scores = []
+        selfies_sum_scores = []
+
+        # exception for batch size 1
+        if len(full_attn_mean.shape) == 2:
+            full_attn_mean = full_attn_mean.unsqueeze(1)
+
+        for i in range(prompt_input_ids.shape[0]):
+            if "graph" in self.args.mol_representation:
+                mol_mean_scores.append(
+                    full_attn_mean[:, i, is_mol_token[i]].mean(dim=-1).mean(dim=0)
+                )
+                mol_sum_scores.append(
+                    full_attn_mean[:, i, is_mol_token[i]].sum(dim=-1).sum(dim=0)
+                )
+            if "string" in self.args.mol_representation:
+                selfies_mean_scores.append(
+                    full_attn_mean[:, i, selfies_mask[i]].mean(dim=-1).mean(dim=0)
+                )
+                selfies_sum_scores.append(
+                    full_attn_mean[:, i, selfies_mask[i]].sum(dim=-1).sum(dim=0)
+                )
+        if "graph" in self.args.mol_representation:
+            mol_mean_scores = torch.stack(mol_mean_scores)
+            mol_mean_scores = torch.where(
+                torch.isnan(mol_mean_scores),
+                torch.zeros_like(mol_mean_scores),
+                mol_mean_scores,
+            )
+            mol_sum_scores = torch.stack(mol_sum_scores)
+            mol_sum_scores = torch.where(
+                torch.isnan(mol_sum_scores),
+                torch.zeros_like(mol_sum_scores),
+                mol_sum_scores,
+            )
+
+            self.log(
+                f"{mode}/graph_attn_mean_score",
+                mol_mean_scores.mean().item(),
+                sync_dist=False,
+                batch_size=prompt_input_ids.shape[0],
+            )
+            self.log(
+                f"{mode}/graph_attn_sum_score",
+                mol_sum_scores.mean().item(),
+                sync_dist=False,
+                batch_size=prompt_input_ids.shape[0],
+            )
+
+        if "string" in self.args.mol_representation:
+            selfies_mean_scores = torch.stack(selfies_mean_scores)
+            selfies_mean_scores = torch.where(
+                torch.isnan(selfies_mean_scores),
+                torch.zeros_like(selfies_mean_scores),
+                selfies_mean_scores,
+            )
+            selfies_sum_scores = torch.stack(selfies_sum_scores)
+            selfies_sum_scores = torch.where(
+                torch.isnan(selfies_sum_scores),
+                torch.zeros_like(selfies_sum_scores),
+                selfies_sum_scores,
+            )
+
+            self.log(
+                f"{mode}/selfies_attn_mean_score",
+                selfies_mean_scores.mean().item(),
+                sync_dist=False,
+                batch_size=prompt_input_ids.shape[0],
+            )
+            self.log(
+                f"{mode}/selfies_attn_sum_score",
+                selfies_sum_scores.mean().item(),
+                sync_dist=False,
+                batch_size=prompt_input_ids.shape[0],
+            )
 
     def on_evaluation_epoch_end(self, mode="val") -> None:
         print(f"\nDevice {self.device} on_evaluation_epoch_end start")
+
+        if self.args.eval_simpo:
+            self.task_specific_logging(
+                outputs=None,
+                tasks=None,
+                mode=mode,
+                epoch_end=True,
+                task_specific_outputs=self.eval_task_specific_outputs,
+                num_moving_samples=None,
+            )
 
         evaluation_results, failed_cases = per_device_evaluate(
             predictions=self.list_logs["predictions"],
@@ -688,9 +1073,7 @@ class Blip2Stage3(pl.LightningModule):
         print(
             "================================================================================="
         )
-        #<DEBUG>
-        print(f"Accuracy: {self.accurate_count / (self.total_count - self.cut_count)}")
-        #</DEBUG>
+
         result_path = os.path.join(
             self.logger.log_dir,
             f"{mode}-step{self.global_step}-{self.global_rank}-results.json",
@@ -705,5 +1088,233 @@ class Blip2Stage3(pl.LightningModule):
         with open(result_path, "w") as f:
             json.dump(result_dict, f, ensure_ascii=False, indent=4)
 
-
         print(f"\nDevice {self.device} on_evaluation_epoch_end end")
+
+
+def check_model_parameters(model, keyword):
+    from collections import OrderedDict
+
+    # save as ordered dict
+    trainable_params_dict = OrderedDict()
+    for name, param in model.named_parameters():
+        if param.requires_grad and keyword in name:
+            trainable_params_dict[name] = param
+    return trainable_params_dict
+
+
+def get_instance_loss(logits, labels):
+    shift_logits = logits[..., :-1, :].contiguous()
+    shift_labels = labels[..., 1:].contiguous()
+    # Flatten the tokens
+    shift_logits = shift_logits.view(-1, logits.shape[-1])
+    shift_labels = shift_labels.view(-1)
+    # Enable model parallelism
+    shift_labels = shift_labels.to(shift_logits.device)
+
+    # custom forward to get not reduced loss
+    loss_fct_not_reduced = CrossEntropyLoss(reduction="none")
+    loss_not_reduced = loss_fct_not_reduced(shift_logits, shift_labels).view(
+        labels.size(0), -1
+    )
+    # normalization exclude default ignore index -100
+    instance_non_pad_tokens = torch.where(
+        shift_labels != -100,
+        torch.tensor(1).to(shift_labels.device),
+        torch.tensor(0).to(shift_labels.device),
+    ).view(labels.size(0), -1)
+    instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
+        dim=-1
+    ) / instance_non_pad_tokens.sum(dim=-1)
+    loss = (
+        loss_not_reduced * instance_non_pad_tokens
+    ).sum() / instance_non_pad_tokens.sum()
+    return {"loss": loss, "instance_loss": instance_loss}
+
+
+import torch
+from typing import Tuple
+from torch.nn import functional as F
+
+
+def molpo_loss(
+    chosen_rewards: torch.FloatTensor,
+    chosen_loss_mask: torch.BoolTensor,
+    rejected_rewards: torch.FloatTensor,
+    rejected_loss_mask: torch.BoolTensor,
+    loss_type="sigmoid",
+    beta=1.0,
+    gamma_beta_ratio=0.0,
+) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
+    """Compute the SimPO loss for a batch of policy model log probabilities.
+
+    Args:
+        policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
+        policy_rejected_logps: Log probabilities of the policy model for the rejected responses. Shape: (batch_size,)
+
+    Returns:
+        A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
+        The losses tensor contains the SimPO loss for each example in the batch.
+        The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
+    """
+    # calculate molpo loss
+    logits = chosen_rewards - rejected_rewards - beta * gamma_beta_ratio
+    if loss_type == "sigmoid":
+        losses = -F.logsigmoid(beta * logits)
+    elif loss_type == "hinge":
+        losses = torch.relu(1 - beta * logits)
+    else:
+        raise ValueError(
+            f"Unknown loss type: {loss_type}. Should be one of ['sigmoid', 'hinge']"
+        )
+    loss_mask = torch.where(
+        (rejected_loss_mask.sum(-1) > 0) & (chosen_loss_mask.sum(-1) > 0),
+        True,
+        False,
+    )
+    loss = losses[loss_mask].mean()
+
+    return loss, losses
+
+
+def anchor_loss(
+    avg_sft_rewards: torch.FloatTensor,
+    sft_rewards: torch.FloatTensor,
+    sft_lambda: float,
+    rejected_rewards: torch.FloatTensor,
+    reject_lambda: float,
+    beta: float,
+):
+    anchor_sft_losses = -F.logsigmoid(sft_rewards - sft_lambda * beta * avg_sft_rewards)
+    anchor_rejected_losses = -F.logsigmoid(
+        rejected_rewards - reject_lambda * beta * avg_sft_rewards
+    )
+    return anchor_sft_losses, anchor_rejected_losses
+
+
+def simpo_loss(
+    policy_chosen_logps: torch.FloatTensor,
+    policy_rejected_logps: torch.FloatTensor,
+    loss_type="sigmoid",
+    beta=1.0,
+    gamma_beta_ratio=0.0,
+    device="cuda",
+) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
+    """Compute the SimPO loss for a batch of policy model log probabilities.
+
+    Args:
+        policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
+        policy_rejected_logps: Log probabilities of the policy model for the rejected responses. Shape: (batch_size,)
+
+    Returns:
+        A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
+        The losses tensor contains the SimPO loss for each example in the batch.
+        The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
+    """
+    pi_logratios = policy_chosen_logps - policy_rejected_logps
+    pi_logratios = pi_logratios.to(device)
+    logits = pi_logratios - gamma_beta_ratio
+
+    if loss_type == "sigmoid":
+        losses = -F.logsigmoid(beta * logits)
+    elif loss_type == "hinge":
+        losses = torch.relu(1 - beta * logits)
+    else:
+        raise ValueError(
+            f"Unknown loss type: {loss_type}. Should be one of ['sigmoid', 'hinge']"
+        )
+
+    chosen_rewards = beta * policy_chosen_logps.to(device).clone().detach()
+    rejected_rewards = beta * policy_rejected_logps.to(device).clone().detach()
+
+    return losses, chosen_rewards, rejected_rewards
+
+
+def get_batch_logps(
+    logits: torch.FloatTensor,
+    labels: torch.LongTensor,
+    average_log_prob: bool = True,
+    label_pad_token_id: int = -100,
+    is_encoder_decoder: bool = False,
+) -> torch.FloatTensor:
+    """Compute the log probabilities of the given labels under the given logits.
+
+    Args:
+        logits: Logits of the model (unnormalized). Shape: (batch_size, sequence_length, vocab_size)
+        labels: Labels for which to compute the log probabilities. Label tokens with a value of label_pad_token_id are ignored. Shape: (batch_size, sequence_length)
+        average_log_prob: If True, return the average log probability per (non-masked) token. Otherwise, return the sum of the log probabilities of the (non-masked) tokens.
+        label_pad_token_id: The label pad token id.
+        is_encoder_decoder: Whether the model is an encoder-decoder model.
+
+    Returns:
+        A tensor of shape (batch_size,) containing the average/sum log probabilities of the given labels under the given logits.
+    """
+    if logits.shape[:-1] != labels.shape:
+        raise ValueError(
+            "Logits (batch and sequence length dim) and labels must have the same shape."
+        )
+
+    if not is_encoder_decoder:
+        labels = labels[:, 1:].clone()
+        logits = logits[:, :-1, :]
+    loss_mask = labels != label_pad_token_id
+    target_truncation_mask = torch.where(loss_mask.sum(-1) > 0, True, False)
+
+    # dummy token; we'll ignore the losses on these tokens later
+    labels[labels == label_pad_token_id] = 0
+
+    per_token_logps = torch.gather(
+        logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)
+    ).squeeze(2)
+
+    # just add one for target truncated instance.
+    # the loss is not used for backprop, so it's fine to have a dummy loss for truncated instances.
+    numerically_stable_mask = loss_mask.sum(-1) + ~target_truncation_mask * 1e-6
+
+    if average_log_prob:
+        return (per_token_logps * loss_mask).sum(-1) / numerically_stable_mask
+    else:
+        return (per_token_logps * loss_mask).sum(-1)
+
+
+def concatenated_forward(
+    all_logits: torch.FloatTensor,
+    all_labels: torch.LongTensor,
+    instance_loss: torch.FloatTensor = None,
+    label_pad_token_id: int = -100,
+) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
+    """Run the given model on the given batch of inputs, concatenating the chosen and rejected inputs together.
+
+    We do this to avoid doing two forward passes, because it's faster for FSDP.
+    """
+
+    all_logps = get_batch_logps(
+        logits=all_logits,
+        labels=all_labels,
+        average_log_prob=True,
+        is_encoder_decoder=False,
+        label_pad_token_id=label_pad_token_id,
+    )
+    len_tuple = all_labels.shape[0] // 3
+
+    sft_instance_loss = instance_loss[:len_tuple]
+    sft_logps = all_logps[:len_tuple]
+    sft_labels = all_labels[:len_tuple]
+    sft_loss_mask = sft_labels[:, 1:].clone() != -100
+
+    chosen_logps = all_logps[len_tuple : 2 * len_tuple]
+    chosen_labels = all_labels[len_tuple : 2 * len_tuple]
+    chosen_loss_mask = chosen_labels[:, 1:].clone() != -100
+
+    rejected_logps = all_logps[2 * len_tuple :]
+    rejected_labels = all_labels[2 * len_tuple :]
+    rejected_loss_mask = rejected_labels[:, 1:].clone() != -100
+
+    return {
+        "sft_instance_loss": sft_instance_loss,
+        "sft_logps": sft_logps,
+        "sft_loss_mask": sft_loss_mask,
+        "chosen_logps": chosen_logps,
+        "chosen_loss_mask": chosen_loss_mask,
+        "rejected_logps": rejected_logps,
+        "rejected_loss_mask": rejected_loss_mask,
+    }

@@ -4,6 +4,8 @@ cross_attention_freq: 2
 num_query_token: 32
 bert_num_hidden_layers: 5
 
+projector_type: qformer
+
 llm_model: "mistralai/Mistral-7B-Instruct-v0.3"
 tune_llm: lora
 peft_config: null
@@ -18,24 +20,19 @@ prompt: "[START_I_SMILES]{}[END_I_SMILES]"
 
 num_beams: 1
 
-
-
-mol_representation: string_only
-
 strategy_name: null
 accelerator: gpu
 devices: "0,1,2,3,4,5,6,7"
 precision: bf16-mixed
 max_steps: -1
 max_epochs: 12
-second_stage_start_step: 1000
 every_n_epochs: 1
 task: null
-save_top_k: 10
 logging_dir: "your logging path"
-llava_style: 0
+llava_pretraining: 0
+second_stage_start_epoch: 4
 num_workers: 0
-skip_sanity_check: false
+skip_sanity_check: true
 
 # accumulate_grad_batches: 11
 total_batch_size: 1024
@@ -57,12 +54,10 @@ weight_decay: 0.05
 min_lr: 0.00001
 init_lr: 0.0001
 warmup_lr: 0.00001
-warmup_steps: 100
+warmup_epochs: 0.25
 scheduler: linear_warmup_cosine_lr
 optimizer: adamw
 log_every_n_steps: 50
-
-mol_string_randomization_ratio: -1
 
 val_check_interval: 0.5
 check_val_every_n_epoch: 1
@@ -70,3 +65,13 @@ trainset_resize: -1
 valset_resize: -1
 testset_resize: -1
 test_on_trainset: false
+
+# multimodal training
+mol_representation: string_only
+log_attn_score: true
+
+# simpo
+train_simpo: false
+eval_simpo: false
+
+find_unused_parameters: false

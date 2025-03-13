@@ -1,0 +1,80 @@
+bert_hidden_dim: 768
+bert_name: scibert
+cross_attention_freq: 2
+num_query_token: 32
+bert_num_hidden_layers: 5
+
+projector_type: qformer
+
+llm_model: "mistralai/Mistral-7B-Instruct-v0.3"
+tune_llm: lora
+peft_config: null
+peft_dir: ""
+load_in_8bit: false
+lora_r: 64
+lora_alpha: 32
+lora_dropout: 0.1
+selfies_token_path: "selfies_dict.txt path"
+add_selfies_tokens: true
+prompt: "[START_I_SMILES]{}[END_I_SMILES]"
+
+num_beams: 1
+
+strategy_name: null
+accelerator: gpu
+devices: "0,1,2,3,4,5,6,7"
+precision: bf16-mixed
+max_steps: -1
+max_epochs: 12
+every_n_epochs: 1
+task: null
+save_top_k: 10
+logging_dir: "your logging path"
+llava_pretraining: 0
+second_stage_start_epoch: 4
+num_workers: 0
+skip_sanity_check: true
+
+# accumulate_grad_batches: 11
+total_batch_size: 2048
+batch_size: 5
+inference_batch_size: 10
+
+truncation: 1
+padding: max_length
+max_length: 512
+
+gen_max_len: 256
+min_len: 8
+
+apply_sequence_packing: false
+max_packing_size: -1
+
+weight_decay: 0.05
+min_lr: 0.00001
+init_lr: 0.0001
+warmup_lr: 0.00001
+warmup_steps: 100
+scheduler: linear_warmup_cosine_lr
+optimizer: adamw
+log_every_n_steps: 50
+
+val_check_interval: 0.25
+check_val_every_n_epoch: 1
+trainset_resize: -1
+valset_resize: -1
+testset_resize: -1
+test_on_trainset: false
+
+# multimodal training
+mol_representation: string_only
+log_attn_score: true
+
+# simpo
+train_simpo: true
+eval_simpo: true
+
+beta: 1.0
+gamma_beta_ratio: 1.0
+molpo_weight: 0.3
+loss_type: sigmoid

@@ -1,5 +1,5 @@
 defaults:
-  - data: multi_task_extended-v6
+  - data: multi_task
   - gnn: moleculeSTM_freeze
   - trainer: mistral7b_80gb
 
@@ -13,4 +13,6 @@ wandb_project: mol-llm
 wandb_log_freq: 100
 wandb_id: null
 
+debug: false
 ckpt_path: null
+pretrained_ckpt_path: null

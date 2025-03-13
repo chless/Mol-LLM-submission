@@ -102,10 +102,9 @@ class Blip2OPT(Blip2Base):
         # initialize opt model
         self.llm_tokenizer = AutoTokenizer.from_pretrained(
             # llm_model, use_fast=False, padding_side="right"
-            llm_model, use_fast=False, padding_side="left"
-        )
-        self.llm_tokenizer.mol_string_randomization_ratio = (
-            args.mol_string_randomization_ratio
+            llm_model,
+            use_fast=False,
+            padding_side="left",
         )
         self.add_necessary_tokens()
 
@@ -150,7 +149,7 @@ class Blip2OPT(Blip2Base):
             model=self.llm_model, keyword="embed", grad=True, IsPrint=False
         )
 
-        if self.args.llava_style:
+        if self.args.llava_pretraining:
             self.set_params_requires_grads(
                 model=self.llm_model, keyword="lora", grad=False, IsPrint=False
             )
@@ -168,26 +167,33 @@ class Blip2OPT(Blip2Base):
                 self.graph_encoder.train = disabled_train
                 print("freeze graph encoder")
 
-            self.num_query_token = num_query_token
-            self.Qformer, self.query_tokens = self.init_Qformer(
-                bert_name,
-                num_query_token,
-                gin_hidden_dim,
-                cross_attention_freq,
-                bert_num_hidden_layers=args.bert_num_hidden_layers,
-            )
+            if self.args.projector_type == "qformer":
 
-            ## remove the unused parameters
-            self.Qformer.cls = None
-            self.Qformer.bert.embeddings.word_embeddings = None
-            self.Qformer.bert.embeddings.position_embeddings = None
-            for layer in self.Qformer.bert.encoder.layer:
-                layer.output = None
-                layer.intermediate = None
+                self.num_query_token = num_query_token
+                self.Qformer, self.query_tokens = self.init_Qformer(
+                    bert_name,
+                    num_query_token,
+                    gin_hidden_dim,
+                    cross_attention_freq,
+                    bert_num_hidden_layers=args.bert_num_hidden_layers,
+                )
 
-            self.opt_proj = nn.Linear(
-                self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
-            )
+                ## remove the unused parameters
+                self.Qformer.cls = None
+                self.Qformer.bert.embeddings.word_embeddings = None
+                self.Qformer.bert.embeddings.position_embeddings = None
+                for layer in self.Qformer.bert.encoder.layer:
+                    layer.output = None
+                    layer.intermediate = None
+
+                self.opt_proj = nn.Linear(
+                    self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
+                )
+            elif self.args.projector_type == "mlp":
+                # build self.opt_proj with single layers
+                self.opt_proj = nn.Linear(
+                    gin_hidden_dim, self.llm_model.config.hidden_size
+                )
 
     def get_lora_target_modules(self):
         return ["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]
@@ -199,10 +205,11 @@ class Blip2OPT(Blip2Base):
             )
         else:
             self.llm_model = OPTForCausalLM_Custom.from_pretrained(
-                llm_model, 
-                torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+                llm_model,
+                torch_dtype=(
+                    torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+                ),
             )
-            
 
     def add_necessary_tokens(self):
         # pad toekn for galactica is "<pad>""
@@ -219,7 +226,7 @@ class Blip2OPT(Blip2Base):
             self.llm_tokenizer.add_tokens(selfies_tokens)
             # get token id of the selfies_tokens
             self.llm_tokenizer.selfies_token_ids = [
-                self.llm_tokenizer(token, add_special_tokens=False).input_ids[0]
+                self.llm_tokenizer.convert_tokens_to_ids(token)
                 for token in selfies_tokens
             ]
             self.llm_tokenizer.added_selfies_tokens = selfies_tokens
@@ -239,9 +246,29 @@ class Blip2OPT(Blip2Base):
 
         self.llm_tokenizer.add_tokens(additional_tokens)
 
+        simpo_mask_tokens = added_tokens.BOOL + added_tokens.FLOAT \
+            + added_tokens.DESCRIPTION + added_tokens.SELFIES \
+            + added_tokens.IUPAC \
+            + added_tokens.MOLFORMULA
+        simpo_mask_tokens += [self.llm_tokenizer.eos_token]
+        self.llm_tokenizer.simpo_mask_tokens = simpo_mask_tokens
+
+        # get ids of task tokens
+        self.llm_tokenizer.simpo_mask_ids = [
+            self.llm_tokenizer.convert_tokens_to_ids(token)
+            for token in simpo_mask_tokens
+        ]# if llm model is mistral, add
+        if "mistral" in self.llm_tokenizer.name_or_path:
+            self.llm_tokenizer.simpo_mask_ids += [29473] # '_' token id
+            self.llm_tokenizer.simpo_mask_tokens += [self.llm_tokenizer.convert_ids_to_tokens(29473)]
+
         # self.llm_tokenizer.mol_token = added_tokens.MOL_EMBEDDING[0]
-        self.llm_tokenizer.add_special_tokens({"additional_special_tokens": [added_tokens.MOL_EMBEDDING[0]]})
-        self.llm_tokenizer.mol_token_id = self.llm_tokenizer.convert_tokens_to_ids(added_tokens.MOL_EMBEDDING[0])
+        self.llm_tokenizer.add_special_tokens(
+            {"additional_special_tokens": [added_tokens.MOL_EMBEDDING[0]]}
+        )
+        self.llm_tokenizer.mol_token_id = self.llm_tokenizer.convert_tokens_to_ids(
+            added_tokens.MOL_EMBEDDING[0]
+        )
 
     def merge_and_initialize_lora(self):
         self.model.blip2model.llm_model.merge_and_unload(progressbar=True)
@@ -275,51 +302,21 @@ class Blip2OPT(Blip2Base):
         else:
             raise NotImplementedError()
 
-    def random_replace_mol_string(self, input_tokens_input_ids):
-        ids = input_tokens_input_ids
-        tokenizer = self.llm_tokenizer
-        mol_string_randomization_ratio = tokenizer.mol_string_randomization_ratio
-        total_selfies_token_ids = tokenizer.selfies_token_ids
-
-        selfies_min_id = min(total_selfies_token_ids)
-        selfies_max_id = max(total_selfies_token_ids)
-        # if ids are correspond to total_selfies_token_ids, replace them with random token by mol_string_randomization_ratio
-        full_random_replaced = torch.where(
-            (ids >= selfies_min_id) & (ids <= selfies_max_id),
-            torch.randint(
-                selfies_min_id, selfies_max_id + 1, ids.shape, device=ids.device
-            ),
-            ids,
-        )
-        partial_random_replaced = torch.where(
-            torch.rand(ids.shape, device=ids.device) < mol_string_randomization_ratio,
-            full_random_replaced,
-            ids,
-        )
-        return partial_random_replaced
-
     def forward(self, batch):
-        
-        
         input_ids = batch.input_ids  # ['input_ids']
         attention_mask = batch.attention_mask  # ['attention_mask']
         target_ids = batch.labels  # ['labels']
-        
-        if "graph" in self.args.mol_representation:
-            graphs = batch['graphs']
-            additional_graphs = batch['additional_graphs']
-            is_mol_token = batch['is_mol_token']
-        
-        
-        del batch
-        
 
         # preprare targets to ignore pad tokens in the loss calculation
         targets = target_ids.masked_fill(
             target_ids == self.llm_tokenizer.pad_token_id, -100
         )
 
-        if "graph" in self.args.mol_representation:
+        if "graphs" in batch.keys():
+            graphs = batch["graphs"]
+            additional_graphs = batch["additional_graphs"]
+            is_mol_token = batch["is_mol_token"]
+
             input_embeds = self.llm_model.get_input_embeddings()(input_ids)
             input_embeds = self.inject_graph_embeds2input_embeds(
                 input_embeds=input_embeds,
@@ -344,11 +341,11 @@ class Blip2OPT(Blip2Base):
 
         results = {
             "loss": outputs.loss,
-            "instance_loss": outputs.instance_loss.cpu(),
+            "instance_loss": outputs.instance_loss,
             "logits": outputs.logits,
         }
         return results
-    
+
     def debug_pred(self, logits, targets):
         max_logits = logits.argmax(dim=-1)
         target_masks = targets != -100
@@ -359,8 +356,8 @@ class Blip2OPT(Blip2Base):
             target = targets[i]
             target_mask = target_masks[i]
 
-            #prediction = self.llm_tokenizer.decode(max_logit)
-            #label = self.llm_tokenizer.decode(target)
+            # prediction = self.llm_tokenizer.decode(max_logit)
+            # label = self.llm_tokenizer.decode(target)
 
             prediction = self.llm_tokenizer.decode(max_logit[target_mask])
             label = self.llm_tokenizer.decode(target[target_mask])
@@ -368,15 +365,13 @@ class Blip2OPT(Blip2Base):
             labels.append(label)
         return predictions, labels
 
-
     def inject_graph_embeds2input_embeds(self, input_embeds, is_mol_token, graphs):
         mol_graphs, mol2_graphs = graphs
-        
-        
+
         mol_token_sequence = []
-        
+
         for graphs in [mol_graphs, mol2_graphs]:
-            
+
             mol_x = graphs["x"]
             mol_edge_index = graphs["edge_index"]
             mol_edge_attr = graphs["edge_attr"]
@@ -388,30 +383,39 @@ class Blip2OPT(Blip2Base):
             if not self.tune_gnn:
                 mol_embeds = mol_embeds.detach()
             mol_embeds = self.ln_graph(mol_embeds, mol_masks)
-            query_tokens = self.query_tokens.expand(mol_embeds.shape[0], -1, -1)
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=mol_embeds,
-                encoder_attention_mask=mol_masks,
-                return_dict=True,
-            )
-            mol_tokens = self.opt_proj(query_output.last_hidden_state)
+            if self.args.projector_type == "qformer":
+                query_tokens = self.query_tokens.expand(mol_embeds.shape[0], -1, -1)
+                query_output = self.Qformer.bert(
+                    query_embeds=query_tokens,
+                    encoder_hidden_states=mol_embeds,
+                    encoder_attention_mask=mol_masks,
+                    return_dict=True,
+                )
+                mol_tokens = self.opt_proj(query_output.last_hidden_state)
+            else:
+                mol_tokens = self.opt_proj(mol_embeds)
             mol_token_sequence.append(mol_tokens)
-        
-    
+
         mol_tokens = torch.cat(mol_token_sequence, dim=1)
-        
+
         num_mol_tokens_per_sample = is_mol_token.sum(dim=1)  # Shape: (batch_size,)
         if (num_mol_tokens_per_sample > 0).any():
-            mol_token_indices_full = is_mol_token.cumsum(dim=1) - 1  # Shape: (batch_size, seq_length)
+            mol_token_indices_full = (
+                is_mol_token.cumsum(dim=1) - 1
+            )  # Shape: (batch_size, seq_length)
 
             # Get indices where is_mol_token is True
-            batch_indices, token_indices = is_mol_token.nonzero(as_tuple=True)  # Shape: (num_true_tokens,)
+            batch_indices, token_indices = is_mol_token.nonzero(
+                as_tuple=True
+            )  # Shape: (num_true_tokens,)
 
             # Get corresponding mol_token_indices
-            mol_token_indices = mol_token_indices_full[batch_indices, token_indices]  # Shape: (num_true_tokens,)
-            input_embeds[batch_indices, token_indices, :] = mol_tokens[batch_indices, mol_token_indices, :]
-
+            mol_token_indices = mol_token_indices_full[
+                batch_indices, token_indices
+            ]  # Shape: (num_true_tokens,)
+            input_embeds[batch_indices, token_indices, :] = mol_tokens[
+                batch_indices, mol_token_indices, :
+            ]
 
         return input_embeds
 
@@ -423,7 +427,6 @@ class Blip2OPT(Blip2Base):
         input_ids,
         attention_mask,
         is_mol_token=None,
-        
         do_sample=False,
         num_beams=5,
         max_length=128,
@@ -433,6 +436,7 @@ class Blip2OPT(Blip2Base):
         length_penalty=1.0,
         num_captions=1,
         temperature=1,
+        output_attentions=False,
     ):
         """
         Args:
@@ -450,7 +454,9 @@ class Blip2OPT(Blip2Base):
 
         input_embeds = self.llm_model.get_input_embeddings()(input_ids)
         if "graph" in self.args.mol_representation:
-            assert is_mol_token is not None, 'is_mol_token should be provided for graph representation'
+            assert (
+                is_mol_token is not None
+            ), "is_mol_token should be provided for graph representation"
             input_embeds = self.inject_graph_embeds2input_embeds(
                 input_embeds=input_embeds,
                 is_mol_token=is_mol_token,
@@ -475,6 +481,7 @@ class Blip2OPT(Blip2Base):
             output_scores=True,
             output_logits=True,
             return_dict_in_generate=True,
+            output_attentions=output_attentions,
         )
 
         batch_size, sequence_length = outputs.sequences.shape
@@ -656,7 +663,7 @@ class OPTForCausalLM_Custom(OPTForCausalLM):
             instance_loss = (loss_not_reduced * instance_non_pad_tokens).sum(
                 dim=-1
             ) / instance_non_pad_tokens.sum(dim=-1)
-            instance_loss = instance_loss.detach()
+
             # cross entropy aggregate not row-wise, but sum of all instances
             loss = (
                 loss_not_reduced * instance_non_pad_tokens

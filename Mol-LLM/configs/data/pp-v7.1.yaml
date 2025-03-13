@@ -1,0 +1,13 @@
+raw_data_root: 'your data path'
+data_tag: "property_prediction_small_offline"
+
+tasks:
+  - bace
+  - smol-property_prediction-bbbp
+  - smol-property_prediction-clintox
+  - smol-property_prediction-hiv
+  - smol-property_prediction-esol
+  - smol-property_prediction-lipo
+  - qm9_homo
+  - qm9_lumo
+  - qm9_homo_lumo_gap
