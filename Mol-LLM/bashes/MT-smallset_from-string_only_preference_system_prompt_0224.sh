@@ -6,7 +6,7 @@ gpus="'0,1,2,3,4,5,6,7'"
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
-mode=post-ft \
+mode=ft \
 data=multi_task \
 data.data_tag=ablation_0224_augmented \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \

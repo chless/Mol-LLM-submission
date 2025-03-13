@@ -6,7 +6,7 @@ gpus="'0,1,2,3'"
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
-mode=post-ft \
+mode=ft \
 data=multi_task \
 data.data_tag=qm9_0211_augmented \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
