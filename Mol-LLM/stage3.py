@@ -13,9 +13,9 @@ import hydra
 from omegaconf import OmegaConf, DictConfig
 from datetime import timedelta
 import wandb
+import nltk
 
-# from pytorch_lightning.profilers import AdvancedProfiler
-
+nltk.download("wordnet")
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -52,17 +52,13 @@ class MyDDPStrategy(strategies.DDPStrategy):
 
 @hydra.main(config_path="configs", config_name="default.yaml", version_base=None)
 def main(cfg):
-    import nltk
-
-    nltk.download("wordnet")
-
     cfg = flatten_dictconfig(cfg)
     pl.seed_everything(cfg.seed)
 
     model = Blip2Stage3(cfg)
-
     print("total params:", sum(p.numel() for p in model.parameters()))
 
+    # datamodule
     dm = Stage3DM(
         mode=cfg.mode,
         num_workers=cfg.num_workers,
@@ -71,8 +67,6 @@ def main(cfg):
     )
 
     callbacks = []
-
-    # TODO: save avg chosen rewards for resuming training
     callbacks.append(
         ModelCheckpoint(
             dirpath=os.path.join(cfg.logging_dir, cfg.filename),
@@ -136,27 +130,17 @@ def main(cfg):
         trainer_args["profiler"] = cfg.profiler
 
     trainer = Trainer(**trainer_args)
+
+    # load pretrained model for model parameter initialization
+    if cfg.pretrained_ckpt_path is not None:
+        assert cfg.ckpt_path is None, "only one ckpt path should be provided"
+        ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
+        model.load_state_dict(ckpt["state_dict"], strict=False)
+        print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
+
     if cfg.mode in {"ft"}:
-        if cfg.pretrained_ckpt_path is not None:
-            ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
-            model.load_state_dict(ckpt["state_dict"], strict=False)
-            print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
-
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         outputs = trainer.test(model, datamodule=dm)
-    elif cfg.mode in {"post-ft"}:
-        if cfg.pretrained_ckpt_path is not None:
-            ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
-            model.load_state_dict(ckpt["state_dict"], strict=False)
-            print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
-            cfg.ckpt_path = None
-
-        # if cfg.mode == "post-ft":
-        #    outputs = trainer.test(model, datamodule=dm)
-
-        trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
-        outputs = trainer.test(model, datamodule=dm)
-
     elif cfg.mode == "test":
         ckpt = torch.load(cfg.ckpt_path, map_location="cpu")
         model.load_state_dict(ckpt["state_dict"], strict=False)
