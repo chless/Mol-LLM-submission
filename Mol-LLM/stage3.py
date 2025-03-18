@@ -140,7 +140,7 @@ def main(cfg):
 
     if cfg.mode in {"ft"}:
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
-        outputs = trainer.test(model, datamodule=dm)
+        # outputs = trainer.test(model, datamodule=dm)
     elif cfg.mode == "test":
         ckpt = torch.load(cfg.ckpt_path, map_location="cpu")
         model.load_state_dict(ckpt["state_dict"], strict=False)
