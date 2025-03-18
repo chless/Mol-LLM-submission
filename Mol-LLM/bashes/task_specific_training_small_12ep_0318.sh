@@ -1,8 +1,9 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 projector_type=$2
-max_epochs=12
 modality=$3
+max_epochs=50
+total_batch_size=32
 
 tasks=(
     "smol-property_prediction-bbbp"
@@ -28,6 +29,7 @@ for task in "${tasks[@]}"; do
     trainer.mol_representation=${modality} \
     trainer.projector_type=${projector_type} \
     trainer.skip_sanity_check=false \
+    trainer.total_batch_size=${total_batch_size} \
     trainer.every_n_epochs=0
 done
 
