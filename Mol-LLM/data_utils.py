@@ -273,24 +273,38 @@ class DataCollator(DataCollatorForSeq2Seq):
 
         if self.projector_type == "mlp" and "graph" in self.mol_representation:
             for i in range(len(prompt_text)):
-                if '|>>|' in prompt_text[i]:
+                if "|>>|" in prompt_text[i]:
                     num_nodes_in_graph = list_graphs[i].x.size(0)
                     num_nodes_mol = "<mol>" * num_nodes_in_graph
                     mol_tokens_pattern = re.compile(r"(<mol>)+(?=</GRAPH>\|>>\|)")
-                    assert mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
-                    prompt_text[i] = mol_tokens_pattern.sub(num_nodes_mol, prompt_text[i])
+                    assert mol_tokens_pattern.search(
+                        prompt_text[i]
+                    ), f"{prompt_text[i]}"
+                    prompt_text[i] = mol_tokens_pattern.sub(
+                        num_nodes_mol, prompt_text[i]
+                    )
 
                     num_additional_nodes_in_graph = list_additional_graphs[i].x.size(0)
                     num_additional_nodes_mol = "<mol>" * num_additional_nodes_in_graph
-                    additional_mol_tokens_pattern = re.compile(r"(?<=\|>>\|<GRAPH>)(<mol>)+")
-                    assert additional_mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
-                    prompt_text[i] = additional_mol_tokens_pattern.sub(num_additional_nodes_mol, prompt_text[i])
+                    additional_mol_tokens_pattern = re.compile(
+                        r"(?<=\|>>\|<GRAPH>)(<mol>)+"
+                    )
+                    assert additional_mol_tokens_pattern.search(
+                        prompt_text[i]
+                    ), f"{prompt_text[i]}"
+                    prompt_text[i] = additional_mol_tokens_pattern.sub(
+                        num_additional_nodes_mol, prompt_text[i]
+                    )
                 else:
                     num_nodes_in_graph = list_graphs[i].x.size(0)
                     num_nodes_mol = "<mol>" * num_nodes_in_graph
                     mol_tokens_pattern = re.compile("(<mol>)+")
-                    assert mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
-                    prompt_text[i] = mol_tokens_pattern.sub(num_nodes_mol, prompt_text[i])
+                    assert mol_tokens_pattern.search(
+                        prompt_text[i]
+                    ), f"{prompt_text[i]}"
+                    prompt_text[i] = mol_tokens_pattern.sub(
+                        num_nodes_mol, prompt_text[i]
+                    )
 
         self.tokenizer.padding_side = "left"
         prompt_tokenized = self.tokenizer(
@@ -354,7 +368,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             )  # ['attention_mask']
 
             self.tokenizer.padding_side = "right"
-            eval_features = self.tokenizer.pad(
+            gen_features = self.tokenizer.pad(
                 {
                     "input_ids": [t for t in target_tokenized["input_ids"]],
                 },
@@ -362,16 +376,10 @@ class DataCollator(DataCollatorForSeq2Seq):
                 pad_to_multiple_of=self.pad_to_multiple_of,
                 return_tensors=return_tensors,
             )
-            eval_features.input_ids = eval_features.input_ids.masked_fill(
-                eval_features.input_ids == self.tokenizer.pad_token_id, -100
+            gen_features.input_ids = gen_features.input_ids.masked_fill(
+                gen_features.input_ids == self.tokenizer.pad_token_id, -100
             )
-            features["eval_labels"] = eval_features.input_ids
-            eval_simpo_labels = eval_features.input_ids.clone()
-            for simpo_mask_id in self.tokenizer.simpo_mask_ids:
-                eval_simpo_labels = eval_simpo_labels.masked_fill(
-                    eval_simpo_labels == simpo_mask_id, -100
-                )
-            features["eval_simpo_labels"] = eval_simpo_labels
+            features["gen_labels"] = gen_features.input_ids
 
         labels_ids = torch.full_like(features["input_ids"], self.tokenizer.pad_token_id)
         for i, target in enumerate(target_tokenized["input_ids"]):

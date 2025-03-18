@@ -538,52 +538,45 @@ class Blip2Stage3(pl.LightningModule):
             additional_graphs = None
             is_mol_token = None
 
-        labels = batch.eval_labels
-        simpo_labels = batch.eval_simpo_labels
-        gen_max_length = self.gen_max_len
-
-        log_attn_score = self.args.log_attn_score
         gen_outputs = self.blip2model.generate(
             graphs=(graphs, additional_graphs),
-            # input_tokens=prompt_tokens,
             input_ids=batch.prompt_input_ids,
             attention_mask=batch.prompt_attention_mask,
             is_mol_token=is_mol_token,
             num_beams=self.num_beams,
-            max_length=gen_max_length,
+            max_length=self.gen_max_len,
             min_length=self.min_len,
-            output_attentions=log_attn_score,
+            output_attentions=self.args.log_attn_score,
         )
-        logits = gen_outputs.logits
-        comparable_len = min(logits.shape[1], labels.shape[1])
+        gen_logits = gen_outputs.logits
+        gen_labels = batch.gen_labels
 
-        comparable_labels = labels[:, :comparable_len]
-        comparable_simpo_labels = simpo_labels[:, :comparable_len]
-        comparable_logits = logits[:, :comparable_len]
-
-        loss_dict = get_instance_loss(
-            logits=comparable_logits, labels=comparable_labels
+        forward_outputs = self.blip2model(batch)
+        forward_logits = forward_outputs.pop("logits")
+        forward_labels = batch.labels
+        forward_loss_dict = get_instance_loss(
+            logits=forward_logits, labels=forward_labels
         )
-        instance_loss = loss_dict["instance_loss"]
-        loss = loss_dict["loss"]
+        forward_instance_loss = forward_loss_dict["instance_loss"]
+        forward_loss = forward_loss_dict["loss"]
 
         if self.args.eval_simpo:
-            len_tuple = labels.shape[0] // 3
+            len_tuple = gen_labels.shape[0] // 3
             tasks = [id2task(task_id.item()) for task_id in batch.tasks][:len_tuple]
 
             compute_loss_context_manager = torch.amp.autocast
             with compute_loss_context_manager(device_type="cuda"):
-                loss, metrics = self.get_total_molpo_loss(
-                    logits=comparable_logits,
-                    labels=comparable_simpo_labels,
+                forward_loss, metrics = self.get_total_molpo_loss(
+                    logits=forward_logits,
+                    labels=batch.simpo_labels,
                     tasks=tasks,
-                    instance_loss=instance_loss,
+                    instance_loss=forward_instance_loss,
                     is_train=False,
                 )
 
-            logits = logits[:len_tuple]
-            labels = labels[:len_tuple]
-            instance_loss = instance_loss[:len_tuple]
+            gen_logits = gen_logits[:len_tuple]
+            gen_labels = gen_labels[:len_tuple]
+            forward_instance_loss = forward_instance_loss[:len_tuple]
 
             attentions = gen_outputs.attentions
             predictions = gen_outputs.predictions[:len_tuple]
@@ -596,7 +589,7 @@ class Blip2Stage3(pl.LightningModule):
             prompt_input_ids = batch.prompt_input_ids
             input_ids = batch.input_ids
 
-        if log_attn_score:
+        if self.args.log_attn_score:
             self.log_attn_score(
                 prompt_input_ids=prompt_input_ids,
                 mode=mode,
@@ -604,6 +597,7 @@ class Blip2Stage3(pl.LightningModule):
                 attentions=attentions,
             )
 
+        # address generation input and output for evaluation metric calculation
         prompts = self.blip2model.llm_tokenizer.batch_decode(
             input_ids, skip_special_tokens=False
         )
@@ -611,9 +605,9 @@ class Blip2Stage3(pl.LightningModule):
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in predictions
         ]
         target_ids = torch.where(
-            labels == -100,
+            gen_labels == -100,
             self.blip2model.llm_tokenizer.pad_token_id,
-            labels,
+            gen_labels,
         )
         targets = self.blip2model.llm_tokenizer.batch_decode(target_ids)
         targets = [
@@ -621,7 +615,7 @@ class Blip2Stage3(pl.LightningModule):
         ]
 
         probs = convert_logit2binary_prob(
-            logits=logits,
+            logits=gen_logits,
             predictions=predictions,
             tokenizer=self.blip2model.llm_tokenizer,
         )
@@ -635,15 +629,18 @@ class Blip2Stage3(pl.LightningModule):
         self.list_logs["probs"].extend(probs)
         self.list_logs["prompts"].extend(prompts)
 
+        # address forward loss
         batch_size = input_ids.shape[0]
 
         new_data_weight = batch_size / (self.total_seen_data_size + batch_size)
-        self.total_avg_loss += (loss.item() - self.total_avg_loss) * new_data_weight
+        self.total_avg_loss += (
+            forward_loss.item() - self.total_avg_loss
+        ) * new_data_weight
         self.total_seen_data_size += batch_size
 
-        for i in range(instance_loss.shape[0]):
+        for i in range(forward_instance_loss.shape[0]):
             # if i th item is nan, skip
-            if instance_loss[i] != instance_loss[i]:
+            if forward_instance_loss[i] != forward_instance_loss[i]:
                 continue
             task_subtask_pair = tasks[i]
             if task_subtask_pair not in self.eval_dataset_losses:
@@ -657,9 +654,11 @@ class Blip2Stage3(pl.LightningModule):
             ] *= self.eval_dataset_losses[task_subtask_pair]["num_instances"] / (
                 self.eval_dataset_losses[task_subtask_pair]["num_instances"] + 1
             )
-            self.eval_dataset_losses[task_subtask_pair]["avg_loss"] += instance_loss[
-                i
-            ] / (self.eval_dataset_losses[task_subtask_pair]["num_instances"] + 1)
+            self.eval_dataset_losses[task_subtask_pair][
+                "avg_loss"
+            ] += forward_instance_loss[i] / (
+                self.eval_dataset_losses[task_subtask_pair]["num_instances"] + 1
+            )
 
             self.eval_dataset_losses[task_subtask_pair]["num_instances"] += 1
 
@@ -681,7 +680,7 @@ class Blip2Stage3(pl.LightningModule):
                     sync_dist=False,
                 )
 
-        return loss
+        return forward_loss
 
     def log_attn_score(self, prompt_input_ids, mode, is_mol_token, attentions):
         num_steps = len(attentions)
