@@ -3,7 +3,7 @@ gpus=$1
 projector_type=$2
 modality=$3
 max_epochs=12
-total_batch_size=64
+total_batch_size=128
 
 tasks=(
     "reagent_prediction"
