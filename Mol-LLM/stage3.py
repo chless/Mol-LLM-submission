@@ -146,14 +146,13 @@ def main(cfg):
         model.load_state_dict(ckpt["state_dict"], strict=False)
         print(f"loaded trained model from {cfg.ckpt_path}")
         outputs = trainer.test(model, datamodule=dm)
+        if cfg.filename is not None:
+            update_result_csv(
+                logger_dir=trainer.logger.log_dir,
+                outputs=outputs,
+            )
     else:
         raise NotImplementedError()
-
-    if cfg.filename is not None:
-        update_result_csv(
-            logger_dir=trainer.logger.log_dir,
-            outputs=outputs,
-        )
 
 
 def update_result_csv(outputs, logger_dir, task_names=None):
