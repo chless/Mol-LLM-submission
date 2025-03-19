@@ -6,6 +6,10 @@ max_epochs=12
 total_batch_size=128
 
 tasks=(
+    "smol-property_prediction-hiv"
+    "smol-property_prediction-sider"
+    "chebi-20-mol2text"
+    "smol-molecule_captioning"
     "reagent_prediction"
     "qm9_homo"
     "forward_reaction_prediction"
