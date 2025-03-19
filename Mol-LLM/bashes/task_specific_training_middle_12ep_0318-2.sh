@@ -6,9 +6,6 @@ max_epochs=25
 total_batch_size=64
 
 tasks=(
-    "smol-property_prediction-hiv"
-    "smol-property_prediction-sider"
-    "chebi-20-mol2text"
     "smol-molecule_captioning"
 )
 
