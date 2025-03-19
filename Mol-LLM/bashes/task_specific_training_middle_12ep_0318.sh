@@ -2,18 +2,16 @@ export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 projector_type=$2
 modality=$3
-max_epochs=12
+max_epochs=25
 total_batch_size=64
 
 tasks=(
-    "reagent_prediction"
-    "qm9_homo"
-    "qm9_lumo"
-    "qm9_homo_lumo_gap"
-    "forward_reaction_prediction"
-    "retrosynthesis"
-    "smol-forward_synthesis"
-    "smol-retrosynthesis"
+    "smol-property_prediction-hiv"
+    "smol-property_prediction-sider"
+    "chebi-20-text2mol"
+    "chebi-20-mol2text"
+    "smol-molecule_generation"
+    "smol-molecule_captioning"
 )
 
 for task in "${tasks[@]}"; do
