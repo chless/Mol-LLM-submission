@@ -12,6 +12,14 @@ tasks=(
     "chebi-20-mol2text"
     "smol-molecule_generation"
     "smol-molecule_captioning"
+    "reagent_prediction"
+    "qm9_homo"
+    "qm9_lumo"
+    "qm9_homo_lumo_gap"
+    "forward_reaction_prediction"
+    "retrosynthesis"
+    "smol-forward_synthesis"
+    "smol-retrosynthesis"
 )
 
 for task in "${tasks[@]}"; do

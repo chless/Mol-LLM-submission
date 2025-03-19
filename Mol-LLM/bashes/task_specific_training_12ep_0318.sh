@@ -17,11 +17,11 @@ tasks=(
     "smol-molecule_generation"
     "smol-molecule_captioning"
     "reagent_prediction"
-    "forward_reaction_prediction"
-    "retrosynthesis"
     "qm9_homo"
     "qm9_lumo"
     "qm9_homo_lumo_gap"
+    "forward_reaction_prediction"
+    "retrosynthesis"
     "smol-forward_synthesis"
     "smol-retrosynthesis"
 )
