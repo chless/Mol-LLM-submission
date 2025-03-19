@@ -147,6 +147,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             return_tensors = self.return_tensors
 
         tasks = [task2id(sample.pop("task")) for sample in batch]  # task id
+        task_names = [id2task(task) for task in tasks]
         prompt_text = [sample["prompt_text"] for sample in batch]
         target_text = [sample["target_text"] for sample in batch]
 
@@ -200,6 +201,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             )  # ((q, sw), (q, sl), (q, sl))
             target_text = target_text * 3  # (y, y, y)
             tasks = tasks * 3
+            task_names = task_names * 3
 
         if "graph" in self.mol_representation:
             list_graphs = [
@@ -271,9 +273,10 @@ class DataCollator(DataCollatorForSeq2Seq):
                     list_additional_graphs * 2 + list_rejected_additional_graphs
                 )
 
+        # address <mol> token in prompt_text, for the case of using graph modality
         if self.projector_type == "mlp" and "graph" in self.mol_representation:
             for i in range(len(prompt_text)):
-                if "|>>|" in prompt_text[i]:
+                if task_names[i] in ["reagent_prediction"]:
                     num_nodes_in_graph = list_graphs[i].x.size(0)
                     num_nodes_mol = "<mol>" * num_nodes_in_graph
                     mol_tokens_pattern = re.compile(r"(<mol>)+(?=</GRAPH>\|>>\|)")
@@ -295,6 +298,9 @@ class DataCollator(DataCollatorForSeq2Seq):
                     prompt_text[i] = additional_mol_tokens_pattern.sub(
                         num_additional_nodes_mol, prompt_text[i]
                     )
+                elif task_names[i] in TEXT2MOL_BENCHMARKS:
+                    # there is no input <mol> token
+                    pass
                 else:
                     num_nodes_in_graph = list_graphs[i].x.size(0)
                     num_nodes_mol = "<mol>" * num_nodes_in_graph
