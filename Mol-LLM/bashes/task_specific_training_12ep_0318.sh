@@ -21,8 +21,8 @@ tasks=(
     "qm9_lumo"
     "qm9_homo_lumo_gap"
     "forward_reaction_prediction"
-    "retrosynthesis"
     "smol-forward_synthesis"
+    "retrosynthesis"
     "smol-retrosynthesis"
 )
 

@@ -8,12 +8,8 @@ total_batch_size=64
 tasks=(
     "reagent_prediction"
     "qm9_homo"
-    "qm9_lumo"
-    "qm9_homo_lumo_gap"
     "forward_reaction_prediction"
-    "retrosynthesis"
     "smol-forward_synthesis"
-    "smol-retrosynthesis"
 )
 
 for task in "${tasks[@]}"; do
