@@ -142,6 +142,23 @@ class DataCollator(DataCollatorForSeq2Seq):
                 "mol_representation should be one of ['string+graph', 'string_only', 'graph_only']"
             )
 
+    def enumerate_selfies(self, 
+                          origin_selfies, 
+                          ):
+        origin_smiles = sf.decoder(origin_selfies)
+
+        processed_smiles = Chem.MolToSmiles(
+            Chem.MolFromSmiles(origin_smiles),
+            isomericSmiles=self.args.isomericSmiles,
+            kekuleSmiles=self.args.kekuleSmiles,
+            canonical=self.args.canonical,
+            doRandom=not self.args.canonical,
+            allBondsExplicit=self.args.allBondsExplicit,
+            allHsExplicit=self.args.allHsExplicit
+        )
+        processed_selfies = sf.encoder(processed_smiles)
+        return processed_selfies
+
     def __call__(self, batch, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
@@ -150,10 +167,28 @@ class DataCollator(DataCollatorForSeq2Seq):
         task_names = [id2task(task) for task in tasks]
         prompt_text = [sample["prompt_text"] for sample in batch]
         target_text = [sample["target_text"] for sample in batch]
+        input_mol_strings = [sample["input_mol_string"] for sample in batch]
 
         prompt_text = self.select_mol_representation(
             prompt_text, mol_representation=self.mol_representation
         )
+
+        if self.args.selfies_enumeration:
+            list_selfies = [
+                i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
+                for i in input_mol_strings
+            ]
+            processed_selfies = [
+                self.enumerate_selfies(list_selfies[i])
+                for i in range(len(list_selfies))
+            ]
+            for i in range(len(prompt_text)):
+                assert list_selfies[i] in prompt_text[i], f"{list_selfies[i]} not in {prompt_text[i]}"
+                prompt_text[i] = prompt_text[i].replace(
+                    list_selfies[i], processed_selfies[i]
+                )
+            
+
 
         if self.apply_molpo:
             if self.train:
@@ -165,7 +200,6 @@ class DataCollator(DataCollatorForSeq2Seq):
             # sft tuple (gw, sw, q, y)
             # molpo chosen tuple (gw, sl, q, y)
             # molpo rejected tuple (gl, sl, q, y)
-            input_mol_strings = [sample["input_mol_string"] for sample in batch]
             list_selfies = [
                 i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
                 for i in input_mol_strings

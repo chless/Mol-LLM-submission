@@ -75,3 +75,10 @@ train_simpo: false
 eval_simpo: false
 
 find_unused_parameters: false
+
+selfies_enumeration: false
+isomericSmiles: false
+kekuleSmiles: false
+canonical: false
+allBondsExplicit: false
+allHsExplicit: false
