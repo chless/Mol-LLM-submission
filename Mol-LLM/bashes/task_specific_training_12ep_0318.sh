@@ -1,8 +1,8 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 projector_type=$2
+modality=$3
 max_epochs=12
-modality=graph_only
 
 tasks=(
     "smol-property_prediction-bbbp"
