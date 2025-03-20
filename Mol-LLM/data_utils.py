@@ -147,12 +147,16 @@ class DataCollator(DataCollatorForSeq2Seq):
                           ):
         origin_smiles = sf.decoder(origin_selfies)
 
+        isomericSmiles = bool(self.args.isomericSmiles)
+        canonical = bool(self.args.canonical)
+        allHsExplicit = bool(self.args.allHsExplicit)
+
         processed_smiles = Chem.MolToSmiles(
             Chem.MolFromSmiles(origin_smiles),
-            isomericSmiles=self.args.isomericSmiles,
-            canonical=self.args.canonical,
-            doRandom=not self.args.canonical,
-            allHsExplicit=self.args.allHsExplicit,
+            isomericSmiles=isomericSmiles,
+            canonical=canonical,
+            doRandom=not canonical,
+            allHsExplicit=allHsExplicit,
             allBondsExplicit=False,
             kekuleSmiles=False,
         )
