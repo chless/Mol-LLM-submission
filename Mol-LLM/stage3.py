@@ -72,7 +72,6 @@ def main(cfg):
             dirpath=os.path.join(cfg.logging_dir, cfg.filename),
             filename="{epoch:02d}-{step}",
             every_n_epochs=cfg.every_n_epochs,
-            every_n_train_steps=cfg.every_n_train_steps,
             save_last=True,
             save_top_k=-1,
         )
