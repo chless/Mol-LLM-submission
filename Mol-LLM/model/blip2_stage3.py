@@ -181,11 +181,18 @@ class Blip2Stage3(pl.LightningModule):
         return optimizer
 
     def save_predictions(
-        self, predictions, targets, tasks, prompts, filename="predictions.json"
+        self,
+        predictions,
+        targets,
+        tasks,
+        prompts,
+        input_mol_strings,
+        filename="predictions.json",
     ):
         assert len(predictions) == len(targets)
         assert len(predictions) == len(tasks)
         assert len(predictions) == len(prompts)
+        assert len(predictions) == len(input_mol_strings)
         instances = []
         for i in range(len(predictions)):
             instances.append(
@@ -194,6 +201,7 @@ class Blip2Stage3(pl.LightningModule):
                     "prediction": predictions[i],
                     "target": targets[i],
                     "prompt": prompts[i],
+                    "input_mol_strings": input_mol_strings[i],
                 }
             )
         os.makedirs(self.logger.log_dir, exist_ok=True)
@@ -509,6 +517,7 @@ class Blip2Stage3(pl.LightningModule):
             "tasks": [],
             "probs": [],
             "prompts": [],
+            "input_mol_strings": [],
         }
 
         self.total_avg_loss = 0.0
@@ -622,12 +631,20 @@ class Blip2Stage3(pl.LightningModule):
         prompts = [
             p.replace(self.blip2model.llm_tokenizer.pad_token, "") for p in prompts
         ]
+        input_mol_strings = self.blip2model.llm_tokenizer.batch_decode(
+            batch.input_mol_strings
+        )
+        input_mol_strings = [
+            p.replace(self.blip2model.llm_tokenizer.pad_token, "")
+            for p in input_mol_strings
+        ]
 
         self.list_logs["predictions"].extend(predictions)
         self.list_logs["targets"].extend(targets)
         self.list_logs["tasks"].extend(tasks)
         self.list_logs["probs"].extend(probs)
         self.list_logs["prompts"].extend(prompts)
+        self.list_logs["input_mol_strings"].extend(input_mol_strings)
 
         # address forward loss
         batch_size = input_ids.shape[0]
@@ -827,6 +844,7 @@ class Blip2Stage3(pl.LightningModule):
             targets=self.list_logs["targets"],
             tasks=self.list_logs["tasks"],
             prompts=self.list_logs["prompts"],
+            input_mol_strings=self.list_logs["input_mol_strings"],
             tokenizer=self.blip2model.llm_tokenizer,
             total_task_subtask_pairs=self.task_subtask_name_pairs,
         )
@@ -836,6 +854,7 @@ class Blip2Stage3(pl.LightningModule):
             targets=self.list_logs["targets"],
             tasks=self.list_logs["tasks"],
             prompts=self.list_logs["prompts"],
+            input_mol_strings=self.list_logs["input_mol_strings"],
             filename=(
                 f"{self.args.mode}-step{self.global_step}-{self.global_rank}-outputs.json"
                 if self.args.mode == "val"
@@ -848,6 +867,7 @@ class Blip2Stage3(pl.LightningModule):
             targets=failed_cases["targets"],
             tasks=failed_cases["tasks"],
             prompts=failed_cases["prompts"],
+            input_mol_strings=failed_cases["input_mol_strings"],
             filename=(
                 f"{self.args.mode}-step{self.global_step}-{self.global_rank}-failed_cases.json"
                 if self.args.mode == "val"
