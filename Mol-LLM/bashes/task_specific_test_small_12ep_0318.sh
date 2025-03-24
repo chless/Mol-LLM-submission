@@ -5,10 +5,12 @@ modality=$3
 max_epochs=12
 
 tasks=(
-    "chebi-20-mol2text"
-    "reagent_prediction"
-    "qm9_homo"
-    "forward_reaction_prediction"
+    "smol-property_prediction-bbbp"
+    "smol-property_prediction-clintox"
+    "smol-property_prediction-esol"
+    "smol-property_prediction-lipo"
+    "smol-property_prediction-hiv"
+    "smol-property_prediction-sider"
 )
 
 for task in "${tasks[@]}"; do
