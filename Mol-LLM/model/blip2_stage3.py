@@ -57,19 +57,12 @@ class Blip2Stage3(pl.LightningModule):
         for key in to_be_removed:
             checkpoint["state_dict"].pop(key)
 
-        if 'graph' in self.args.mol_representation:
-            checkpoint["gnn_state_dict"] = self.blip2model.graph_encoder.state_dict()
-
         if hasattr(self, "task_specific_sft_reward"):
             checkpoint[f"task_specific_sft_reward"] = self.task_specific_sft_reward
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         if hasattr(self, "task_specific_sft_reward"):
             self.task_specific_sft_reward = checkpoint["task_specific_sft_reward"]
-
-        if hasattr(checkpoint, "gnn_state_dict") and 'graph' in self.args.mol_representation:
-            self.blip2model.graph_encoder.load_state_dict(checkpoint["gnn_state_dict"])
-            print("=========loaded gnn state dict from checkpoint=========")
 
     def __init__(self, args):
         super().__init__()

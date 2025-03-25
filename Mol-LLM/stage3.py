@@ -137,9 +137,6 @@ def main(cfg):
         ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
         model.load_state_dict(ckpt["state_dict"], strict=False)
         print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
-        if "gnn_state_dict" in ckpt.keys() and 'graph' in cfg.mol_representation:
-            model.blip2model.graph_encoder.load_state_dict(ckpt["gnn_state_dict"])
-            print("=========loaded gnn state dict from checkpoint=========")
 
     if cfg.mode in {"ft"}:
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
