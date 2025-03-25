@@ -187,15 +187,15 @@ class Blip2Stage3(pl.LightningModule):
         tasks,
         prompts,
         input_mol_strings,
-        prob=None,
+        probs=None,
         filename="predictions.json",
     ):
         assert len(predictions) == len(targets)
         assert len(predictions) == len(tasks)
         assert len(predictions) == len(prompts)
         assert len(predictions) == len(input_mol_strings)
-        if prob is not None:
-            assert len(predictions) == len(prob)
+        if probs is not None:
+            assert len(predictions) == len(probs)
         instances = []
         for i in range(len(predictions)):
             instance = {
@@ -205,8 +205,8 @@ class Blip2Stage3(pl.LightningModule):
                 "prompt": prompts[i],
                 "input_mol_strings": input_mol_strings[i],
             }
-            if tasks[i] in CLASSIFICATION_BENCHMARKS and prob is not None:
-                instance["prob"] = prob[i]
+            if tasks[i] in CLASSIFICATION_BENCHMARKS and probs is not None:
+                instance["prob"] = probs[i]
             instances.append(instance)
         os.makedirs(self.logger.log_dir, exist_ok=True)
 
