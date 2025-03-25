@@ -187,23 +187,27 @@ class Blip2Stage3(pl.LightningModule):
         tasks,
         prompts,
         input_mol_strings,
+        prob=None,
         filename="predictions.json",
     ):
         assert len(predictions) == len(targets)
         assert len(predictions) == len(tasks)
         assert len(predictions) == len(prompts)
         assert len(predictions) == len(input_mol_strings)
+        if prob is not None:
+            assert len(predictions) == len(prob)
         instances = []
         for i in range(len(predictions)):
-            instances.append(
-                {
-                    "task": tasks[i],
-                    "prediction": predictions[i],
-                    "target": targets[i],
-                    "prompt": prompts[i],
-                    "input_mol_strings": input_mol_strings[i],
-                }
-            )
+            instance = {
+                "task": tasks[i],
+                "prediction": predictions[i],
+                "target": targets[i],
+                "prompt": prompts[i],
+                "input_mol_strings": input_mol_strings[i],
+            }
+            if tasks[i] in CLASSIFICATION_BENCHMARKS and prob is not None:
+                instance["prob"] = prob[i]
+            instances.append(instance)
         os.makedirs(self.logger.log_dir, exist_ok=True)
 
         with open(os.path.join(self.logger.log_dir, filename), "w") as f:
@@ -854,6 +858,7 @@ class Blip2Stage3(pl.LightningModule):
             targets=self.list_logs["targets"],
             tasks=self.list_logs["tasks"],
             prompts=self.list_logs["prompts"],
+            probs=self.list_logs["probs"],
             input_mol_strings=self.list_logs["input_mol_strings"],
             filename=(
                 f"{self.args.mode}-step{self.global_step}-{self.global_rank}-outputs.json"
