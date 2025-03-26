@@ -170,3 +170,4 @@ outputs
 *.pth
 *.csv
 *.code-workspace
+*.json
