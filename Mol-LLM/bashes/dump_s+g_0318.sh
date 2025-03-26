@@ -8,7 +8,7 @@ echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 mode=test \
 trainer.devices=$gpus \
-filename=MT_${projector_type}_${modality}_dump_0318 \
+filename=MT_${task}_${modality}_dump_0318 \
 data.data_tag=${task}_0219 \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=moleculeSTM \
