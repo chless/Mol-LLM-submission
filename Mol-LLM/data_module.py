@@ -126,6 +126,9 @@ def get_dataset(split, tokenizer, args):
             dataset = load_from_disk(taged_preprocessed_data_path)
         elif os.path.exists(preprocessed_data_path):
             assert args.tasks is not None
+            print(
+                f"preprocessed data not found: {taged_preprocessed_data_path}, filtering from {preprocessed_data_path}"
+            )
             dataset = load_from_disk(preprocessed_data_path)
             dataset = dataset.filter(lambda x: x["task"] in args.tasks)
             dataset.save_to_disk(taged_preprocessed_data_path)
