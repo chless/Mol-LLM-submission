@@ -848,9 +848,9 @@ def add_atoms_based_on_mol(mol, num_atoms_to_add):
     return out
 
 
-def map_by_substructure_replacement(data_point, 
-                                    replace_ratio=0.1,
-                                    num_rejected_graphs=5):
+def map_by_substructure_replacement(
+    data_point, replace_ratio=0.1, num_rejected_graphs=5
+):
 
     task = data_point["task"]
     input_mol_string = data_point["input_mol_string"]
@@ -902,9 +902,9 @@ def map_by_substructure_replacement(data_point,
                 dummy_selfies, replace_ratio=replace_ratio
             )["modified_graph"]
         else:
-            rejected_graph = extract_and_modify(
-                selfies, replace_ratio=replace_ratio
-            )["modified_graph"]
+            rejected_graph = extract_and_modify(selfies, replace_ratio=replace_ratio)[
+                "modified_graph"
+            ]
             additional_rejected_graph = extract_and_modify(
                 selfies, replace_ratio=replace_ratio
             )["modified_graph"]
@@ -912,11 +912,15 @@ def map_by_substructure_replacement(data_point,
         data_point[f"{i}-th_rejected_x"] = rejected_graph["node_feat"]
         data_point[f"{i}-th_rejected_edge_index"] = rejected_graph["edge_index"]
         data_point[f"{i}-th_rejected_edge_attr"] = rejected_graph["edge_feat"]
-        data_point[f"{i}-th_additional_rejected_x"] = additional_rejected_graph["node_feat"]
-        data_point[f"{i}-th_additional_rejected_edge_index"] = additional_rejected_graph[
-            "edge_index"
+        data_point[f"{i}-th_additional_rejected_x"] = additional_rejected_graph[
+            "node_feat"
         ]
-        data_point[f"{i}-th_additional_rejected_edge_attr"] = additional_rejected_graph["edge_feat"]
+        data_point[f"{i}-th_additional_rejected_edge_index"] = (
+            additional_rejected_graph["edge_index"]
+        )
+        data_point[f"{i}-th_additional_rejected_edge_attr"] = additional_rejected_graph[
+            "edge_feat"
+        ]
 
     return data_point
 
@@ -936,7 +940,7 @@ if __name__ == "__main__":
         default="mistralai-Mistral-7B-Instruct-v0.3_string+graph_q32_test_rxn_m2t",
     )
     parser.add_argument("--num_procs", type=int, default=10)
-    parser.add_argument("--data_tag", type=str, default="_augmented")
+    parser.add_argument("--data_tag", type=str, default="_molpo")
 
     args = parser.parse_args()
 
