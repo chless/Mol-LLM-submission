@@ -8,7 +8,6 @@ trainer.devices=$gpus \
 filename=$file_name \
 mode=ft \
 data=molpo \
-data.data_tag=gap_fixed_molpo_0330 \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=moleculeSTM \
 gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
