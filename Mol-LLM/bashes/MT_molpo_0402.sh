@@ -16,5 +16,5 @@ trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string+graph \
 trainer.skip_sanity_check=false \
-trainser.sl_noise_ratio=0.0 \
+trainer.sl_noise_ratio=0.0 \
 pretrained_ckpt_path="'/data/all_checkpoints/MT_mistral7b_string_only_12ep_0224/epoch=11-step=61512.ckpt'"
