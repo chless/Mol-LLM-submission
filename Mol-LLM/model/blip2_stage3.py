@@ -105,7 +105,7 @@ class Blip2Stage3(pl.LightningModule):
         self.tokenizer = self.blip2model.init_tokenizer()
         self.save_hyperparameters(args)
 
-        if self.args.eval_simpo or self.args.train_simpo:
+        if self.args.eval_molpo or self.args.train_molpo:
             self.beta = args.beta
             self.gamma_beta_ratio = args.gamma_beta_ratio
             self.sft_weight = args.sft_weight
@@ -354,7 +354,7 @@ class Blip2Stage3(pl.LightningModule):
 
         metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
         metrics[f"instance_loss"] = sft_instance_loss.clone().detach().cpu()
-        metrics[f"simpo_loss"] = losses_molpo.clone().detach().cpu()
+        metrics[f"molpo_loss"] = losses_molpo.clone().detach().cpu()
         metrics[f"anchor_loss/sft"] = anchor_sft_losses.clone().detach().cpu()
         metrics[f"anchor_loss/rejected"] = anchor_rejected_losses.clone().detach().cpu()
 
@@ -391,7 +391,7 @@ class Blip2Stage3(pl.LightningModule):
         logits = outputs.pop("logits")
         loss = outputs.pop("loss")
 
-        if hasattr(self.args, "train_simpo") and self.args.train_simpo:
+        if hasattr(self.args, "train_molpo") and self.args.train_molpo:
             compute_loss_context_manager = torch.amp.autocast
             len_tuple = batch.labels.shape[0] // 3
             tasks = tasks[:len_tuple]
@@ -399,7 +399,7 @@ class Blip2Stage3(pl.LightningModule):
             with compute_loss_context_manager(device_type="cuda"):
                 loss, metrics = self.get_total_molpo_loss(
                     logits=logits,
-                    labels=batch.simpo_labels,
+                    labels=batch.molpo_labels,
                     instance_loss=outputs["instance_loss"],
                     tasks=tasks,
                     is_train=True,
@@ -436,7 +436,7 @@ class Blip2Stage3(pl.LightningModule):
             task_specific_outputs=self.task_specific_outputs,
             num_moving_samples=32,
         )
-        if self.args.train_simpo:
+        if self.args.train_molpo:
             # bar r logging
             for k, v in self.task_specific_sft_reward.items():
                 self.log(
@@ -573,7 +573,7 @@ class Blip2Stage3(pl.LightningModule):
         forward_instance_loss = forward_loss_dict["instance_loss"]
         forward_loss = forward_loss_dict["loss"]
 
-        if self.args.eval_simpo:
+        if self.args.eval_molpo:
             len_tuple = gen_labels.shape[0] // 3
             tasks = [id2task(task_id.item()) for task_id in batch.tasks][:len_tuple]
 
@@ -581,7 +581,7 @@ class Blip2Stage3(pl.LightningModule):
             with compute_loss_context_manager(device_type="cuda"):
                 forward_loss, metrics = self.get_total_molpo_loss(
                     logits=forward_logits,
-                    labels=batch.simpo_labels,
+                    labels=batch.molpo_labels,
                     tasks=tasks,
                     instance_loss=forward_instance_loss,
                     is_train=False,
@@ -683,7 +683,7 @@ class Blip2Stage3(pl.LightningModule):
 
             self.eval_dataset_losses[task_subtask_pair]["num_instances"] += 1
 
-        if self.args.eval_simpo:
+        if self.args.eval_molpo:
             self.task_specific_logging(
                 outputs=metrics,
                 tasks=tasks,
@@ -833,7 +833,7 @@ class Blip2Stage3(pl.LightningModule):
     def on_evaluation_epoch_end(self, mode="val") -> None:
         print(f"\nDevice {self.device} on_evaluation_epoch_end start")
 
-        if self.args.eval_simpo:
+        if self.args.eval_molpo:
             self.task_specific_logging(
                 outputs=None,
                 tasks=None,
@@ -1169,7 +1169,7 @@ def molpo_loss(
     beta=1.0,
     gamma_beta_ratio=0.0,
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
-    """Compute the SimPO loss for a batch of policy model log probabilities.
+    """Compute the molpo loss for a batch of policy model log probabilities.
 
     Args:
         policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
@@ -1177,7 +1177,7 @@ def molpo_loss(
 
     Returns:
         A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
-        The losses tensor contains the SimPO loss for each example in the batch.
+        The losses tensor contains the molpo loss for each example in the batch.
         The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
     """
     # calculate molpo loss
@@ -1215,7 +1215,7 @@ def anchor_loss(
     return anchor_sft_losses, anchor_rejected_losses
 
 
-def simpo_loss(
+def molpo_loss(
     policy_chosen_logps: torch.FloatTensor,
     policy_rejected_logps: torch.FloatTensor,
     loss_type="sigmoid",
@@ -1223,7 +1223,7 @@ def simpo_loss(
     gamma_beta_ratio=0.0,
     device="cuda",
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
-    """Compute the SimPO loss for a batch of policy model log probabilities.
+    """Compute the molpo loss for a batch of policy model log probabilities.
 
     Args:
         policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
@@ -1231,7 +1231,7 @@ def simpo_loss(
 
     Returns:
         A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
-        The losses tensor contains the SimPO loss for each example in the batch.
+        The losses tensor contains the molpo loss for each example in the batch.
         The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
     """
     pi_logratios = policy_chosen_logps - policy_rejected_logps

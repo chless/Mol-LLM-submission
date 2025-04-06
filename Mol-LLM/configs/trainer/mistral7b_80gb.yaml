@@ -70,9 +70,9 @@ test_on_trainset: false
 mol_representation: string_only
 log_attn_score: true
 
-# simpo
-train_simpo: false
-eval_simpo: false
+# molpo
+train_molpo: false
+eval_molpo: false
 
 find_unused_parameters: false
 

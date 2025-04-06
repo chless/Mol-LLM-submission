@@ -29,6 +29,6 @@ trainer.reject_lambda=2.0 \
 trainer.min_lr=0.0000002 \
 trainer.init_lr=0.000002 \
 trainer.warmup_lr=0.0000002 \
-trainer.train_simpo=false \
-trainer.eval_simpo=false \
+trainer.train_molpo=false \
+trainer.eval_molpo=false \
 ckpt_path="'/data/all_checkpoints/string_only-resume/all_checkpoints/string_only-resume/epoch=11-val_total_loss=0.000.ckpt'"

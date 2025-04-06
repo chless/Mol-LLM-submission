@@ -246,21 +246,27 @@ class Blip2OPT(Blip2Base):
 
         self.llm_tokenizer.add_tokens(additional_tokens)
 
-        simpo_mask_tokens = added_tokens.BOOL + added_tokens.FLOAT \
-            + added_tokens.DESCRIPTION + added_tokens.SELFIES \
-            + added_tokens.IUPAC \
+        molpo_mask_tokens = (
+            added_tokens.BOOL
+            + added_tokens.FLOAT
+            + added_tokens.DESCRIPTION
+            + added_tokens.SELFIES
+            + added_tokens.IUPAC
             + added_tokens.MOLFORMULA
-        simpo_mask_tokens += [self.llm_tokenizer.eos_token]
-        self.llm_tokenizer.simpo_mask_tokens = simpo_mask_tokens
+        )
+        molpo_mask_tokens += [self.llm_tokenizer.eos_token]
+        self.llm_tokenizer.molpo_mask_tokens = molpo_mask_tokens
 
         # get ids of task tokens
-        self.llm_tokenizer.simpo_mask_ids = [
+        self.llm_tokenizer.molpo_mask_ids = [
             self.llm_tokenizer.convert_tokens_to_ids(token)
-            for token in simpo_mask_tokens
-        ]# if llm model is mistral, add
+            for token in molpo_mask_tokens
+        ]  # if llm model is mistral, add
         if "mistral" in self.llm_tokenizer.name_or_path:
-            self.llm_tokenizer.simpo_mask_ids += [29473] # '_' token id
-            self.llm_tokenizer.simpo_mask_tokens += [self.llm_tokenizer.convert_ids_to_tokens(29473)]
+            self.llm_tokenizer.molpo_mask_ids += [29473]  # '_' token id
+            self.llm_tokenizer.molpo_mask_tokens += [
+                self.llm_tokenizer.convert_ids_to_tokens(29473)
+            ]
 
         # self.llm_tokenizer.mol_token = added_tokens.MOL_EMBEDDING[0]
         self.llm_tokenizer.add_special_tokens(

@@ -14,7 +14,7 @@ trainer=mistral7b_80gb_mdpo-v2 \
 trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
 trainer.logging_dir=/data/all_checkpoints \
 trainer.mol_representation=string_only \
-trainer.eval_simpo=true \
+trainer.eval_molpo=true \
 ckpt_path="'/data/all_checkpoints/string_only-resume-last/epoch=11-val_total_loss=0.000.ckpt'" \
 trainer.skip_sanity_check=false
 

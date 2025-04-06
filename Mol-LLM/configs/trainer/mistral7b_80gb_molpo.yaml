@@ -70,10 +70,10 @@ mol_representation: string_only
 log_attn_score: true
 
 # molpo
-train_simpo: true
-eval_simpo: true
+train_molpo: true
+eval_molpo: true
 
-molpo_batching: 2
+molpo_batch_division: 2
 
 beta: 1.0
 gamma_beta_ratio: 1.0
