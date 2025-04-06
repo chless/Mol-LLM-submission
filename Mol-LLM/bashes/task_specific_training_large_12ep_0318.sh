@@ -4,7 +4,7 @@ projector_type=$2
 modality=$3
 task=$4
 max_epochs=12
-total_batch_size=128
+total_batch_size=88
 
 tasks=(
     "smol-property_prediction-hiv"
