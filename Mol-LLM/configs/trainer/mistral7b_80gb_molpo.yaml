@@ -80,14 +80,13 @@ gamma_beta_ratio: 1.0
 
 sft_weight: 1.0
 molpo_weight: 0.5 
-anc_sft_weight: 0.5 
+anc_chosen_weight: 0.5 
 anc_reject_weight: 0.5 
-sft_lambda: 1.0
+chosen_lambda: 1.0
 reject_lambda: 6.0
-sl_noise_ratio: 0.0
 apply_preference_system_prompt: false
 
 selfies_enumeration: false
 
-loss_type: sigmoid
+loss_type: hinge
 find_unused_parameters: true
