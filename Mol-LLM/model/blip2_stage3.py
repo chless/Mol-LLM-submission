@@ -57,12 +57,14 @@ class Blip2Stage3(pl.LightningModule):
         for key in to_be_removed:
             checkpoint["state_dict"].pop(key)
 
-        if hasattr(self, "task_specific_sft_reward"):
-            checkpoint[f"task_specific_sft_reward"] = self.task_specific_sft_reward
+        if hasattr(self, "task_specific_chosen_reward"):
+            checkpoint[f"task_specific_chosen_reward"] = (
+                self.task_specific_chosen_reward
+            )
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
-        if hasattr(self, "task_specific_sft_reward"):
-            self.task_specific_sft_reward = checkpoint["task_specific_sft_reward"]
+        if hasattr(self, "task_specific_chosen_reward"):
+            self.task_specific_chosen_reward = checkpoint["task_specific_chosen_reward"]
 
     def __init__(self, args):
         super().__init__()
@@ -104,16 +106,6 @@ class Blip2Stage3(pl.LightningModule):
         )
         self.tokenizer = self.blip2model.init_tokenizer()
         self.save_hyperparameters(args)
-
-        if self.args.eval_molpo or self.args.train_molpo:
-            self.beta = args.beta
-            self.gamma_beta_ratio = args.gamma_beta_ratio
-            self.sft_weight = args.sft_weight
-            self.molpo_weight = args.molpo_weight
-            self.anc_sft_weight = args.anc_sft_weight
-            self.anc_reject_weight = args.anc_reject_weight
-            self.sft_lambda = args.sft_lambda
-            self.reject_lambda = args.reject_lambda
 
     def load_from_stage1_checkpoint(self, path):
         ckpt = torch.load(path, map_location="cpu")
@@ -259,6 +251,7 @@ class Blip2Stage3(pl.LightningModule):
         instance_loss: torch.FloatTensor,
         tasks,
         is_train=True,
+        molpo_batch_division=2,
     ):
         metrics = {}
         out = concatenated_forward(
@@ -266,24 +259,24 @@ class Blip2Stage3(pl.LightningModule):
             all_labels=labels,
             label_pad_token_id=-100,
             instance_loss=instance_loss,
+            molpo_batch_division=molpo_batch_division,
         )
         sft_instance_loss = out["sft_instance_loss"]
-        policy_sft_logps = out["sft_logps"]
-        sft_loss_mask = out["sft_loss_mask"]
+
         policy_chosen_logps = out["chosen_logps"]
         chosen_loss_mask = out["chosen_loss_mask"]
+
         policy_rejected_logps = out["rejected_logps"]
         rejected_loss_mask = out["rejected_loss_mask"]
 
         # calculate rewards
-        sft_rewards = self.beta * policy_sft_logps
-        chosen_rewards = self.beta * policy_chosen_logps
-        rejected_rewards = self.beta * policy_rejected_logps
+        chosen_rewards = self.args.beta * policy_chosen_logps
+        rejected_rewards = self.args.beta * policy_rejected_logps
 
         # calculate sft loss
-        sft_loss = (sft_instance_loss * sft_loss_mask.sum(-1))[
-            sft_loss_mask.sum(-1) > 0
-        ].sum() / sft_loss_mask.sum()
+        sft_loss = (sft_instance_loss * chosen_loss_mask.sum(-1))[
+            chosen_loss_mask.sum(-1) > 0
+        ].sum() / chosen_loss_mask.sum()
 
         # calculate molpo loss
         loss_molpo, losses_molpo = molpo_loss(
@@ -291,91 +284,90 @@ class Blip2Stage3(pl.LightningModule):
             chosen_loss_mask=chosen_loss_mask,
             rejected_rewards=rejected_rewards,
             rejected_loss_mask=rejected_loss_mask,
-            beta=self.beta,
-            gamma_beta_ratio=self.gamma_beta_ratio,
+            loss_type=self.args.loss_type,
+            beta=self.args.beta,
+            gamma_beta_ratio=self.args.gamma_beta_ratio,
         )
 
         # update and get task specific sft rewards
         if is_train:
-            self.update_task_specific_sft_rewards_avg(
-                sft_rewards=sft_rewards,
+            self.update_task_specific_chosen_rewards_avg(
+                chosen_rewards=chosen_rewards,
                 tasks=tasks,
-                task_specific_outputs=self.task_specific_sft_reward,
+                task_specific_outputs=self.task_specific_chosen_reward,
                 alpha=0.99,
             )
 
         # get average sft rewards
-        avg_sft_rewards_list = []
+        avg_chosen_rewards_list = []
         for task in tasks:
-            if task in self.task_specific_sft_reward:
-                avg_sft_rewards_list.append(self.task_specific_sft_reward[task])
+            if task in self.task_specific_chosen_reward:
+                avg_chosen_rewards_list.append(self.task_specific_chosen_reward[task])
             else:
-                avg_sft_rewards_list.append(0.0)
+                avg_chosen_rewards_list.append(0.0)
 
-        avg_sft_rewards = torch.tensor(
-            avg_sft_rewards_list,
+        avg_chosen_rewards = torch.tensor(
+            avg_chosen_rewards_list,
             device=logits.device,
         )
 
         # calculate anchor losses
-        anchor_sft_losses, anchor_rejected_losses = anchor_loss(
-            avg_sft_rewards=avg_sft_rewards,
-            sft_rewards=sft_rewards,
-            sft_lambda=self.sft_lambda,
+        anchor_chosen_losses, anchor_rejected_losses = anchor_loss(
+            avg_chosen_rewards=avg_chosen_rewards,
+            chosen_rewards=chosen_rewards,
+            chosen_lambda=self.args.chosen_lambda,
             rejected_rewards=rejected_rewards,
-            reject_lambda=self.reject_lambda,
-            beta=self.beta,
+            rejected_lambda=self.args.rejected_lambda,
+            beta=self.args.beta,
+            loss_type=self.args.anc_loss_type,
         )
 
-        if self.molpo_weight > 0.0:
+        if self.args.molpo_weight > 0.0:
             loss = (
-                self.sft_weight * sft_loss
-                + self.molpo_weight * loss_molpo
-                + self.anc_sft_weight * anchor_sft_losses.mean()
-                + self.anc_reject_weight * anchor_rejected_losses.mean()
+                self.args.sft_weight * sft_loss
+                + self.args.molpo_weight * loss_molpo
+                + self.args.anc_chosen_weight * anchor_chosen_losses.mean()
+                + self.args.anc_rejected_weight * anchor_rejected_losses.mean()
             )
         else:
-            loss = self.sft_weight * sft_loss
+            loss = self.args.sft_weight * sft_loss
 
         if torch.isnan(loss):
             assert not torch.isnan(loss), "loss is nan"
 
         metrics[f"rewards/chosen"] = chosen_rewards.cpu()
         metrics[f"rewards/rejected"] = rejected_rewards.cpu()
-        metrics[f"rewards/sft"] = sft_rewards.cpu()
         metrics[f"rewards/accuracies"] = (
             (chosen_rewards > rejected_rewards).float().cpu()
         )
         metrics[f"rewards/margins"] = (chosen_rewards - rejected_rewards).cpu()
 
-        metrics["logps/sft"] = policy_sft_logps.clone().detach().cpu()
         metrics[f"logps/chosen"] = policy_chosen_logps.clone().detach().cpu()
         metrics[f"logps/rejected"] = policy_rejected_logps.clone().detach().cpu()
 
         metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
         metrics[f"instance_loss"] = sft_instance_loss.clone().detach().cpu()
         metrics[f"molpo_loss"] = losses_molpo.clone().detach().cpu()
-        metrics[f"anchor_loss/sft"] = anchor_sft_losses.clone().detach().cpu()
         metrics[f"anchor_loss/rejected"] = anchor_rejected_losses.clone().detach().cpu()
 
         return loss, metrics
 
-    def update_task_specific_sft_rewards_avg(
+    def update_task_specific_chosen_rewards_avg(
         self,
-        sft_rewards,
+        chosen_rewards,
         tasks,
         task_specific_outputs: Dict[str, Dict[str, list]],
         alpha=0.99,
     ):
-        for i in range(sft_rewards.shape[0]):
-            if torch.isnan(sft_rewards[i]):
+        for i in range(chosen_rewards.shape[0]):
+            if torch.isnan(chosen_rewards[i]):
                 continue
 
             task = tasks[i]
-            task_specific_outputs.setdefault(task, sft_rewards[i].item())
+            task_specific_outputs.setdefault(task, chosen_rewards[i].item())
             task_specific_outputs[task] = (
                 alpha * task_specific_outputs[task]
-                + (1 - alpha) * sft_rewards[i].item()
+                + (1 - alpha) * chosen_rewards[i].item()
             )
 
     def training_step(self, batch, batch_idx):
@@ -393,7 +385,7 @@ class Blip2Stage3(pl.LightningModule):
 
         if hasattr(self.args, "train_molpo") and self.args.train_molpo:
             compute_loss_context_manager = torch.amp.autocast
-            len_tuple = batch.labels.shape[0] // 3
+            len_tuple = batch.labels.shape[0] // self.args.molpo_batch_division
             tasks = tasks[:len_tuple]
 
             with compute_loss_context_manager(device_type="cuda"):
@@ -403,6 +395,7 @@ class Blip2Stage3(pl.LightningModule):
                     instance_loss=outputs["instance_loss"],
                     tasks=tasks,
                     is_train=True,
+                    molpo_batch_division=self.args.molpo_batch_division,
                 )
             outputs.update(metrics)
 
@@ -438,7 +431,7 @@ class Blip2Stage3(pl.LightningModule):
         )
         if self.args.train_molpo:
             # bar r logging
-            for k, v in self.task_specific_sft_reward.items():
+            for k, v in self.task_specific_chosen_reward.items():
                 self.log(
                     f"train/{k}/bar_reward",
                     v,
@@ -500,7 +493,7 @@ class Blip2Stage3(pl.LightningModule):
 
     def on_train_epoch_start(self) -> None:
         self.task_specific_outputs = {}
-        self.task_specific_sft_reward = {}
+        self.task_specific_chosen_reward = {}
 
         self.train_list_predictions = []
         self.train_list_targets = []
@@ -538,8 +531,8 @@ class Blip2Stage3(pl.LightningModule):
         }
         self.eval_task_specific_outputs = {}
 
-        if not hasattr(self, "task_specific_sft_reward"):
-            self.task_specific_sft_reward = {}
+        if not hasattr(self, "task_specific_chosen_reward"):
+            self.task_specific_chosen_reward = {}
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
         if "graph" in self.args.mol_representation:
@@ -574,7 +567,7 @@ class Blip2Stage3(pl.LightningModule):
         forward_loss = forward_loss_dict["loss"]
 
         if self.args.eval_molpo:
-            len_tuple = gen_labels.shape[0] // 3
+            len_tuple = gen_labels.shape[0] // self.args.molpo_batch_division
             tasks = [id2task(task_id.item()) for task_id in batch.tasks][:len_tuple]
 
             compute_loss_context_manager = torch.amp.autocast
@@ -585,6 +578,7 @@ class Blip2Stage3(pl.LightningModule):
                     tasks=tasks,
                     instance_loss=forward_instance_loss,
                     is_train=False,
+                    molpo_batch_division=self.args.molpo_batch_division,
                 )
 
             gen_logits = gen_logits[:len_tuple]
@@ -693,7 +687,7 @@ class Blip2Stage3(pl.LightningModule):
                 num_moving_samples=None,
             )
 
-            for k, v in self.task_specific_sft_reward.items():
+            for k, v in self.task_specific_chosen_reward.items():
                 self.log(
                     f"train/{k}/bar_reward",
                     v,
@@ -1201,56 +1195,28 @@ def molpo_loss(
 
 
 def anchor_loss(
-    avg_sft_rewards: torch.FloatTensor,
-    sft_rewards: torch.FloatTensor,
-    sft_lambda: float,
+    avg_chosen_rewards: torch.FloatTensor,
+    chosen_rewards: torch.FloatTensor,
+    chosen_lambda: float,
     rejected_rewards: torch.FloatTensor,
-    reject_lambda: float,
+    rejected_lambda: float,
     beta: float,
+    loss_type: str = "sigmoid",
 ):
-    anchor_sft_losses = -F.logsigmoid(sft_rewards - sft_lambda * beta * avg_sft_rewards)
-    anchor_rejected_losses = -F.logsigmoid(
-        rejected_rewards - reject_lambda * beta * avg_sft_rewards
-    )
-    return anchor_sft_losses, anchor_rejected_losses
-
-
-def molpo_loss(
-    policy_chosen_logps: torch.FloatTensor,
-    policy_rejected_logps: torch.FloatTensor,
-    loss_type="sigmoid",
-    beta=1.0,
-    gamma_beta_ratio=0.0,
-    device="cuda",
-) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
-    """Compute the molpo loss for a batch of policy model log probabilities.
-
-    Args:
-        policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
-        policy_rejected_logps: Log probabilities of the policy model for the rejected responses. Shape: (batch_size,)
-
-    Returns:
-        A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
-        The losses tensor contains the molpo loss for each example in the batch.
-        The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
-    """
-    pi_logratios = policy_chosen_logps - policy_rejected_logps
-    pi_logratios = pi_logratios.to(device)
-    logits = pi_logratios - gamma_beta_ratio
+    chosen_logits = chosen_rewards - chosen_lambda * beta * avg_chosen_rewards
+    rejected_logits = rejected_rewards - rejected_lambda * beta * avg_chosen_rewards
 
     if loss_type == "sigmoid":
-        losses = -F.logsigmoid(beta * logits)
+        anchor_chosen_losses = -F.logsigmoid(chosen_logits)
+        anchor_rejected_losses = -F.logsigmoid(rejected_logits)
     elif loss_type == "hinge":
-        losses = torch.relu(1 - beta * logits)
+        anchor_chosen_losses = torch.relu(chosen_logits)
+        anchor_rejected_losses = torch.relu(rejected_logits)
     else:
         raise ValueError(
             f"Unknown loss type: {loss_type}. Should be one of ['sigmoid', 'hinge']"
         )
-
-    chosen_rewards = beta * policy_chosen_logps.to(device).clone().detach()
-    rejected_rewards = beta * policy_rejected_logps.to(device).clone().detach()
-
-    return losses, chosen_rewards, rejected_rewards
+    return anchor_chosen_losses, anchor_rejected_losses
 
 
 def get_batch_logps(
@@ -1305,6 +1271,7 @@ def concatenated_forward(
     all_labels: torch.LongTensor,
     instance_loss: torch.FloatTensor = None,
     label_pad_token_id: int = -100,
+    molpo_batch_division: int = 2,
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
     """Run the given model on the given batch of inputs, concatenating the chosen and rejected inputs together.
 
@@ -1318,25 +1285,20 @@ def concatenated_forward(
         is_encoder_decoder=False,
         label_pad_token_id=label_pad_token_id,
     )
-    len_tuple = all_labels.shape[0] // 3
+    len_tuple = all_labels.shape[0] // molpo_batch_division
 
     sft_instance_loss = instance_loss[:len_tuple]
-    sft_logps = all_logps[:len_tuple]
-    sft_labels = all_labels[:len_tuple]
-    sft_loss_mask = sft_labels[:, 1:].clone() != -100
 
-    chosen_logps = all_logps[len_tuple : 2 * len_tuple]
-    chosen_labels = all_labels[len_tuple : 2 * len_tuple]
+    chosen_logps = all_logps[:len_tuple]
+    chosen_labels = all_labels[:len_tuple]
     chosen_loss_mask = chosen_labels[:, 1:].clone() != -100
 
-    rejected_logps = all_logps[2 * len_tuple :]
-    rejected_labels = all_labels[2 * len_tuple :]
+    rejected_logps = all_logps[len_tuple:]
+    rejected_labels = all_labels[len_tuple:]
     rejected_loss_mask = rejected_labels[:, 1:].clone() != -100
 
     return {
         "sft_instance_loss": sft_instance_loss,
-        "sft_logps": sft_logps,
-        "sft_loss_mask": sft_loss_mask,
         "chosen_logps": chosen_logps,
         "chosen_loss_mask": chosen_loss_mask,
         "rejected_logps": rejected_logps,

@@ -118,7 +118,9 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.tokenizer.padding_side = "left"
         self.mol_representation = args.mol_representation
 
-        self.apply_molpo = args.train_simpo if self.train else args.eval_simpo
+        self.apply_molpo = args.train_molpo if self.train else args.eval_molpo
+        if self.apply_molpo:
+            self.molpo_batch_division = args.molpo_batch_division
 
         self.projector_type = args.projector_type
         self.args = args
@@ -201,42 +203,23 @@ class DataCollator(DataCollatorForSeq2Seq):
             else:
                 self.reject_cardinal = 0
 
-            # prepare tuples
-            # sft tuple (gw, sw, q, y)
-            # molpo chosen tuple (gw, sl, q, y)
-            # molpo rejected tuple (gl, sl, q, y)
-
-            prompt_text_sl = prompt_text.copy()
-
-            if self.args.sl_noise_ratio > 0:
-                for i in range(len(prompt_text_sl)):
-                    sw = list_selfies[i]
-                    if input_mol_string_pattern.search(prompt_text_sl[i]):
-                        sl = random_noise_selfies(
-                            selfies=sw,
-                            tokenizer=self.tokenizer,
-                            sl_noise_ratio=self.args.sl_noise_ratio,
-                        )
-                        assert (
-                            sw in prompt_text_sl[i]
-                        ), f"{sw} not in {prompt_text_sl[i]}"
-                        prompt_text_sl[i] = prompt_text_sl[i].replace(sw, sl)
+            prompt_text_reject = prompt_text.copy()
 
             if self.args.apply_preference_system_prompt:
-                for i in range(len(prompt_text_sl)):
+                for i in range(len(prompt_text_reject)):
                     preference_system_prompt = "In the following problems, molecular graph is either accurate or inaccurate. Your predictions should be based primarily on careful understanding of the provided graph."
-                    prompt_text_sl[i] = re.sub(
+                    prompt_text_reject[i] = re.sub(
                         r"(?<=\[INST\]).*(?=\n\n)",
                         preference_system_prompt,
-                        prompt_text_sl[i],
+                        prompt_text_reject[i],
                     )
 
-            prompt_text = (
-                prompt_text + prompt_text_sl * 2
-            )  # ((q, sw), (q, sl), (q, sl))
-            target_text = target_text * 3  # (y, y, y)
-            tasks = tasks * 3
-            task_names = task_names * 3
+            prompt_text = prompt_text + prompt_text_reject * (
+                self.molpo_batch_division - 1
+            )
+            target_text = target_text * self.molpo_batch_division
+            tasks = tasks * self.molpo_batch_division
+            task_names = task_names * self.molpo_batch_division
 
         if "graph" in self.mol_representation:
             list_graphs = [
@@ -302,10 +285,12 @@ class DataCollator(DataCollatorForSeq2Seq):
                     for sample in batch
                 ]
 
-                # (gw, gw, gl)
-                list_graphs = list_graphs * 2 + list_rejected_graphs
+                list_graphs = (
+                    list_graphs * (self.molpo_batch_division - 1) + list_rejected_graphs
+                )
                 list_additional_graphs = (
-                    list_additional_graphs * 2 + list_rejected_additional_graphs
+                    list_additional_graphs * (self.molpo_batch_division - 1)
+                    + list_rejected_additional_graphs
                 )
 
         # address <mol> token in prompt_text, for the case of using graph modality
@@ -448,12 +433,12 @@ class DataCollator(DataCollatorForSeq2Seq):
             labels_ids == self.tokenizer.pad_token_id, -100
         )
         features["labels"] = labels_ids
-        simpo_labels_ids = labels_ids.clone()
-        for simpo_mask_id in self.tokenizer.simpo_mask_ids:
-            simpo_labels_ids = simpo_labels_ids.masked_fill(
-                simpo_labels_ids == simpo_mask_id, -100
+        molpo_labels_ids = labels_ids.clone()
+        for molpo_mask_id in self.tokenizer.molpo_mask_ids:
+            molpo_labels_ids = molpo_labels_ids.masked_fill(
+                molpo_labels_ids == molpo_mask_id, -100
             )
-        features["simpo_labels"] = simpo_labels_ids
+        features["molpo_labels"] = molpo_labels_ids
 
         assert (
             features.input_ids.size(1) <= self.max_length
