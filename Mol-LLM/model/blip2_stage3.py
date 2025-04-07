@@ -1203,15 +1203,15 @@ def anchor_loss(
     beta: float,
     loss_type: str = "sigmoid",
 ):
-    chosen_logits = chosen_rewards - chosen_lambda * beta * avg_chosen_rewards
-    rejected_logits = rejected_rewards - rejected_lambda * beta * avg_chosen_rewards
+    chosen_logits = chosen_rewards - chosen_lambda * avg_chosen_rewards
+    rejected_logits = rejected_rewards - rejected_lambda * avg_chosen_rewards
 
     if loss_type == "sigmoid":
         anchor_chosen_losses = -F.logsigmoid(chosen_logits)
         anchor_rejected_losses = -F.logsigmoid(rejected_logits)
     elif loss_type == "hinge":
-        anchor_chosen_losses = torch.relu(chosen_logits)
-        anchor_rejected_losses = torch.relu(rejected_logits)
+        anchor_chosen_losses = torch.relu(-chosen_logits)
+        anchor_rejected_losses = torch.relu(-rejected_logits)
     else:
         raise ValueError(
             f"Unknown loss type: {loss_type}. Should be one of ['sigmoid', 'hinge']"
