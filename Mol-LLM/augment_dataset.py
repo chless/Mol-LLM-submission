@@ -940,6 +940,7 @@ if __name__ == "__main__":
         default="mistralai-Mistral-7B-Instruct-v0.3_string+graph_q32_test_rxn_m2t",
     )
     parser.add_argument("--num_procs", type=int, default=10)
+    parser.add_argument("--num_rejected_graphs", type=int, default=20)
     parser.add_argument("--data_tag", type=str, default="_molpo")
 
     args = parser.parse_args()
@@ -950,7 +951,9 @@ if __name__ == "__main__":
     from functools import partial
 
     map_by_substructure_replacement = partial(
-        map_by_substructure_replacement, replace_ratio=args.replace_ratio
+        map_by_substructure_replacement,
+        replace_ratio=args.replace_ratio,
+        num_rejected_graphs=args.num_rejected_graphs,
     )
 
     random.seed(42)
