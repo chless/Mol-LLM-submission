@@ -36,8 +36,8 @@ skip_sanity_check: true
 
 # accumulate_grad_batches: 11
 total_batch_size: 2048
-batch_size: 3
-inference_batch_size: 6
+batch_size: 5
+inference_batch_size: 10
 
 truncation: 1
 padding: max_length
@@ -90,5 +90,5 @@ apply_preference_system_prompt: false
 selfies_enumeration: false
 
 loss_type: sigmoid
-anc_loss_type: hinge
+anc_loss_type: sigmoid
 find_unused_parameters: true
