@@ -274,9 +274,19 @@ class Blip2Stage3(pl.LightningModule):
         rejected_rewards = self.args.beta * policy_rejected_logps
 
         # calculate sft loss
-        sft_loss = (sft_instance_loss * chosen_loss_mask.sum(-1))[
-            chosen_loss_mask.sum(-1) > 0
-        ].sum() / chosen_loss_mask.sum()
+        if molpo_batch_division == 2:
+            sft_loss = (sft_instance_loss * chosen_loss_mask.sum(-1))[
+                chosen_loss_mask.sum(-1) > 0
+            ].sum() / chosen_loss_mask.sum()
+        elif molpo_batch_division == 3:
+            policy_sft_logps = out["sft_logps"]
+            sft_loss_mask = out["sft_loss_mask"]
+            sft_rewards = self.args.beta * policy_sft_logps
+
+            sft_loss = (sft_instance_loss * sft_loss_mask.sum(-1))[
+                sft_loss_mask.sum(-1) > 0
+            ].sum() / sft_loss_mask.sum()
+
 
         # calculate molpo loss
         loss_molpo, losses_molpo = molpo_loss(
@@ -349,6 +359,10 @@ class Blip2Stage3(pl.LightningModule):
         metrics[f"instance_loss"] = sft_instance_loss.clone().detach().cpu()
         metrics[f"molpo_loss"] = losses_molpo.clone().detach().cpu()
         metrics[f"anchor_loss/rejected"] = anchor_rejected_losses.clone().detach().cpu()
+
+        if molpo_batch_division == 3:
+            metrics[f"rewards/sft"] = sft_rewards.cpu()
+            metrics["logps/sft"] = policy_sft_logps.clone().detach().cpu()
 
         return loss, metrics
 
@@ -1289,18 +1303,43 @@ def concatenated_forward(
 
     sft_instance_loss = instance_loss[:len_tuple]
 
-    chosen_logps = all_logps[:len_tuple]
-    chosen_labels = all_labels[:len_tuple]
-    chosen_loss_mask = chosen_labels[:, 1:].clone() != -100
+    if molpo_batch_division == 2:
+        chosen_logps = all_logps[:len_tuple]
+        chosen_labels = all_labels[:len_tuple]
+        chosen_loss_mask = chosen_labels[:, 1:].clone() != -100
 
-    rejected_logps = all_logps[len_tuple:]
-    rejected_labels = all_labels[len_tuple:]
-    rejected_loss_mask = rejected_labels[:, 1:].clone() != -100
+        rejected_logps = all_logps[len_tuple:]
+        rejected_labels = all_labels[len_tuple:]
+        rejected_loss_mask = rejected_labels[:, 1:].clone() != -100
 
-    return {
-        "sft_instance_loss": sft_instance_loss,
-        "chosen_logps": chosen_logps,
-        "chosen_loss_mask": chosen_loss_mask,
-        "rejected_logps": rejected_logps,
-        "rejected_loss_mask": rejected_loss_mask,
-    }
+        out_dict = {
+            "sft_instance_loss": sft_instance_loss,
+            "chosen_logps": chosen_logps,
+            "chosen_loss_mask": chosen_loss_mask,
+            "rejected_logps": rejected_logps,
+            "rejected_loss_mask": rejected_loss_mask,
+        }
+    elif molpo_batch_division == 3:
+        sft_logps = all_logps[:len_tuple]
+        sft_labels = all_labels[:len_tuple]
+        sft_loss_mask = sft_labels[:, 1:].clone() != -100
+
+        chosen_logps = all_logps[len_tuple : 2 * len_tuple]
+        chosen_labels = all_labels[len_tuple : 2 * len_tuple]
+        chosen_loss_mask = chosen_labels[:, 1:].clone() != -100
+
+        rejected_logps = all_logps[2 * len_tuple :]
+        rejected_labels = all_labels[2 * len_tuple :]
+        rejected_loss_mask = rejected_labels[:, 1:].clone() != -100
+
+        out_dict = {
+            "sft_instance_loss": sft_instance_loss,
+            "sft_logps": sft_logps,
+            "sft_loss_mask": sft_loss_mask,
+            "chosen_logps": chosen_logps,
+            "chosen_loss_mask": chosen_loss_mask,
+            "rejected_logps": rejected_logps,
+            "rejected_loss_mask": rejected_loss_mask,
+        }
+
+    return out_dict

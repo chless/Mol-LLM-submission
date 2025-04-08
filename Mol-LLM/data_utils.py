@@ -119,8 +119,6 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.mol_representation = args.mol_representation
 
         self.apply_molpo = args.train_molpo if self.train else args.eval_molpo
-        if self.apply_molpo:
-            self.molpo_batch_division = args.molpo_batch_division
 
         self.projector_type = args.projector_type
         self.args = args
@@ -267,11 +265,11 @@ class DataCollator(DataCollatorForSeq2Seq):
                     )
 
             prompt_text = prompt_text + prompt_text_reject * (
-                self.molpo_batch_division - 1
+                self.args.molpo_batch_division - 1
             )
-            target_text = target_text * self.molpo_batch_division
-            tasks = tasks * self.molpo_batch_division
-            task_names = task_names * self.molpo_batch_division
+            target_text = target_text * self.args.molpo_batch_division
+            tasks = tasks * self.args.molpo_batch_division
+            task_names = task_names * self.args.molpo_batch_division
 
             if "graph" in self.mol_representation:
                 list_rejected_graphs = [
@@ -315,10 +313,10 @@ class DataCollator(DataCollatorForSeq2Seq):
                 ]
 
                 list_graphs = (
-                    list_graphs * (self.molpo_batch_division - 1) + list_rejected_graphs
+                    list_graphs * (self.args.molpo_batch_division - 1) + list_rejected_graphs
                 )
                 list_additional_graphs = (
-                    list_additional_graphs * (self.molpo_batch_division - 1)
+                    list_additional_graphs * (self.args.molpo_batch_division - 1)
                     + list_rejected_additional_graphs
                 )
 
