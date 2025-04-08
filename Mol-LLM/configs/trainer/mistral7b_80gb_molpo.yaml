@@ -66,14 +66,13 @@ testset_resize: -1
 test_on_trainset: false
 
 # multimodal training
-mol_representation: string_only
+mol_representation: string+graph
 log_attn_score: true
+eval_modality_util: null
 
 # molpo
 train_molpo: true
 eval_molpo: true
-
-eval_graph_util: false
 
 molpo_batch_division: 2
 

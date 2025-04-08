@@ -69,6 +69,7 @@ test_on_trainset: false
 # multimodal training
 mol_representation: string_only
 log_attn_score: true
+eval_modality_util: null
 
 # molpo
 train_molpo: false
