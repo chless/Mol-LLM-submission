@@ -1,6 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 rejected_lambda=$2
+anc_rejected_weight=$3
 modality=string+graph
 projector_type=qformer
 task=qm9_homo
@@ -35,5 +36,6 @@ trainer.projector_type=${projector_type} \
 trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
 trainer.rejected_lambda=${rejected_lambda} \
+trainer.anc_rejected_weight=${anc_rejected_weight} \
 trainer.every_n_epochs=0
 
