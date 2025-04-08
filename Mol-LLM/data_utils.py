@@ -170,7 +170,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         if return_tensors is None:
             return_tensors = self.return_tensors
 
-        tasks = [task2id(sample.pop("task")) for sample in batch]  # task id
+        tasks = [task2id(sample["task"]) for sample in batch]  # task id
         task_names = [id2task(task) for task in tasks]
         prompt_text = [sample["prompt_text"] for sample in batch]
         target_text = [sample["target_text"] for sample in batch]
@@ -179,10 +179,56 @@ class DataCollator(DataCollatorForSeq2Seq):
             i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
             for i in input_mol_strings
         ]
+        list_graphs = [
+            Data(
+                x=torch.tensor(sample["x"], dtype=torch.int64),
+                edge_index=torch.tensor(sample["edge_index"], dtype=torch.int64),
+                edge_attr=torch.tensor(sample["edge_attr"], dtype=torch.int64),
+            )
+            for sample in batch
+        ]
+        # for reagent prediction
+        list_additional_graphs = [
+            Data(
+                x=torch.tensor(sample["additional_x"], dtype=torch.int64),
+                edge_index=torch.tensor(
+                    sample["additional_edge_index"], dtype=torch.int64
+                ),
+                edge_attr=torch.tensor(
+                    sample["additional_edge_attr"], dtype=torch.int64
+                ),
+            )
+            for sample in batch
+        ]
 
         prompt_text = self.select_mol_representation(
             prompt_text, mol_representation=self.mol_representation
         )
+
+        if not self.train and self.args.eval_graph_util:
+            shuffled_idx = []
+            # shuffle the selfies_idx, guarantee that the selfies_idx is not in order
+            for i in range(len(list_selfies)):
+                idxs = np.random.choice(
+                    range(len(list_selfies)), size=2, replace=False
+                ).tolist()
+                if i in idxs:
+                    idxs.remove(i)
+                shuffled_idx.append(idxs[0])
+
+            processed_selfies = [list_selfies[i] for i in shuffled_idx]
+            for i in range(len(prompt_text)):
+                assert (
+                    list_selfies[i] in prompt_text[i]
+                ), f"{list_selfies[i]} not in {prompt_text[i]}"
+                prompt_text[i] = prompt_text[i].replace(
+                    list_selfies[i], processed_selfies[i]
+                )
+
+            list_graphs = [list_graphs[i] for i in shuffled_idx]
+            list_additional_graphs = [
+                list_additional_graphs[i] for i in shuffled_idx
+            ]
 
         if self.args.selfies_enumeration:
             processed_selfies = [
@@ -196,6 +242,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                 prompt_text[i] = prompt_text[i].replace(
                     list_selfies[i], processed_selfies[i]
                 )
+                list_selfies = processed_selfies
 
         if self.apply_molpo:
             if self.train:
@@ -221,30 +268,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             tasks = tasks * self.molpo_batch_division
             task_names = task_names * self.molpo_batch_division
 
-        if "graph" in self.mol_representation:
-            list_graphs = [
-                Data(
-                    x=torch.tensor(sample["x"], dtype=torch.int64),
-                    edge_index=torch.tensor(sample["edge_index"], dtype=torch.int64),
-                    edge_attr=torch.tensor(sample["edge_attr"], dtype=torch.int64),
-                )
-                for sample in batch
-            ]
-            # for reagent prediction
-            list_additional_graphs = [
-                Data(
-                    x=torch.tensor(sample["additional_x"], dtype=torch.int64),
-                    edge_index=torch.tensor(
-                        sample["additional_edge_index"], dtype=torch.int64
-                    ),
-                    edge_attr=torch.tensor(
-                        sample["additional_edge_attr"], dtype=torch.int64
-                    ),
-                )
-                for sample in batch
-            ]
-
-            if self.apply_molpo:
+            if "graph" in self.mol_representation:
                 list_rejected_graphs = [
                     Data(
                         x=torch.tensor(

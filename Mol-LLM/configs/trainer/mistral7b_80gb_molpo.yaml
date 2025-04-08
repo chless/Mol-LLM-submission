@@ -73,6 +73,8 @@ log_attn_score: true
 train_molpo: true
 eval_molpo: true
 
+eval_graph_util: false
+
 molpo_batch_division: 2
 
 beta: 1.0
