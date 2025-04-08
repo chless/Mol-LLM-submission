@@ -205,7 +205,10 @@ class DataCollator(DataCollatorForSeq2Seq):
             prompt_text, mol_representation=self.mol_representation
         )
 
-        if not self.train and self.args.eval_graph_util:
+        if not self.train and self.args.eval_modality_util in [
+                "string",
+                "graph",
+            ]:
             shuffled_idx = []
             # shuffle the selfies_idx, guarantee that the selfies_idx is not in order
             for i in range(len(list_selfies)):
@@ -216,19 +219,21 @@ class DataCollator(DataCollatorForSeq2Seq):
                     idxs.remove(i)
                 shuffled_idx.append(idxs[0])
 
-            processed_selfies = [list_selfies[i] for i in shuffled_idx]
-            for i in range(len(prompt_text)):
-                assert (
-                    list_selfies[i] in prompt_text[i]
-                ), f"{list_selfies[i]} not in {prompt_text[i]}"
-                prompt_text[i] = prompt_text[i].replace(
-                    list_selfies[i], processed_selfies[i]
-                )
-
-            list_graphs = [list_graphs[i] for i in shuffled_idx]
-            list_additional_graphs = [
-                list_additional_graphs[i] for i in shuffled_idx
-            ]
+            if self.args.eval_modality_util == "string":
+                processed_selfies = [list_selfies[i] for i in shuffled_idx]
+                for i in range(len(prompt_text)):
+                    assert (
+                        list_selfies[i] in prompt_text[i]
+                    ), f"{list_selfies[i]} not in {prompt_text[i]}"
+                    prompt_text[i] = prompt_text[i].replace(
+                        list_selfies[i], processed_selfies[i]
+                    )
+                    
+            if self.args.eval_modality_util == "graph":
+                list_graphs = [list_graphs[i] for i in shuffled_idx]
+                list_additional_graphs = [
+                    list_additional_graphs[i] for i in shuffled_idx
+                ]
 
         if self.args.selfies_enumeration:
             processed_selfies = [
