@@ -83,7 +83,7 @@ molpo_weight: 0.5
 anc_chosen_weight: 0.0 
 anc_rejected_weight: 0.5 
 chosen_lambda: 1.0
-rejected_lambda: 6.0
+rejected_lambda: 1.2
 
 apply_preference_system_prompt: false
 
