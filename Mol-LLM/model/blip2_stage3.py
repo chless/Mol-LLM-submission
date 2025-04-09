@@ -402,7 +402,7 @@ class Blip2Stage3(pl.LightningModule):
             if "graph_avg_norm" in outputs:
                 graph_keys = ["graph_avg_norm", "moltoken_avg_norm"]
                 for k in graph_keys:
-                    avg_norm = outputs.pop("k")
+                    avg_norm = outputs.pop(k)
                     if self.args.molpo_batch_division == 2:
                         chosen_avg_norm = avg_norm[:len_tuple]
                         reject_avg_norm = avg_norm[len_tuple:]
