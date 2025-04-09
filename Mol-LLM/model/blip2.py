@@ -76,26 +76,6 @@ class Blip2Base(BaseModel):
 
     @classmethod
     def init_graph_encoder(cls, args):
-        if "MoleculeSTM" in args.graph_encoder_ckpt:
-            if args.graph_encoder_ckpt is not None:
-                ckpt = torch.load(
-                    args.graph_encoder_ckpt, map_location=torch.device("cpu")
-                )
-                renamed_state_dict = {}
-                for k, v in ckpt.items():
-                    if k.startswith("molecule_node_model."):
-                        renamed_state_dict[k.replace("molecule_node_model.", "")] = v
-                ckpt = renamed_state_dict
-        elif "gine_custom" in args.graph_encoder_ckpt:
-            raise NotImplementedError(
-                "Custom GINE model is not supported yet. Please use the default GINE model."
-            )
-        elif "tokengt_custom" in args.graph_encoder_ckpt:
-            raise NotImplementedError(
-                "Custom TokenGT model is not supported yet. Please use the default TokenGT model."
-            )
-        else:
-            ckpt = None
 
         if args.gnn_type == "gine":
             graph_encoder = GNN_MoleculeSTM(
@@ -119,14 +99,39 @@ class Blip2Base(BaseModel):
                 max_position_embeddings=args.max_position_embeddings,
             )
 
-        if ckpt is not None:
-            print(f"load graph encoder from {args.graph_encoder_ckpt}")
-            missing_keys, unexpected_keys = graph_encoder.load_state_dict(
-                ckpt, strict=False
+        if "MoleculeSTM" in args.graph_encoder_ckpt:
+            if args.graph_encoder_ckpt is not None:
+                ckpt = torch.load(
+                    args.graph_encoder_ckpt, map_location=torch.device("cpu")
+                )
+                renamed_state_dict = {}
+                for k, v in ckpt.items():
+                    if k.startswith("molecule_node_model."):
+                        renamed_state_dict[k.replace("molecule_node_model.", "")] = v
+                ckpt = renamed_state_dict
+                print(f"load graph encoder from {args.graph_encoder_ckpt}")
+                missing_keys, unexpected_keys = graph_encoder.load_state_dict(
+                    ckpt, strict=False
+                )
+                if len(missing_keys) or len(unexpected_keys):
+                    print(missing_keys)
+                    print(unexpected_keys)
+        elif "Custom_gnn_models/GINE" in args.graph_encoder_ckpt:
+            raise NotImplementedError(
+                "Custom GINE model is not supported yet. Please use the default GINE model."
             )
-            if len(missing_keys) or len(unexpected_keys):
-                print(missing_keys)
-                print(unexpected_keys)
+        elif "Custom_gnn_models/TokenGT" in args.graph_encoder_ckpt:
+            ckpt = torch.load(args.graph_encoder_ckpt, map_location=torch.device("cpu"))
+            renamed_state_dict = {}
+            for param, value in ckpt["state_dict"].items():
+                if param.startswith("gnn."):
+                    renamed_state_dict[param.replace("gnn.", "")] = value
+            graph_encoder.load_state_dict(renamed_state_dict, strict=True)
+            print(f"load graph encoder from {args.graph_encoder_ckpt}")
+        else:
+            raise NotImplementedError(
+                f"Please provide a valid graph encoder checkpoint. {args.graph_encoder_ckpt} is not supported."
+            )
 
         ln_graph = LayerNorm(args.gnn_hidden_dim)
 
