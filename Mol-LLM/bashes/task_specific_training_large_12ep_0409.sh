@@ -1,8 +1,9 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
-projector_type=$2
+gnn=$2
 modality=$3
 task=$4
+projector_type=qformer
 max_epochs=12
 total_batch_size=88
 
@@ -20,10 +21,10 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=${task}_${projector_type}_${modality}_12ep_0318 \
+filename=${task}_${projector_type}_${modality}_12ep_0409 \
 data.data_tag=${task}_0219 \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
-gnn=moleculeSTM \
+gnn=${gnn} \
 gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
 trainer=mistral7b_80gb \
 trainer.max_epochs=${max_epochs} \
