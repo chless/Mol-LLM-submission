@@ -400,19 +400,21 @@ class Blip2Stage3(pl.LightningModule):
             outputs.update(metrics)
 
             if "graph_avg_norm" in outputs:
-                graph_avg_norm = outputs.pop("graph_avg_norm")
-                if self.args.molpo_batch_division == 2:
-                    chosen_graph_avg_norm = graph_avg_norm[:len_tuple]
-                    reject_graph_avg_norm = graph_avg_norm[len_tuple:]
-                elif self.args.molpo_batch_division == 3:
-                    sft_graph_avg_norm = graph_avg_norm[:len_tuple]
-                    chosen_graph_avg_norm = graph_avg_norm[len_tuple : 2 * len_tuple]
-                    reject_graph_avg_norm = graph_avg_norm[2 * len_tuple :]
+                graph_keys = ["graph_avg_norm", "moltoken_avg_norm"]
+                for k in graph_keys:
+                    avg_norm = outputs.pop("k")
+                    if self.args.molpo_batch_division == 2:
+                        chosen_avg_norm = avg_norm[:len_tuple]
+                        reject_avg_norm = avg_norm[len_tuple:]
+                    elif self.args.molpo_batch_division == 3:
+                        sft_avg_norm = avg_norm[:len_tuple]
+                        chosen_avg_norm = avg_norm[len_tuple : 2 * len_tuple]
+                        reject_avg_norm = avg_norm[2 * len_tuple :]
 
-                    outputs["graph_avg_norm/sft"] = sft_graph_avg_norm
+                        outputs[f"{k}/sft"] = sft_avg_norm
 
-                outputs["graph_avg_norm/chosen"] = chosen_graph_avg_norm
-                outputs["graph_avg_norm/reject"] = reject_graph_avg_norm
+                    outputs[f"{k}/chosen"] = chosen_avg_norm
+                    outputs[f"{k}/reject"] = reject_avg_norm
 
         self.log(
             "lr",
