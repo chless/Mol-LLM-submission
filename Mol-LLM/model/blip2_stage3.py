@@ -240,7 +240,6 @@ class Blip2Stage3(pl.LightningModule):
         is_train=True,
         molpo_batch_division=2,
     ):
-        metrics = {}
         out = concatenated_forward(
             all_logits=logits,
             all_labels=labels,
@@ -331,6 +330,7 @@ class Blip2Stage3(pl.LightningModule):
         if torch.isnan(loss):
             assert not torch.isnan(loss), "loss is nan"
 
+        metrics = {}
         metrics[f"rewards/chosen"] = chosen_rewards.cpu()
         metrics[f"rewards/rejected"] = rejected_rewards.cpu()
         metrics[f"rewards/accuracies"] = (
@@ -398,6 +398,21 @@ class Blip2Stage3(pl.LightningModule):
                     molpo_batch_division=self.args.molpo_batch_division,
                 )
             outputs.update(metrics)
+
+            if "graph_avg_norm" in outputs:
+                graph_avg_norm = outputs.pop("graph_avg_norm")
+                if self.args.molpo_batch_division == 2:
+                    chosen_graph_avg_norm = graph_avg_norm[:len_tuple]
+                    reject_graph_avg_norm = graph_avg_norm[len_tuple:]
+                elif self.args.molpo_batch_division == 3:
+                    sft_graph_avg_norm = graph_avg_norm[:len_tuple]
+                    chosen_graph_avg_norm = graph_avg_norm[len_tuple : 2 * len_tuple]
+                    reject_graph_avg_norm = graph_avg_norm[2 * len_tuple :]
+
+                    outputs["graph_avg_norm/sft"] = sft_graph_avg_norm
+
+                outputs["graph_avg_norm/chosen"] = chosen_graph_avg_norm
+                outputs["graph_avg_norm/reject"] = reject_graph_avg_norm
 
         self.log(
             "lr",
