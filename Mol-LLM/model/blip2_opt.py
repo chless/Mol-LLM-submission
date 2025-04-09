@@ -80,24 +80,19 @@ class Blip2OPT(Blip2Base):
         >>> model = load_model("blip2", "pretrain")
     """
 
-    def __init__(
-        self,
-        bert_name,
-        gin_num_layers,
-        gin_hidden_dim,
-        gin_drop_ratio,
-        tune_gnn=False,
-        num_query_token=32,
-        cross_attention_freq=2,
-        tune_llm="freeze",
-        peft_dir="",
-        llm_model="facebook/galactica-1.3b",
-        prompt="",  # TODO: remove. currently LLM classes not use prompt from args.prompt
-        args=None,
-    ):
+    def __init__(self, args=None):
         super().__init__()
         self.args = args
+        bert_name = args.bert_name
+        tune_gnn = args.tune_gnn
+        num_query_token = args.num_query_token
+        cross_attention_freq = args.cross_attention_freq
+        tune_llm = args.tune_llm
+        peft_dir = args.peft_dir
+        llm_model = args.llm_model
+        prompt = args.prompt
         self.peft_dir = peft_dir
+        gnn_hidden_dim = args.gnn_hidden_dim
 
         # initialize opt model
         self.llm_tokenizer = AutoTokenizer.from_pretrained(
@@ -155,9 +150,7 @@ class Blip2OPT(Blip2Base):
             )
 
         if "graph" in self.args.mol_representation:
-            self.graph_encoder, self.ln_graph = self.init_graph_encoder(
-                gin_num_layers, gin_hidden_dim, gin_drop_ratio, args
-            )
+            self.graph_encoder, self.ln_graph = self.init_graph_encoder(args)
 
             self.tune_gnn = tune_gnn
             if not tune_gnn:
@@ -173,7 +166,7 @@ class Blip2OPT(Blip2Base):
                 self.Qformer, self.query_tokens = self.init_Qformer(
                     bert_name,
                     num_query_token,
-                    gin_hidden_dim,
+                    gnn_hidden_dim,
                     cross_attention_freq,
                     bert_num_hidden_layers=args.bert_num_hidden_layers,
                 )
@@ -192,7 +185,7 @@ class Blip2OPT(Blip2Base):
             elif self.args.projector_type == "mlp":
                 # build self.opt_proj with single layers
                 self.opt_proj = nn.Linear(
-                    gin_hidden_dim, self.llm_model.config.hidden_size
+                    gnn_hidden_dim, self.llm_model.config.hidden_size
                 )
 
     def get_lora_target_modules(self):
@@ -324,11 +317,13 @@ class Blip2OPT(Blip2Base):
             is_mol_token = batch["is_mol_token"]
 
             input_embeds = self.llm_model.get_input_embeddings()(input_ids)
-            input_embeds = self.inject_graph_embeds2input_embeds(
-                input_embeds=input_embeds,
-                is_mol_token=is_mol_token,
-                # graphs=graphs,
-                graphs=(graphs, additional_graphs),
+            input_embeds, graph_avg_norm, moltoken_avg_norm = (
+                self.inject_graph_embeds2input_embeds(
+                    input_embeds=input_embeds,
+                    is_mol_token=is_mol_token,
+                    # graphs=graphs,
+                    graphs=(graphs, additional_graphs),
+                )
             )
 
             outputs = self.llm_model(
@@ -349,6 +344,8 @@ class Blip2OPT(Blip2Base):
             "loss": outputs.loss,
             "instance_loss": outputs.instance_loss,
             "logits": outputs.logits,
+            "graph_avg_norm": graph_avg_norm,
+            "moltoken_avg_norm": moltoken_avg_norm,
         }
         return results
 
@@ -389,6 +386,9 @@ class Blip2OPT(Blip2Base):
             if not self.tune_gnn:
                 mol_embeds = mol_embeds.detach()
             mol_embeds = self.ln_graph(mol_embeds, mol_masks)
+            graph_embedding = mol_embeds[:, 0, :]
+            graph_avg_norm = torch.norm(graph_embedding, p=1, dim=-1)
+
             if self.args.projector_type == "qformer":
                 query_tokens = self.query_tokens.expand(mol_embeds.shape[0], -1, -1)
                 query_output = self.Qformer.bert(
@@ -402,7 +402,8 @@ class Blip2OPT(Blip2Base):
                 mol_tokens = self.opt_proj(mol_embeds)
             mol_token_sequence.append(mol_tokens)
 
-        mol_tokens = torch.cat(mol_token_sequence, dim=1)
+            mol_tokens = torch.cat(mol_token_sequence, dim=1)
+            moltoken_avg_norm = torch.norm(mol_tokens, p=1, dim=-1).mean(1)
 
         num_mol_tokens_per_sample = is_mol_token.sum(dim=1)  # Shape: (batch_size,)
         if (num_mol_tokens_per_sample > 0).any():
@@ -423,7 +424,7 @@ class Blip2OPT(Blip2Base):
                 batch_indices, mol_token_indices, :
             ]
 
-        return input_embeds
+        return input_embeds, graph_avg_norm, moltoken_avg_norm
 
     @torch.no_grad()
     def generate(
@@ -463,10 +464,12 @@ class Blip2OPT(Blip2Base):
             assert (
                 is_mol_token is not None
             ), "is_mol_token should be provided for graph representation"
-            input_embeds = self.inject_graph_embeds2input_embeds(
-                input_embeds=input_embeds,
-                is_mol_token=is_mol_token,
-                graphs=graphs,
+            input_embeds, graph_avg_norm, moltoken_avg_norm = (
+                self.inject_graph_embeds2input_embeds(
+                    input_embeds=input_embeds,
+                    is_mol_token=is_mol_token,
+                    graphs=graphs,
+                )
             )
 
         outputs = self.llm_model.generate(

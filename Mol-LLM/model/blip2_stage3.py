@@ -90,20 +90,7 @@ class Blip2Stage3(pl.LightningModule):
         else:
             raise NotImplementedError()
 
-        self.blip2model = blip2model(
-            args.bert_name,
-            args.gin_num_layers,
-            args.gin_hidden_dim,
-            args.drop_ratio,
-            args.tune_gnn,
-            args.num_query_token,
-            args.cross_attention_freq,
-            args.tune_llm,
-            args.peft_dir,
-            args.llm_model,
-            args.prompt,
-            args,
-        )
+        self.blip2model = blip2model(args)
         self.tokenizer = self.blip2model.init_tokenizer()
         self.save_hyperparameters(args)
 
@@ -286,7 +273,6 @@ class Blip2Stage3(pl.LightningModule):
             sft_loss = (sft_instance_loss * sft_loss_mask.sum(-1))[
                 sft_loss_mask.sum(-1) > 0
             ].sum() / sft_loss_mask.sum()
-
 
         # calculate molpo loss
         loss_molpo, losses_molpo = molpo_loss(

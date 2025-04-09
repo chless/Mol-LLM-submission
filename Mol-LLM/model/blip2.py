@@ -18,6 +18,7 @@ from lavis.models.base_model import BaseModel
 from lavis.models.blip2_models.Qformer import BertConfig, BertLMHeadModel
 from transformers import BertTokenizer
 from model.gin_model import GNN, GNN_MoleculeSTM
+from model.tokenGT import BERTTokenGT
 
 
 class Blip2Base(BaseModel):
@@ -74,10 +75,8 @@ class Blip2Base(BaseModel):
         return Qformer, query_tokens
 
     @classmethod
-    def init_graph_encoder(cls, gin_num_layers, gin_hidden_dim, gin_drop_ratio, args):
-
+    def init_graph_encoder(cls, args):
         if "MoleculeSTM" in args.graph_encoder_ckpt:
-            gnn_class = GNN_MoleculeSTM
             if args.graph_encoder_ckpt is not None:
                 ckpt = torch.load(
                     args.graph_encoder_ckpt, map_location=torch.device("cpu")
@@ -87,18 +86,38 @@ class Blip2Base(BaseModel):
                     if k.startswith("molecule_node_model."):
                         renamed_state_dict[k.replace("molecule_node_model.", "")] = v
                 ckpt = renamed_state_dict
+        elif "gine_custom" in args.graph_encoder_ckpt:
+            raise NotImplementedError(
+                "Custom GINE model is not supported yet. Please use the default GINE model."
+            )
+        elif "tokengt_custom" in args.graph_encoder_ckpt:
+            raise NotImplementedError(
+                "Custom TokenGT model is not supported yet. Please use the default TokenGT model."
+            )
         else:
-            gnn_class = GNN
             ckpt = None
 
-        graph_encoder = gnn_class(
-            num_layer=gin_num_layers,
-            emb_dim=gin_hidden_dim,
-            gnn_type="gin",
-            drop_ratio=gin_drop_ratio,
-            JK=args.gnn_jk,
-            args=args,
-        )
+        if args.gnn_type == "gine":
+            graph_encoder = GNN_MoleculeSTM(
+                num_layer=args.gin_num_layers,
+                emb_dim=args.gnn_hidden_dim,
+                gnn_type="gin",
+                drop_ratio=args.gin_drop_ratio,
+                JK=args.gnn_jk,
+                args=args,
+            )
+        elif args.gnn_type == "tokengt":
+            graph_encoder = BERTTokenGT(
+                input_feat_dim=args.input_feat_dim,
+                hidden_dim=args.gnn_hidden_dim,
+                num_layers=args.num_layers,
+                num_heads=args.num_heads,
+                method=args.method,
+                d_p=args.d_p,
+                d_e=args.d_e,
+                use_graph_token=args.use_graph_token,
+                max_position_embeddings=args.max_position_embeddings,
+            )
 
         if ckpt is not None:
             print(f"load graph encoder from {args.graph_encoder_ckpt}")
@@ -109,7 +128,23 @@ class Blip2Base(BaseModel):
                 print(missing_keys)
                 print(unexpected_keys)
 
-        ln_graph = LayerNorm(gin_hidden_dim)
+        ln_graph = LayerNorm(args.gnn_hidden_dim)
+
+        # qm9_pretrained = torch.load("gnn_ablation/all_except_lumo_homo_gap_scaled/GM_GM_-_-/lightning_logs/version_0/checkpoints/best-model.ckpt")['state_dict']
+        # qm9_renamed_gnn_state_dict = {}
+        # qm9_renamed_lngraph_state_dict = {}
+
+        # for name, param in qm9_pretrained.items():
+        #     if name.startswith("mlp."):
+        #         continue
+        #     if name.startswith('ln_graph.'):
+        #         qm9_renamed_lngraph_state_dict[name.replace("ln_graph.", "")] = param
+        #         continue
+        #     renamed = name.replace("gin.", "")
+        #     qm9_renamed_gnn_state_dict[renamed] = param
+
+        # graph_encoder.load_state_dict(qm9_renamed_gnn_state_dict, strict=True)
+        # ln_graph.load_state_dict(qm9_renamed_lngraph_state_dict, strict=True)
 
         return graph_encoder, ln_graph
 

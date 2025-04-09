@@ -38,35 +38,8 @@ class Blip2Mistral(Blip2OPT):
         >>> model = load_model("blip2", "pretrain")
     """
 
-    def __init__(
-        self,
-        bert_name,
-        gin_num_layers,
-        gin_hidden_dim,
-        gin_drop_ratio,
-        tune_gnn=False,
-        num_query_token=32,
-        cross_attention_freq=2,
-        tune_llm="freeze",
-        peft_dir="",
-        llm_model="facebook/galactica-1.3b",
-        prompt="",  # TODO: remove. currently LLM classes not use prompt from args.prompt
-        args=None,
-    ):
-        super().__init__(
-            bert_name=bert_name,
-            gin_num_layers=gin_num_layers,
-            gin_hidden_dim=gin_hidden_dim,
-            gin_drop_ratio=gin_drop_ratio,
-            tune_gnn=tune_gnn,
-            num_query_token=num_query_token,
-            cross_attention_freq=cross_attention_freq,
-            tune_llm=tune_llm,
-            peft_dir=peft_dir,
-            llm_model=llm_model,
-            prompt=prompt,
-            args=args,
-        )
+    def __init__(self, args):
+        super().__init__(args=args)
         self.system_prompt = "You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation."
 
     def set_llm_model(self, llm_model):
