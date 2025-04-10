@@ -59,7 +59,6 @@ optimizer: adamw
 log_every_n_steps: 50
 
 val_check_interval: 0.20
-check_val_every_n_epoch: 1
 trainset_resize: -1
 valset_resize: -1
 testset_resize: -1

@@ -119,7 +119,6 @@ def main(cfg):
         "max_steps": cfg.max_steps,
         "max_epochs": cfg.max_epochs,
         "val_check_interval": cfg.val_check_interval,
-        "check_val_every_n_epoch": cfg.check_val_every_n_epoch,
         "accumulate_grad_batches": cfg.accumulate_grad_batches,
         "log_every_n_steps": cfg.log_every_n_steps,
     }
