@@ -128,6 +128,8 @@ class Blip2Base(BaseModel):
                     renamed_state_dict[param.replace("gnn.", "")] = value
             graph_encoder.load_state_dict(renamed_state_dict, strict=True)
             print(f"load graph encoder from {args.graph_encoder_ckpt}")
+        elif "scratch" in args.graph_encoder_ckpt:
+            pass
         else:
             raise NotImplementedError(
                 f"Please provide a valid graph encoder checkpoint. {args.graph_encoder_ckpt} is not supported."
