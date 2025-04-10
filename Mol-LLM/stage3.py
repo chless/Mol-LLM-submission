@@ -121,6 +121,7 @@ def main(cfg):
         "val_check_interval": cfg.val_check_interval,
         "accumulate_grad_batches": cfg.accumulate_grad_batches,
         "log_every_n_steps": cfg.log_every_n_steps,
+        "gradient_clip_val": cfg.gradient_clip_val,
     }
 
     if cfg.skip_sanity_check:
