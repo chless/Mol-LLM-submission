@@ -117,9 +117,21 @@ class Blip2Base(BaseModel):
                     print(missing_keys)
                     print(unexpected_keys)
         elif "Custom_gnn_models/GINE" in args.graph_encoder_ckpt:
-            raise NotImplementedError(
-                "Custom GINE model is not supported yet. Please use the default GINE model."
-            )
+            ckpt = torch.load(args.graph_encoder_ckpt, map_location=torch.device("cpu"))
+            renamed_state_dict = {}
+            for param, value in ckpt["state_dict"].items():
+                if param.startswith("gnn."):
+                    renamed_state_dict[param.replace("gnn.", "")] = value
+            graph_encoder.load_state_dict(renamed_state_dict, strict=True)
+            print(f"load graph encoder from {args.graph_encoder_ckpt}")
+        elif "Custom_gnn_models/TokenGT" in args.graph_encoder_ckpt:
+            ckpt = torch.load(args.graph_encoder_ckpt, map_location=torch.device("cpu"))
+            renamed_state_dict = {}
+            for param, value in ckpt["state_dict"].items():
+                if param.startswith("gnn."):
+                    renamed_state_dict[param.replace("gnn.", "")] = value
+            graph_encoder.load_state_dict(renamed_state_dict, strict=True)
+            print(f"load graph encoder from {args.graph_encoder_ckpt}")
         elif "Custom_gnn_models/TokenGT" in args.graph_encoder_ckpt:
             ckpt = torch.load(args.graph_encoder_ckpt, map_location=torch.device("cpu"))
             renamed_state_dict = {}
