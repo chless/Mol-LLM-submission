@@ -2,14 +2,12 @@ export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 gnn=$2
 modality=$3
-task=$4
-graph_encoder_ckpt=$5
+task=ablation
 gradient_clip_val=0.5
 projector_type=qformer
 max_epochs=12
-total_batch_size=88
-trained_tokengt_ckpt=/data/all_checkpoints/Custom_gnn_models/TokenGT/best-model.ckpt
-moleculeSTM_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth
+total_batch_size=256
+
 
 tasks=(
     "smol-property_prediction-hiv"
@@ -25,8 +23,8 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=${task}_${modality}_${gnn}_grad-clip-${gradient_clip_val}_12ep_0409 \
-data.data_tag=${task}_0219 \
+filename=${task}_${modality}_${gnn}_grad-clip-${gradient_clip_val}_12ep_0411 \
+data.data_tag=${task}_0411 \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=${gnn} \
 gnn.graph_encoder_ckpt=${graph_encoder_ckpt} \
