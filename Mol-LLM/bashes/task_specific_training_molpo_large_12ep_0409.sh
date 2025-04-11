@@ -1,7 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
-replace_ratio=$2
-task=qm9_homo
+task=$2
+replace_ratio=$3
 rejected_lambda=0.5
 modality=string+graph
 projector_type=qformer
@@ -25,8 +25,8 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=${task}_molpo_ratio-${replace_ratio}_rej-${rejected_lambda}_${gnn}_12ep_0409 \
-data.data_tag=${task}_0405_molpo-ratio-${replace_ratio} \
+filename=${task}_molpo-replace-${replace_ratio}_rej-${rejected_lambda}_${gnn}_12ep_0409 \
+data.data_tag=${task}_0405_molpo-replace-${replace_ratio} \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=${gnn} \
 gnn.graph_encoder_ckpt=${graph_encoder_ckpt} \
