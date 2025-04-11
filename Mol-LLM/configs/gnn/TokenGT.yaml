@@ -8,5 +8,5 @@ d_e: 64
 use_graph_token: True
 max_position_embeddings: 102
 tune_gnn: true
-graph_encoder_ckpt: None
+graph_encoder_ckpt: /data/all_checkpoints/Custom_gnn_models/TokenGT/best-model.ckpt
 gnn_type: tokengt
