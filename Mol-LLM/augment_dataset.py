@@ -852,6 +852,7 @@ def map_by_substructure_replacement(
     data_point, replace_ratio=0.1, num_rejected_graphs=5
 ):
 
+    replace_ratio = min(replace_ratio, 1.0)
     task = data_point["task"]
     input_mol_string = data_point["input_mol_string"]
 
@@ -860,9 +861,6 @@ def map_by_substructure_replacement(
         .replace("</SELFIES>", "")
         .replace(" ", "")
     )
-    if task in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS + MOL2TEXT_BENCHMARKS:
-        replace_ratio *= 2
-        replace_ratio = min(replace_ratio, 1.0)
 
     for i in range(num_rejected_graphs):
         if task in REGRESSION_BENCHMARKS:
