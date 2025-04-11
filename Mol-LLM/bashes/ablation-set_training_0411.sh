@@ -1,13 +1,13 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
-gnn=$2
-modality=$3
+gnn=gine_custom
+modality=$2
 task=ablation
 gradient_clip_val=0.5
 projector_type=qformer
 max_epochs=12
 total_batch_size=256
-
+graph_encoder_ckpt=/data/all_checkpoints/Custom_gnn_models/GINE/best-model.ckpt
 
 tasks=(
     "smol-property_prediction-hiv"
