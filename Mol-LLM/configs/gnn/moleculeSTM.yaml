@@ -1,5 +1,5 @@
 gnn_hidden_dim: 300
-gin_num_layers: 5
+gnn_num_layers: 5
 drop_ratio: 0.0
 tune_gnn: true
 used_gnn_layer: -1

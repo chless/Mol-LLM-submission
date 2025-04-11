@@ -79,10 +79,10 @@ class Blip2Base(BaseModel):
 
         if args.gnn_type == "gine":
             graph_encoder = GNN_MoleculeSTM(
-                num_layer=args.gin_num_layers,
+                num_layer=args.gnn_num_layers,
                 emb_dim=args.gnn_hidden_dim,
                 gnn_type="gin",
-                drop_ratio=args.gin_drop_ratio,
+                drop_ratio=args.drop_ratio,
                 JK=args.gnn_jk,
                 args=args,
             )
