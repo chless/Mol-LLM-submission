@@ -1,17 +1,15 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
-gnn=$2
+replace_ratio=$2
+task=qm9_homo
+rejected_lambda=0.5
 modality=string+graph
-task=$3
-rejected_lambda=$4
-molpo_batch_division=$5
-graph_encoder_ckpt=$6
-replace_ratio=$7
 projector_type=qformer
 max_epochs=12
 total_batch_size=88
-trained_tokengt_ckpt=/data/all_checkpoints/Custom_gnn_models/TokenGT/best-model.ckpt
-moleculestm_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth
+gnn=TokenGT
+graph_encoder_ckpt=/data/all_checkpoints/Custom_gnn_models/TokenGT/best-model.ckpt
+
 
 tasks=(
     "smol-property_prediction-hiv"
@@ -41,6 +39,5 @@ trainer.projector_type=${projector_type} \
 trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
 trainer.rejected_lambda=${rejected_lambda} \
-trainer.molpo_batch_division=${molpo_batch_division} \
 trainer.every_n_epochs=0
 

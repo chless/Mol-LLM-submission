@@ -1,15 +1,13 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
-gnn=$2
-modality=$3
-task=$4
-graph_encoder_ckpt=$5
+modality=$2
+task=$3
 gradient_clip_val=0.5
 projector_type=qformer
 max_epochs=12
 total_batch_size=88
-trained_tokengt_ckpt=/data/all_checkpoints/Custom_gnn_models/TokenGT/best-model.ckpt
-moleculeSTM_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth
+gnn=TokenGT
+graph_encoder_ckpt=/data/all_checkpoints/Custom_gnn_models/TokenGT/best-model.ckpt
 
 tasks=(
     "smol-property_prediction-hiv"
