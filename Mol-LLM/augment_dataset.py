@@ -939,7 +939,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--num_procs", type=int, default=10)
     parser.add_argument("--num_rejected_graphs", type=int, default=20)
-    parser.add_argument("--data_tag", type=str, default="molpo")
+    parser.add_argument("--data_tag", type=str, default="")
 
     args = parser.parse_args()
 
@@ -958,5 +958,5 @@ if __name__ == "__main__":
     mapped_dataset = dataset.map(
         map_by_substructure_replacement, batched=False, num_proc=args.num_procs
     )
-    mapped_dataset.save_to_disk(dataset_path + "_" + args.data_tag)
-    print("saved augmented dataset:", dataset_path + args.data_tag)
+    mapped_dataset.save_to_disk(dataset_path + "_" + f"molpo-replace-{args.replace_ratio}" + args.data_tag)
+    print("saved augmented dataset:", dataset_path + f"molpo-replace-{args.replace_ratio}" + args.data_tag)
