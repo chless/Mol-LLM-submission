@@ -6,6 +6,7 @@ task=$3
 rejected_lambda=$4
 molpo_batch_division=$5
 graph_encoder_ckpt=$6
+replace_ratio=$7
 projector_type=qformer
 max_epochs=12
 total_batch_size=88
@@ -26,8 +27,8 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=${task}_molpo_rej-${rejected_lambda}_${gnn}_12ep_0409 \
-data.data_tag=${task}_0405_molpo \
+filename=${task}_molpo_ratio-${replace_ratio}_rej-${rejected_lambda}_${gnn}_12ep_0409 \
+data.data_tag=${task}_0405_molpo-ratio-${replace_ratio} \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=${gnn} \
 gnn.graph_encoder_ckpt=${graph_encoder_ckpt} \
