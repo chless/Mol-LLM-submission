@@ -38,5 +38,6 @@ trainer.projector_type=${projector_type} \
 trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
 trainer.rejected_lambda=${rejected_lambda} \
+trainer.val_check_interval=1.0 \
 trainer.every_n_epochs=0
 
