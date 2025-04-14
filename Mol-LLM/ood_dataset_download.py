@@ -139,7 +139,8 @@ def prepare_data_instance(
     system_prompt,
     mol_token="<mol>",
     num_query_tokens=32,
-    list_reject_mol=None
+    list_reject_mol=None,
+    num_reject=-1,
 ):
 
     label = wrap_label(label, task=task)
@@ -208,7 +209,10 @@ def prepare_data_instance(
         "target_text": formatted_target_text,
     }
     if list_reject_mol is not None:
-        for i, reject_mol in enumerate(list_reject_mol):
+        for i in range(len(list_reject_mol)):
+            reject_mol = list_reject_mol[i]
+            if num_reject > 0 and len(list_reject_mol) < num_reject:
+                reject_mol = list_reject_mol[i % len(list_reject_mol)]
             graph = mol2graph(reject_mol)
             additional_graph = graph
             data.update(
@@ -224,7 +228,7 @@ def prepare_data_instance(
     return data
 
 
-def get_data_list(list_mol, list_label, task, instruction_templates, list_reject_mol=None):
+def get_data_list(list_mol, list_label, task, instruction_templates, list_reject_mol=None, num_reject=-1):
     list_data = []
     iter_bar = tqdm(range(len(list_mol)))
 
@@ -236,6 +240,7 @@ def get_data_list(list_mol, list_label, task, instruction_templates, list_reject
             instruction_templates=instruction_templates,
             system_prompt=system_prompt,
             list_reject_mol=list_reject_mol,
+            num_reject=num_reject,
         )
         list_data.append(data)
     return list_data
