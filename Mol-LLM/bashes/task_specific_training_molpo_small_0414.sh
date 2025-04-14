@@ -6,8 +6,9 @@ modality=string+graph
 projector_type=qformer
 max_epochs=50
 total_batch_size=32
-gnn=TokenGT
-graph_encoder_ckpt=/data/all_checkpoints/Custom_gnn_models/TokenGT/best-model.ckpt
+gradient_clip_val=0.5
+gnn=gine_custom
+graph_encoder_ckpt=/data/all_checkpoints/Custom_gnn_models/GINE/best-model.ckpt
 
 
 tasks=(
@@ -39,5 +40,6 @@ trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
 trainer.rejected_lambda=${rejected_lambda} \
 trainer.val_check_interval=1.0 \
+trainer.gradient_clip_val=${gradient_clip_val} \
 trainer.every_n_epochs=0
 
