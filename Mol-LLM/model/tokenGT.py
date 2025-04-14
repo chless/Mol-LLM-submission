@@ -202,7 +202,7 @@ class GraphFeatureTokenizer(torch.nn.Module):
         adj[edge_index[0], edge_index[1]] = 1.0
         degree = adj.sum(dim=1)
         laplacian = torch.diag(degree) - adj
-        _, eigvecs = torch.linalg.eigh(laplacian)
+        _, eigvecs = torch.linalg.eigh(laplacian.double())
         return eigvecs
 
     def prepare_tokens(
