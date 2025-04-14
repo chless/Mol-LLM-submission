@@ -139,6 +139,7 @@ def prepare_data_instance(
     system_prompt,
     mol_token="<mol>",
     num_query_tokens=32,
+    list_reject_mol=None
 ):
 
     label = wrap_label(label, task=task)
@@ -206,10 +207,24 @@ def prepare_data_instance(
         "prompt_text": formatted_prompt_text,
         "target_text": formatted_target_text,
     }
+    if list_reject_mol is not None:
+        for i, reject_mol in enumerate(list_reject_mol):
+            graph = mol2graph(reject_mol)
+            additional_graph = graph
+            data.update(
+                {
+                    f"{i}-th_rejected_x": graph["node_feat"],
+                    f"{i}-th_rejected_edge_index": graph["edge_index"],
+                    f"{i}-th_rejected_edge_attr": graph["edge_feat"],
+                    f"{i}-th_rejected_additional_x": additional_graph["node_feat"],
+                    f"{i}-th_rejected_additional_edge_index": additional_graph["edge_index"],
+                    f"{i}-th_rejected_additional_edge_attr": additional_graph["edge_feat"],
+                }
+            )
     return data
 
 
-def get_data_list(list_mol, list_label, task, instruction_templates):
+def get_data_list(list_mol, list_label, task, instruction_templates, list_reject_mol=None):
     list_data = []
     iter_bar = tqdm(range(len(list_mol)))
 
@@ -220,6 +235,7 @@ def get_data_list(list_mol, list_label, task, instruction_templates):
             task=task,
             instruction_templates=instruction_templates,
             system_prompt=system_prompt,
+            list_reject_mol=list_reject_mol,
         )
         list_data.append(data)
     return list_data
