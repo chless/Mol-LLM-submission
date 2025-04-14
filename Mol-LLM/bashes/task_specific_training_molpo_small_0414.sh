@@ -1,13 +1,14 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
-rejected_lambda=$2
-anc_rejected_weight=$3
-molpo_batch_division=$4
+tag=$2
+rejected_lambda=0.5
 modality=string+graph
 projector_type=qformer
-task=qm9_homo
-max_epochs=12
-total_batch_size=88
+max_epochs=50
+total_batch_size=32
+gnn=TokenGT
+graph_encoder_ckpt=/data/all_checkpoints/Custom_gnn_models/TokenGT/best-model.ckpt
+
 
 tasks=(
     "smol-property_prediction-hiv"
@@ -23,11 +24,11 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=${task}_molpo_rej-${rejected_lambda}_12ep_0405 \
-data.data_tag=${task}_0405_molpo \
+filename=${tag}_rej-${rejected_lambda}_${gnn} \
+data.data_tag=${tag} \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
-gnn=moleculeSTM \
-gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
+gnn=${gnn} \
+gnn.graph_encoder_ckpt=${graph_encoder_ckpt} \
 trainer=mistral7b_80gb_molpo \
 trainer.max_epochs=${max_epochs} \
 trainer.selfies_token_path=Mol-LLM/model/selfies_dict.txt \
@@ -37,8 +38,5 @@ trainer.projector_type=${projector_type} \
 trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
 trainer.rejected_lambda=${rejected_lambda} \
-trainer.anc_rejected_weight=${anc_rejected_weight} \
-trainer.molpo_batch_division=${molpo_batch_division} \
-trainer.apply_preference_system_prompt=true \
 trainer.every_n_epochs=0
 
