@@ -69,6 +69,7 @@ test_on_trainset: false
 mol_representation: string+graph
 log_attn_score: true
 eval_modality_util: null
+tune_gnn: true
 
 # molpo
 train_molpo: true

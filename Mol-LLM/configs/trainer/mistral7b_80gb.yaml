@@ -70,6 +70,7 @@ test_on_trainset: false
 mol_representation: string_only
 log_attn_score: true
 eval_modality_util: null
+tune_gnn: true
 
 # molpo
 train_molpo: false
