@@ -1,11 +1,11 @@
 export TOKENIZERS_PARALLELISM=false;
-file_name='MT_mistral7b_string+graph_12ep_0304'
+file_name='MT_mistral7b_string+graph_12ep_0415'
 gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
-data.data_tag=gap_fixed_0224 \
+data.data_tag=3.3M_0415 \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=moleculeSTM \
 gnn.graph_encoder_ckpt=/data/all_checkpoints/MoleculeSTM/molecule_model.pth \
