@@ -19,7 +19,7 @@ from lavis.models.blip2_models.Qformer import BertConfig, BertLMHeadModel
 from transformers import BertTokenizer
 from model.gin_model import GNN, GNN_MoleculeSTM
 from model.tokenGT import BERTTokenGT
-
+from model.gine_tokengt import GINE_TokenGT
 
 class Blip2Base(BaseModel):
     @classmethod
@@ -98,6 +98,11 @@ class Blip2Base(BaseModel):
                 use_graph_token=args.use_graph_token,
                 max_position_embeddings=args.max_position_embeddings,
             )
+        elif args.gnn_type == "gine_tokengt":
+            graph_encoder = GINE_TokenGT(args)
+            ln_graph = LayerNorm(args.gine.gnn_hidden_dim)
+
+            return graph_encoder, ln_graph
 
         if "MoleculeSTM" in args.graph_encoder_ckpt:
             if args.graph_encoder_ckpt is not None:
