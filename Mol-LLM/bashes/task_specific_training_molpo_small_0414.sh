@@ -1,6 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 tag=$2
+molpo_weight=$3
 rejected_lambda=0.5
 modality=string+graph
 projector_type=qformer
@@ -25,7 +26,7 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=${tag}_rej-${rejected_lambda}_${gnn} \
+filename=${tag}_rej-${rejected_lambda}-weight-${molpo_weight}_${gnn} \
 data.data_tag=${tag} \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=${gnn} \
@@ -41,5 +42,7 @@ trainer.total_batch_size=${total_batch_size} \
 trainer.rejected_lambda=${rejected_lambda} \
 trainer.val_check_interval=1.0 \
 trainer.gradient_clip_val=${gradient_clip_val} \
+trainer.anc_rejected_weight=$molpo_weight \
+trainer.molpo_weight=$molpo_weight \
 trainer.every_n_epochs=0
 
