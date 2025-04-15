@@ -1,4 +1,4 @@
-raw_data_root: 'your data path'
+raw_data_root: /data/data/Mol-LLM-v7.1
 data_tag: 3.3M_0415
 
 
