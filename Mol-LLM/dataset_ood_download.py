@@ -221,14 +221,25 @@ def prepare_data_instance(
                     f"{i}-th_rejected_edge_index": graph["edge_index"],
                     f"{i}-th_rejected_edge_attr": graph["edge_feat"],
                     f"{i}-th_additional_rejected_x": additional_graph["node_feat"],
-                    f"{i}-th_additional_rejected_edge_index": additional_graph["edge_index"],
-                    f"{i}-th_additional_rejected_edge_attr": additional_graph["edge_feat"],
+                    f"{i}-th_additional_rejected_edge_index": additional_graph[
+                        "edge_index"
+                    ],
+                    f"{i}-th_additional_rejected_edge_attr": additional_graph[
+                        "edge_feat"
+                    ],
                 }
             )
     return data
 
 
-def get_data_list(list_mol, list_label, task, instruction_templates, list_reject_mol=None, num_reject=-1):
+def get_data_list(
+    list_mol,
+    list_label,
+    task,
+    instruction_templates,
+    list_reject_mol=None,
+    num_reject=-1,
+):
     list_data = []
     iter_bar = tqdm(range(len(list_mol)))
 
