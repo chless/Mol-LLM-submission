@@ -332,6 +332,14 @@ class Blip2OPT(Blip2Base):
                 return_dict=True,
                 labels=targets,
             )
+            results = {
+                "loss": outputs.loss,
+                "instance_loss": outputs.instance_loss,
+                "logits": outputs.logits,
+                "graph_avg_norm": graph_avg_norm,
+                "moltoken_avg_norm": moltoken_avg_norm,
+            }
+
         else:
             outputs = self.llm_model(
                 input_ids=input_ids,
@@ -339,14 +347,12 @@ class Blip2OPT(Blip2Base):
                 return_dict=True,
                 labels=targets,
             )
+            results = {
+                "loss": outputs.loss,
+                "instance_loss": outputs.instance_loss,
+                "logits": outputs.logits,
+            }
 
-        results = {
-            "loss": outputs.loss,
-            "instance_loss": outputs.instance_loss,
-            "logits": outputs.logits,
-            "graph_avg_norm": graph_avg_norm,
-            "moltoken_avg_norm": moltoken_avg_norm,
-        }
         return results
 
     def debug_pred(self, logits, targets):
