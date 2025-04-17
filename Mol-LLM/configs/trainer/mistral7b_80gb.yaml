@@ -61,9 +61,6 @@ log_every_n_steps: 50
 gradient_clip_val: 0.5
 
 val_check_interval: 0.5
-trainset_resize: -1
-valset_resize: -1
-testset_resize: -1
 test_on_trainset: false
 
 # multimodal training
