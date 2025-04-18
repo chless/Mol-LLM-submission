@@ -1,7 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
-file_name=MT_mistral7b_string+graph_${gnn}_12ep_0418
 gpus=$1
 gnn=$2
+file_name=MT_mistral7b_string+graph_${gnn}_12ep_0418
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
