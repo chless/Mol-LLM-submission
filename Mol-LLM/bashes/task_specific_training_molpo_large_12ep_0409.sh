@@ -1,13 +1,12 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 tag=$2
-rejected_lambda=0.5
+rejected_lambda=1.2
 modality=string+graph
 projector_type=qformer
 max_epochs=12
 total_batch_size=88
-gnn=TokenGT
-graph_encoder_ckpt=/data/all_checkpoints/Custom_gnn_models/TokenGT/best-model.ckpt
+gnn=gine_tokengt
 
 
 tasks=(
@@ -38,5 +37,9 @@ trainer.projector_type=${projector_type} \
 trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
 trainer.rejected_lambda=${rejected_lambda} \
+trainer.min_lr=0.00001 \
+trainer.init_lr=0.0001 \
+trainer.warmup_lr=0.00001 \
+trainer.warmup_epochs=0.25 \
 trainer.every_n_epochs=0
 
