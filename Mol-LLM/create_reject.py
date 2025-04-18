@@ -310,15 +310,13 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset_path", type=str, default='/app2/d4ft-textmol/nonn', help="Path to the dataset")
-    parser.add_argument("--result_path", type=str, default='/app2/d4ft-textmol/smilar_data', help="Path to save the result")
+    parser.add_argument("--dataset_path", type=str, default='/data/data/nonn', help="Path to the dataset")
+    parser.add_argument("--result_path", type=str, default='/data/data/smilar_data', help="Path to save the result")
     
-    # parser.add_argument("--split", type=str, default='train', help="Dataset split")
     parser.add_argument("--split", type=str, default='test', help="Dataset split")
     parser.add_argument("--task", type=str, default='qm9_homo', help="Task name")
     
     parser.add_argument("--n_reject", type=int, default=12, help="Number of rejected molecules to find")
-    # parser.add_argument('--reject_method', type=str, default='structure', choices=['structure', 'matrix', 'rdm'])
     parser.add_argument('--reject_method', type=str, default='rdm', choices=['structure', 'matrix', 'rdm'])
     
     parser.add_argument("--num_proc", type=int, default=32, help="Number of processes for multiprocessing")
