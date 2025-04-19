@@ -235,6 +235,7 @@ class Blip2Stage3(pl.LightningModule):
         self,
         logits: torch.FloatTensor,
         labels: torch.LongTensor,
+        molpo_labels: torch.LongTensor,
         instance_loss: torch.FloatTensor,
         tasks,
         is_train=True,
@@ -242,7 +243,7 @@ class Blip2Stage3(pl.LightningModule):
     ):
         out = concatenated_forward(
             all_logits=logits,
-            all_labels=labels,
+            all_labels=molpo_labels,
             label_pad_token_id=-100,
             instance_loss=instance_loss,
             molpo_batch_division=molpo_batch_division,
@@ -260,8 +261,14 @@ class Blip2Stage3(pl.LightningModule):
         rejected_rewards = self.args.beta * policy_rejected_logps
 
         # calculate sft loss
+        sft_loss_bug = None
         if molpo_batch_division == 2:
-            sft_loss = (sft_instance_loss * chosen_loss_mask.sum(-1))[
+            assert labels.shape[0] % molpo_batch_division == 0, "batch_size(labels.shape[0]) should be divisible by molpo_batch_division"
+            sft_loss_mask = labels[:labels.shape[0]//2, :] != -100
+            sft_loss = (sft_instance_loss * sft_loss_mask.sum(-1))[
+                sft_loss_mask.sum(-1) > 0
+            ].sum() / sft_loss_mask.sum()
+            sft_loss_bug = (sft_instance_loss * chosen_loss_mask.sum(-1))[
                 chosen_loss_mask.sum(-1) > 0
             ].sum() / chosen_loss_mask.sum()
         elif molpo_batch_division == 3:
@@ -342,6 +349,8 @@ class Blip2Stage3(pl.LightningModule):
         metrics[f"logps/rejected"] = policy_rejected_logps.clone().detach().cpu()
 
         metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
+        if sft_loss_bug is not None:
+            metrics[f"sft_loss_bug"] = sft_loss_bug.clone().detach().cpu()
         metrics[f"instance_loss"] = sft_instance_loss.clone().detach().cpu()
         metrics[f"molpo_loss"] = losses_molpo.clone().detach().cpu()
         metrics[f"anchor_loss/rejected"] = anchor_rejected_losses.clone().detach().cpu()
@@ -391,7 +400,8 @@ class Blip2Stage3(pl.LightningModule):
             with compute_loss_context_manager(device_type="cuda"):
                 loss, metrics = self.get_total_molpo_loss(
                     logits=logits,
-                    labels=batch.molpo_labels,
+                    labels=batch.labels,
+                    molpo_labels=batch.molpo_labels,
                     instance_loss=outputs["instance_loss"],
                     tasks=tasks,
                     is_train=True,
@@ -591,7 +601,8 @@ class Blip2Stage3(pl.LightningModule):
             with compute_loss_context_manager(device_type="cuda"):
                 forward_loss, metrics = self.get_total_molpo_loss(
                     logits=forward_logits,
-                    labels=batch.molpo_labels,
+                    labels=batch.labels,
+                    molpo_labels=batch.molpo_labels,
                     tasks=tasks,
                     instance_loss=forward_instance_loss,
                     is_train=False,
