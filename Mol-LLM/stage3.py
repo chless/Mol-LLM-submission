@@ -99,6 +99,7 @@ def main(cfg):
         project=cfg.wandb_project,
         entity=cfg.wandb_entity,
         id=cfg.wandb_id,
+        resume="allow"
     )
 
     tb_logger = TensorBoardLogger(
