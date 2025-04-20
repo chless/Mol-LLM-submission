@@ -11,14 +11,17 @@ gnn=gine_custom
 graph_encoder_ckpt=/data/all_checkpoints/Custom_gnn_models/GINE/best-model.ckpt
 
 tasks=(
+    "smol-property_prediction-bbbp"
+    "smol-property_prediction-clintox"
+    "bace"
+    "smol-property_prediction-esol"
+    "smol-property_prediction-lipo"
     "smol-property_prediction-hiv"
     "smol-property_prediction-sider"
     "chebi-20-mol2text"
-    "smol-molecule_captioning"
     "reagent_prediction"
     "qm9_homo"
     "forward_reaction_prediction"
-    "smol-forward_synthesis"
 )
 
 echo "==============Executing task: $task==============="
