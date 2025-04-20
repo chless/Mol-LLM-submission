@@ -18,19 +18,64 @@ from rdkit.DataStructs import TanimotoSimilarity
 
 
 task2range = {
+    # Classification
+    'bace': {
+        
+    },
+    'smol-property_prediction-bbbp': {
+        
+    },
+    'smol-property_prediction-clintox': {
+        
+    },
+    'smol-property_prediction-hiv': {
+        
+    },
+    'smol-property_prediction-sider': {
+        
+    },
+    
+    # Regression
     'qm9_homo': {
-        'step_size': 0.02,
         'start_value': -0.43,
         'end_value': -0.11,
+        'step_size': 0.02,
+    },
+    'smol-property_prediction-esol': {
+        'start_value': -12,
+        'end_value': 2,
+        'step_size': 0.5,
+    },
+    'smol-property_prediction-lipo': {
+        'start_value': -2,
+        'end_value': 5,
+        'step_size': 0.25,
+    },
+    
+    # forward reaction prediction
+    "forward_reaction_prediction":{
+        
     }
+    
+    # Mol2Text
+    
 }
 
 task_threshold = {
+    
+    # Regression
     'qm9_homo': {
         'structure': [0.4, 0.05, 0.1],
         'matrix': [0, 0],
         # 'rdm': [0.97, 0.92, 0.01],  # cosine similarity
         'rdm': [0.9, 0.8, 0.02],  # 1- wasserstein_distance
+    },
+    
+    'smol-property_prediction-esol': {
+        'structure': [0.4, 0.05, 0.1],
+    },
+    'smol-property_prediction-lipo': {
+        'structure': [0.6, 0.05, 0.1],
     }
 }
 
@@ -73,8 +118,13 @@ def structural_similarity_map(data, dataset, indicies_by_target, target_range, a
     smiles = clean_smiles_text(data['input_mol_string'])
     group_idx = bisect.bisect_left(target_range, clean_target_text(data['target_text'])) - 1
 
+    # candi_indicies = list(chain.from_iterable(
+    #     sublist for i, sublist in enumerate(indicies_by_target) if i != group_idx
+    # ))
+    far = len(target_range) // 3
     candi_indicies = list(chain.from_iterable(
-        sublist for i, sublist in enumerate(indicies_by_target) if i != group_idx
+        sublist for i, sublist in enumerate(indicies_by_target) 
+        if i < group_idx - far or group_idx + far < i
     ))
 
     used_indicies = []
@@ -92,6 +142,7 @@ def structural_similarity_map(data, dataset, indicies_by_target, target_range, a
             sim_score = tanimoto_similarity(smiles, clean_smiles_text(dataset[candi_idx]['input_mol_string']))
             if sim_score > threshold:
                 rejected_data = dataset[candi_idx]
+                data[f"{i}-th_rejected_selfies"] = sf.encoder(clean_smiles_text(dataset[candi_idx]['input_mol_string']))
                 data[f"{i}-th_rejected_x"] = rejected_data["x"]
                 data[f"{i}-th_rejected_edge_index"] = rejected_data["edge_index"]
                 data[f"{i}-th_rejected_edge_attr"] = rejected_data["edge_attr"]
