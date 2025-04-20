@@ -261,12 +261,12 @@ def rdm_similarity_map(data, dataset, indicies_by_target, target_range, args):
 def main(args):
     print(f"Start creating reject molecule for {args.task}")
 
-    args.dataset_path = os.path.join(args.dataset_path, args.split, args.task)
+    dataset_path = os.path.join(args.dataset_path, args.split, args.task)
     
-    args.result_path = os.path.join(args.result_path, args.split, args.reject_method, args.task)
-    os.makedirs(args.result_path, exist_ok=True)
+    result_path = os.path.join(args.result_path, args.split, args.reject_method, args.task)
+    os.makedirs(result_path, exist_ok=True)
 
-    dataset = load_from_disk(args.dataset_path)
+    dataset = load_from_disk(dataset_path)
     # print(dataset[0].keys())
     
     print(f"Loaded dataset with {len(dataset)} samples.")
@@ -300,8 +300,8 @@ def main(args):
         desc="Generating rejected samples"
     )
 
-    new_dataset.save_to_disk(args.result_path)
-    print(f"Saved new dataset with rejected molecules to {args.result_path}")
+    new_dataset.save_to_disk(result_path)
+    print(f"Saved new dataset with rejected molecules to {result_path}")
     
     
     # args.dataset_path = os.path.join(args.dataset_path, args.split, args.task)
