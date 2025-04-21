@@ -21,6 +21,7 @@ from model.gin_model import GNN, GNN_MoleculeSTM
 from model.tokenGT import BERTTokenGT
 from model.gine_tokengt import GINE_TokenGT
 
+
 class Blip2Base(BaseModel):
     @classmethod
     def init_tokenizer(cls):
@@ -68,6 +69,10 @@ class Blip2Base(BaseModel):
             encoder_config.num_hidden_layers = bert_num_hidden_layers
 
         Qformer = BertLMHeadModel.from_pretrained(bert_name, config=encoder_config)
+        # Print some of the parameters of the Qformer
+        for name, param in Qformer.named_parameters():
+            print(f"Parameter name: {name}, Shape: {param.shape}")
+            break  # Print only the first parameter for brevity
         query_tokens = nn.Parameter(
             torch.zeros(1, num_query_token, encoder_config.hidden_size)
         )

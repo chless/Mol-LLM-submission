@@ -49,6 +49,13 @@ class Blip2Stage3(pl.LightningModule):
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         to_be_removed = []
         for key, value in checkpoint["state_dict"].items():
+            # graph encoder parameters
+            if (
+                "running_mean" in key
+                or "running_var" in key
+                or "num_batches_tracked" in key
+            ):
+                continue
             try:
                 if not self.get_parameter(key).requires_grad:
                     to_be_removed.append(key)
@@ -540,6 +547,23 @@ class Blip2Stage3(pl.LightningModule):
         self.trainer.train_dataloader.collate_fn.current_epoch = (
             self.trainer.current_epoch
         )
+
+        if self.global_rank == 0:
+            for name, param in self.state_dict().items():
+                try:
+                    self.log(
+                        f"parameters/{name}_mean",
+                        param.float().mean(),
+                        batch_size=1,
+                        sync_dist=False,
+                    )
+                except:
+                    self.log(
+                        f"parameters/{name}",
+                        param,
+                        batch_size=1,
+                        sync_dist=False,
+                    )  # for scalar values such as running_var of BatchNorm
 
     def on_evaluation_epoch_start(self):
         self.list_logs = {
