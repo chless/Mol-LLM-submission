@@ -3,7 +3,7 @@ gpus=$1
 modality=$2
 gnn=$3
 task=ablation
-max_epochs=3
+max_epochs=6
 total_batch_size=256
 
 tasks=(
@@ -31,6 +31,5 @@ trainer=mistral7b_80gb \
 trainer.max_epochs=${max_epochs} \
 trainer.mol_representation=${modality} \
 trainer.skip_sanity_check=false \
-trainer.total_batch_size=${total_batch_size} \
-pretrained_ckpt_path="'/data/text-mol/all_checkpoints/ablation_string+graph_gine_custom_grad-clip-0.5_12ep_0411/last.ckpt'"
+trainer.total_batch_size=${total_batch_size}
 
