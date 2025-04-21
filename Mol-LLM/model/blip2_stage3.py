@@ -1167,6 +1167,20 @@ class Blip2Stage3(pl.LightningModule):
 
         print(f"\nDevice {self.device} on_evaluation_epoch_end end")
 
+    def on_after_backward(self):
+        # Log the gradient norm for all parameters
+        for name, param in self.named_parameters():
+            if param.grad is not None:
+                grad_norm = param.grad.data.norm(2).item()
+                self.log(
+                    f"grad_norm/{name}",
+                    grad_norm,
+                    on_step=True,
+                    on_epoch=False,
+                    sync_dist=True
+                )
+
+
 
 def check_model_parameters(model, keyword):
     from collections import OrderedDict
