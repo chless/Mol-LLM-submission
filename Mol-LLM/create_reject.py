@@ -90,15 +90,39 @@ def clean_smiles_text(selfies_text):
     selfies_string = selfies_pattern.search(selfies_text).group(1)    
     return sf.decoder(selfies_string)
 
-def group_by_target(dataset, target_range):
+from multiprocessing import Pool, cpu_count
+import multiprocessing
+
+def group_by_target(dataset, target_range, num_procs=10):
+    def process_data(start_idx, end_idx, dataset, target_range, result_list):
+        local_results = []
+        for idx in range(start_idx, end_idx):
+            data = dataset[idx]
+            value = clean_target_text(data['target_text'])
+            group_idx = bisect.bisect_left(target_range, value) - 1
+            local_results.append((group_idx, idx))
+        result_list.extend(local_results)
+
+    chunk_size = len(dataset) // num_procs
+    manager = multiprocessing.Manager()
+    result_list = manager.list()
+    processes = []
+
+    for i in range(num_procs):
+        start_idx = i * chunk_size
+        end_idx = (i + 1) * chunk_size if i < num_procs - 1 else len(dataset)
+        p = multiprocessing.Process(target=process_data, args=(start_idx, end_idx, dataset, target_range, result_list))
+        processes.append(p)
+        p.start()
+
+    for p in processes:
+        p.join()
+
     indicies_by_target = [[] for _ in range(len(target_range) - 1)]
-    for idx, data in enumerate(dataset):
-        value = clean_target_text(data['target_text'])
-        group_idx = bisect.bisect_left(target_range, value) - 1
+    for group_idx, idx in result_list:
         if 0 <= group_idx < len(indicies_by_target):
             indicies_by_target[group_idx].append(idx)
-        else:
-            indicies_by_target[-1].append(idx)
+
     return indicies_by_target
 
 def tanimoto_similarity(smiles1, smiles2):
