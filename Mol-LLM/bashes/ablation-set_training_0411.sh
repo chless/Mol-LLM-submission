@@ -31,6 +31,5 @@ trainer=mistral7b_80gb \
 trainer.max_epochs=${max_epochs} \
 trainer.mol_representation=${modality} \
 trainer.skip_sanity_check=false \
-trainer.total_batch_size=${total_batch_size} \
-trainer.every_n_epochs=0
+trainer.total_batch_size=${total_batch_size}
 
