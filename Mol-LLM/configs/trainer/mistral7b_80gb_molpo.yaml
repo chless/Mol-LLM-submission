@@ -75,14 +75,16 @@ eval_molpo: true
 molpo_batch_division: 2
 
 beta: 1.0
-gamma_beta_ratio: 1.0
+gamma_beta_ratio: 0.5
 
 sft_weight: 1.0
-molpo_weight: 0.5 
-anc_chosen_weight: 0.0 
-anc_rejected_weight: 0.5 
+molpo_weight: 0.25
+anc_chosen_weight: 0.0
+anc_chosen_clip: -1
 chosen_lambda: 1.0
-rejected_lambda: 1.2
+anc_rejected_weight: 0.25 
+anc_reject_clip: 0.5
+rejected_lambda: 1.5
 
 apply_preference_system_prompt: false
 

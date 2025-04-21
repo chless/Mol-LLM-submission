@@ -263,8 +263,10 @@ class Blip2Stage3(pl.LightningModule):
         # calculate sft loss
         sft_loss_bug = None
         if molpo_batch_division == 2:
-            assert labels.shape[0] % molpo_batch_division == 0, "batch_size(labels.shape[0]) should be divisible by molpo_batch_division"
-            sft_loss_mask = labels[:labels.shape[0]//2, :] != -100
+            assert (
+                labels.shape[0] % molpo_batch_division == 0
+            ), "batch_size(labels.shape[0]) should be divisible by molpo_batch_division"
+            sft_loss_mask = labels[: labels.shape[0] // 2, :] != -100
             sft_loss = (sft_instance_loss * sft_loss_mask.sum(-1))[
                 sft_loss_mask.sum(-1) > 0
             ].sum() / sft_loss_mask.sum()
@@ -323,6 +325,11 @@ class Blip2Stage3(pl.LightningModule):
             beta=self.args.beta,
             loss_type=self.args.anc_loss_type,
         )
+        # apply loss clipping to anchor losses
+        if self.args.anc_reject_clip > 0:
+            anchor_rejected_losses = torch.clamp(
+                anchor_rejected_losses, max=self.args.anc_reject_clip
+            )
 
         if self.args.molpo_weight > 0.0:
             loss = (
