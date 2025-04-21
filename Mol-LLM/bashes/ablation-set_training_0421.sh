@@ -32,5 +32,5 @@ trainer.max_epochs=${max_epochs} \
 trainer.mol_representation=${modality} \
 trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
-pretrained_ckpt_path="'/data/text-mol/all_checkpoints/ablation_graph_only_gine_custom_grad-clip-0.5_12ep_0411/last.ckpt'"
+pretrained_ckpt_path="'/data/text-mol/all_checkpoints/ablation_string+graph_gine_custom_grad-clip-0.5_12ep_0411/last.ckpt'"
 
