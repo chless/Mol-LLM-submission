@@ -23,7 +23,7 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=${task}_${modality}_${gnn}_041`` \
+filename=${task}_${modality}_${gnn}_0421 \
 data.data_tag=${task}_0411 \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=${gnn} \
