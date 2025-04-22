@@ -1,9 +1,0 @@
-total_steps: 50000
-warmip_steps: 1000
-name: adamw
-lr_scheduler: cosine
-base_lr: 1e-3
-train_batch_size: 348
-eval_batch_size: 612
-grad_acc: 12
-test_bsz_multi: 1

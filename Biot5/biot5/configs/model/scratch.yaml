@@ -1,5 +1,0 @@
-name: 'google/t5-v1_1-base'
-checkpoint_path: ''
-dropout: 0.0
-random_init: true
-compile: false # Pytorch 2.0
