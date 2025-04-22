@@ -33,10 +33,11 @@ trainer.mol_representation=${modality} \
 trainer.skip_sanity_check=true \
 trainer.validation_before_training=true \
 trainer.total_batch_size=${total_batch_size} \
-pretrained_ckpt_path="'/data/text-mol/all_checkpoints/ablation_string+graph_gine_tokengt_0421/epoch=05-step=15653.ckpt'" \
+pretrained_ckpt_path="'/data/all_checkpoints/ablation_string+graph_gine_tokengt_0421/epoch=05-step=15653.ckpt'" \
 trainer.min_lr=0.000002 \
 trainer.init_lr=0.00002 \
 trainer.warmup_lr=0.000002 \
 trainer.warmup_epochs=0.5 \
-trainer.batch_size=8
+trainer.batch_size=4 \
+trainer.validation_before_training=true
 
