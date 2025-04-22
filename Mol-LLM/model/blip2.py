@@ -202,6 +202,13 @@ class Blip2Base(BaseModel):
             for n in names:
                 print(f"{n} set to requires_grad: {grad}")
 
+    def get_module_params(cls, model, keyword):
+        stat_dict = model.state_dict()
+        for name, param in model.named_parameters():
+            if keyword not in name:
+                stat_dict.pop(name)
+        return stat_dict
+
     def check_grads(cls, model, keyword):
         names = []
         requires_grad = []
