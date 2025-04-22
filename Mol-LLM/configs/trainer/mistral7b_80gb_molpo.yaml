@@ -38,7 +38,7 @@ validation_before_training: false
 # accumulate_grad_batches: 11
 total_batch_size: 2048
 batch_size: 4
-inference_batch_size: 8
+inference_batch_size: 10
 
 truncation: 1
 padding: max_length
