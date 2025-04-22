@@ -31,8 +31,7 @@ gnn=${gnn} \
 trainer=mistral7b_80gb_molpo \
 trainer.max_epochs=${max_epochs} \
 trainer.mol_representation=${modality} \
-trainser.skip_sanity_check=true \
-trainer.validation_before_training=true \
+trainser.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
 pretrained_ckpt_path="'/data/all_checkpoints/ablation_string+graph_gine_tokengt_0421/epoch=05-step=15653.ckpt'" \
 trainer.reject_label_mask=true

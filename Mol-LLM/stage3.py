@@ -140,9 +140,6 @@ def main(cfg):
         print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
 
     if cfg.mode in {"ft"}:
-        if cfg.validation_before_training:
-            trainer.validate(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
-
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
         # outputs = trainer.test(model, datamodule=dm)
         assert "Training done"
