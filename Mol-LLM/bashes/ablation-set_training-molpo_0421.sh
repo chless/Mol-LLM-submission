@@ -34,5 +34,6 @@ trainer.mol_representation=${modality} \
 trainser.skip_sanity_check=true \
 trainer.validation_before_training=true \
 trainer.total_batch_size=${total_batch_size} \
-pretrained_ckpt_path="'/data/text-mol/all_checkpoints/ablation_string+graph_gine_custom_grad-clip-0.5_12ep_0411/last.ckpt'"
+pretrained_ckpt_path="'/data/all_checkpoints/ablation_string+graph_gine_tokengt_0421/epoch=05-step=15653.ckpt'" \
+trainer.validation_before_training=true
 
