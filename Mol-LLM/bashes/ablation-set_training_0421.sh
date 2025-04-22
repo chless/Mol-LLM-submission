@@ -30,6 +30,7 @@ gnn=${gnn} \
 trainer=mistral7b_80gb \
 trainer.max_epochs=${max_epochs} \
 trainer.mol_representation=${modality} \
-trainer.skip_sanity_check=false \
+trainser.skip_sanity_check=true \
+trainer.validation_before_training=true \
 trainer.total_batch_size=${total_batch_size}
 
