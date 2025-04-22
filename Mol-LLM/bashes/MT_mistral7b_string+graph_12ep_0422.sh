@@ -10,6 +10,7 @@ data=multi_task \
 gnn=${gnn} \
 trainer=mistral7b_80gb \
 trainer.mol_representation=string+graph \
-trainer.skip_sanity_check=true \
+trainser.skip_sanity_check=true \
+trainer.validation_before_training=true \
 pretrained_ckpt_path="'/data/all_checkpoints/MT_mistral7b_string+graph_gine_qformer_pretraining_1ep_0415/epoch=00-step=3267.ckpt'" \
 
