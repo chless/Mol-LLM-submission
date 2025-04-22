@@ -204,9 +204,9 @@ class DataCollator(DataCollatorForSeq2Seq):
         )
 
         if not self.train and self.args.eval_modality_util in [
-                "string",
-                "graph",
-            ]:
+            "string",
+            "graph",
+        ]:
             shuffled_idx = []
             # shuffle the selfies_idx, guarantee that the selfies_idx is not in order
             for i in range(len(list_selfies)):
@@ -226,7 +226,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                     prompt_text[i] = prompt_text[i].replace(
                         list_selfies[i], processed_selfies[i]
                     )
-                    
+
             if self.args.eval_modality_util == "graph":
                 list_graphs = [list_graphs[i] for i in shuffled_idx]
                 list_additional_graphs = [
@@ -267,7 +267,18 @@ class DataCollator(DataCollatorForSeq2Seq):
             prompt_text = prompt_text + prompt_text_reject * (
                 self.args.molpo_batch_division - 1
             )
-            target_text = target_text * self.args.molpo_batch_division
+            if hasattr(self.args, "reject_label_mask") and self.args.reject_label_mask:
+                reject_target_text = [sample["reject_target_text"] for sample in batch]
+                # <DEBUG>
+                # reject_target_text = target_text.copy()
+                # reject_target_text[0] = '<FLOAT> <|-|><|0|><|.|><|2|><|3|><|6|><|1|> </FLOAT> </s>'
+                # reject_target_text[1] = target_text[2]
+                # reject_target_text[2] = target_text[3]
+                # reject_target_text[3] = target_text[1]
+                # </DEBUG>
+                target_text = target_text + reject_target_text
+            else:
+                target_text = target_text * self.args.molpo_batch_division
             tasks = tasks * self.args.molpo_batch_division
             task_names = task_names * self.args.molpo_batch_division
 
@@ -313,7 +324,8 @@ class DataCollator(DataCollatorForSeq2Seq):
                 ]
 
                 list_graphs = (
-                    list_graphs * (self.args.molpo_batch_division - 1) + list_rejected_graphs
+                    list_graphs * (self.args.molpo_batch_division - 1)
+                    + list_rejected_graphs
                 )
                 list_additional_graphs = (
                     list_additional_graphs * (self.args.molpo_batch_division - 1)
@@ -460,12 +472,24 @@ class DataCollator(DataCollatorForSeq2Seq):
             labels_ids == self.tokenizer.pad_token_id, -100
         )
         features["labels"] = labels_ids
-        molpo_labels_ids = labels_ids.clone()
-        for molpo_mask_id in self.tokenizer.molpo_mask_ids:
-            molpo_labels_ids = molpo_labels_ids.masked_fill(
-                molpo_labels_ids == molpo_mask_id, -100
-            )
-        features["molpo_labels"] = molpo_labels_ids
+        if self.apply_molpo:
+            molpo_labels_ids = labels_ids.clone()
+            for molpo_mask_id in self.tokenizer.molpo_mask_ids:
+                molpo_labels_ids = molpo_labels_ids.masked_fill(
+                    molpo_labels_ids == molpo_mask_id, -100
+                )
+            if hasattr(self.args, "reject_label_mask") and self.args.reject_label_mask:
+                num_chosen = molpo_labels_ids.shape[0] // self.args.molpo_batch_division
+                chosen_molpo_labels_ids = molpo_labels_ids.clone()[:num_chosen]
+                reject_molpo_labels_ids = molpo_labels_ids.clone()[num_chosen:]
+
+                chosen_molpo_labels_ids = chosen_molpo_labels_ids.masked_fill(
+                    chosen_molpo_labels_ids == reject_molpo_labels_ids, -100
+                )
+                molpo_labels_ids = torch.cat(
+                    (chosen_molpo_labels_ids, reject_molpo_labels_ids), dim=0
+                )
+            features["molpo_labels"] = molpo_labels_ids
 
         assert (
             features.input_ids.size(1) <= self.max_length

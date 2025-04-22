@@ -87,6 +87,8 @@ anc_rejected_weight: 0.25
 anc_reject_clip: 0.5
 rejected_lambda: 1.5
 
+reject_label_mask: false
+
 apply_preference_system_prompt: false
 
 selfies_enumeration: false
