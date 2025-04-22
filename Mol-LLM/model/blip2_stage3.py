@@ -69,6 +69,8 @@ class Blip2Stage3(pl.LightningModule):
                 self.task_specific_chosen_reward
             )
 
+        self.log_model_parameters()
+
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         if hasattr(self, "task_specific_chosen_reward"):
             self.task_specific_chosen_reward = checkpoint["task_specific_chosen_reward"]
@@ -548,6 +550,8 @@ class Blip2Stage3(pl.LightningModule):
             self.trainer.current_epoch
         )
 
+        self.log_model_parameters()
+
     def on_evaluation_epoch_start(self):
         self.list_logs = {
             "predictions": [],
@@ -575,23 +579,40 @@ class Blip2Stage3(pl.LightningModule):
         if not hasattr(self, "task_specific_chosen_reward"):
             self.task_specific_chosen_reward = {}
 
+        self.log_model_parameters()
+
+    def log_model_parameters(self):
+        mean_params = []
+        for name, param in self.state_dict().items():
+            try:
+                mean_val = param.float().mean()
+                name += "_mean"
+            except:
+                mean_val = param
+
+            mean_params.append((name, mean_val))
+
+        if not mean_params:
+            return
+
+        current_step = self.global_step
 
         if self.global_rank == 0:
-            for name, param in self.state_dict().items():
-                try:
-                    self.log(
-                        f"parameters/{name}_mean",
-                        param.float().mean(),
-                        batch_size=1,
-                        sync_dist=False,
-                    )
-                except:
-                    self.log(
-                        f"parameters/{name}",
-                        param,
-                        batch_size=1,
-                        sync_dist=False,
-                    )  # for scalar values such as running_var of BatchNorm
+            for logger in self.trainer.loggers:
+                if isinstance(logger, pl.loggers.TensorBoardLogger):
+                    for name, val in mean_params:
+                        logger.experiment.add_scalar(f"parameters/{name}", val, current_step)
+
+                elif isinstance(logger, pl.loggers.WandbLogger):
+                    run = logger.experiment
+                    run.define_metric("parameters/*", step_metric="global_step")
+                    log_dict = {f"parameters/{name}": val for name, val in mean_params}
+                    log_dict["global_step"] = current_step
+                    logger.experiment.log(log_dict)
+
+                elif isinstance(logger, pl.loggers.CSVLogger):
+                    for name, val in mean_params:
+                        logger.log_metrics({f"parameters/{name}": val}, step=current_step)
 
     def evaluation_step(self, batch, batch_idx, dataloader_idx, mode="val"):
         if "graph" in self.args.mol_representation:
