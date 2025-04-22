@@ -39,6 +39,5 @@ trainer.init_lr=0.00002 \
 trainer.warmup_lr=0.000002 \
 trainer.warmup_epochs=0.5 \
 trainer.batch_size=4 \
-trainer.inference_batch_size=8 \
-trainer.validation_before_training=true
+trainer.inference_batch_size=8
 

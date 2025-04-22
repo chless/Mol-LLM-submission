@@ -24,7 +24,7 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=${task}_molpo-replace-${replace_ratio}_0421 \
+filename=${task}_molpo_reject-v2_label-mask_0423 \
 data.data_tag=${task}_0411_molpo-replace-${replace_ratio} \
 data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=${gnn} \
@@ -35,5 +35,5 @@ trainser.skip_sanity_check=true \
 trainer.validation_before_training=true \
 trainer.total_batch_size=${total_batch_size} \
 pretrained_ckpt_path="'/data/all_checkpoints/ablation_string+graph_gine_tokengt_0421/epoch=05-step=15653.ckpt'" \
-trainer.validation_before_training=true
+trainer.reject_label_mask=true
 
