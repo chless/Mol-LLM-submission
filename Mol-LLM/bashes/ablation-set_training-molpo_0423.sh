@@ -34,5 +34,6 @@ trainer.mol_representation=${modality} \
 trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
 pretrained_ckpt_path="'/data/all_checkpoints/ablation_string+graph_gine_tokengt_0421/last.ckpt'" \
-trainer.reject_label_mask=true
+trainer.reject_label_mask=true \
+trainer.eval_molpo=false
 
