@@ -268,14 +268,7 @@ class DataCollator(DataCollatorForSeq2Seq):
                 self.args.molpo_batch_division - 1
             )
             if hasattr(self.args, "reject_label_mask") and self.args.reject_label_mask:
-                reject_target_text = [sample["reject_target_text"] for sample in batch]
-                # <DEBUG>
-                # reject_target_text = target_text.copy()
-                # reject_target_text[0] = '<FLOAT> <|-|><|0|><|.|><|2|><|3|><|6|><|1|> </FLOAT> </s>'
-                # reject_target_text[1] = target_text[2]
-                # reject_target_text[2] = target_text[3]
-                # reject_target_text[3] = target_text[1]
-                # </DEBUG>
+                reject_target_text = [sample[f"{self.reject_cardinal}-th_rejected_target_text"] for sample in batch]
                 target_text = target_text + reject_target_text
             else:
                 target_text = target_text * self.args.molpo_batch_division
