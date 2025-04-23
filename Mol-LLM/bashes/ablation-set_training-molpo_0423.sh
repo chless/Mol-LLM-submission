@@ -1,7 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
-modality=$2
-gnn=$3
+modality=string+graph
+gnn=gine_tokengt
 replace_ratio=0.3
 task=ablation
 max_epochs=3
