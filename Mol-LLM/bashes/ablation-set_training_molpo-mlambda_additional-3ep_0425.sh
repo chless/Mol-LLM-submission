@@ -34,6 +34,9 @@ trainer.mol_representation=${modality} \
 trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
 trainer.anc_reject_clip=${anc_reject_clip} \
-trainer.molpo_lambda=$molpo_lambda
+trainer.molpo_lambda=$molpo_lambda \
+trainer.reject_lambda=1.2 \
+trainer.molpo_weight=0.5 \
+trainer.anc_rejected_weight=0.5 \
 pretrained_ckpt_path="'/data/all_checkpoints/ablation_molpo_reject-v2_0423/epoch=02-step=4872.ckpt'"
 
