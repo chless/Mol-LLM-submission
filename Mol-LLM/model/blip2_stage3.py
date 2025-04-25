@@ -294,18 +294,7 @@ class Blip2Stage3(pl.LightningModule):
                 sft_loss_mask.sum(-1) > 0
             ].sum() / sft_loss_mask.sum()
 
-        # calculate molpo loss
-        loss_molpo, losses_molpo = molpo_loss(
-            chosen_rewards=chosen_rewards,
-            chosen_loss_mask=chosen_loss_mask,
-            rejected_rewards=rejected_rewards,
-            rejected_loss_mask=rejected_loss_mask,
-            loss_type=self.args.loss_type,
-            beta=self.args.beta,
-            gamma_beta_ratio=self.args.gamma_beta_ratio,
-        )
-
-        # update and get task specific sft rewards
+        # update and get task specific chosen rewards
         if is_train:
             self.update_task_specific_chosen_rewards_avg(
                 chosen_rewards=chosen_rewards,
@@ -314,7 +303,7 @@ class Blip2Stage3(pl.LightningModule):
                 alpha=0.99,
             )
 
-        # get average sft rewards
+        # get average chosen rewards
         avg_chosen_rewards_list = []
         for task in tasks:
             if task in self.task_specific_chosen_reward:
@@ -325,6 +314,19 @@ class Blip2Stage3(pl.LightningModule):
         avg_chosen_rewards = torch.tensor(
             avg_chosen_rewards_list,
             device=logits.device,
+        )
+
+        # calculate molpo loss
+        loss_molpo, losses_molpo = molpo_loss(
+            chosen_rewards=chosen_rewards,
+            chosen_loss_mask=chosen_loss_mask,
+            rejected_rewards=rejected_rewards,
+            rejected_loss_mask=rejected_loss_mask,
+            loss_type=self.args.loss_type,
+            beta=self.args.beta,
+            gamma_beta_ratio=self.args.gamma_beta_ratio,
+            molpo_lambda=self.args.molpo_lambda,
+            avg_chosen_rewards=avg_chosen_rewards
         )
 
         # calculate anchor losses
@@ -1266,6 +1268,8 @@ def molpo_loss(
     loss_type="sigmoid",
     beta=1.0,
     gamma_beta_ratio=0.0,
+    molpo_lambda=None,
+    avg_chosen_rewards=None
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
     """Compute the molpo loss for a batch of policy model log probabilities.
 
@@ -1279,7 +1283,10 @@ def molpo_loss(
         The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
     """
     # calculate molpo loss
-    logits = chosen_rewards - rejected_rewards - beta * gamma_beta_ratio
+    if molpo_lambda is not None:
+        logits = chosen_rewards - rejected_rewards - molpo_lambda * avg_chosen_rewards
+    else:
+        logits = chosen_rewards - rejected_rewards - beta * gamma_beta_ratio
     if loss_type == "sigmoid":
         losses = -F.logsigmoid(beta * logits)
     elif loss_type == "hinge":
