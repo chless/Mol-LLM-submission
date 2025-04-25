@@ -330,7 +330,7 @@ class Blip2Stage3(pl.LightningModule):
         )
 
         # calculate anchor losses
-        anchor_chosen_loss, anchor_rejected_loss = anchor_loss(
+        anchor_chosen_losses, anchor_rejected_losses = anchor_loss(
             avg_chosen_rewards=avg_chosen_rewards,
             chosen_rewards=chosen_rewards,
             chosen_lambda=self.args.chosen_lambda,
@@ -340,11 +340,11 @@ class Blip2Stage3(pl.LightningModule):
             loss_type=self.args.anc_loss_type,
         )
         # apply loss clipping to anchor losses
+        anchor_rejected_loss = anchor_rejected_losses.mean()
         if self.args.anc_reject_clip > 0:
             anchor_rejected_loss = torch.clamp(
                 anchor_rejected_loss, max=self.args.anc_reject_clip
             )
-
         if self.args.molpo_weight > 0.0:
             loss = (
                 self.args.sft_weight * sft_loss
@@ -375,7 +375,8 @@ class Blip2Stage3(pl.LightningModule):
         # </DEBUG>
         metrics[f"instance_loss"] = sft_instance_loss.clone().detach().cpu()
         metrics[f"molpo_loss"] = losses_molpo.clone().detach().cpu()
-        metrics[f"anchor_loss/rejected"] = anchor_rejected_loss.clone().detach().cpu()
+        metrics[f"anchor_loss/rejected"] = anchor_rejected_losses.clone().detach().cpu()
+        metrics["rl_over_bar_rw"] = rejected_rewards.cpu() / avg_chosen_rewards.cpu()
 
         if molpo_batch_division == 3:
             metrics[f"rewards/sft"] = sft_rewards.cpu()
@@ -1327,7 +1328,7 @@ def anchor_loss(
         raise ValueError(
             f"Unknown loss type: {loss_type}. Should be one of ['sigmoid', 'hinge']"
         )
-    return anchor_chosen_losses.mean(), anchor_rejected_losses.mean()
+    return anchor_chosen_losses, anchor_rejected_losses
 
 
 def get_batch_logps(
