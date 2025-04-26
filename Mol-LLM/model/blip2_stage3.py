@@ -1285,6 +1285,7 @@ def molpo_loss(
     """
     # calculate molpo loss
     if molpo_lambda is not None:
+        assert molpo_lambda <= 0, f"molpo_lambda: {molpo_lambda} should be <= 0.0."
         logits = chosen_rewards - rejected_rewards - molpo_lambda * avg_chosen_rewards
     else:
         logits = chosen_rewards - rejected_rewards - beta * gamma_beta_ratio
@@ -1315,6 +1316,7 @@ def anchor_loss(
     beta: float,
     loss_type: str = "sigmoid",
 ):
+    assert rejected_lambda >= 0.0, f"rejected_lambda: {rejected_lambda} should be >= 0.0."
     chosen_logits = chosen_rewards - chosen_lambda * avg_chosen_rewards
     rejected_logits = rejected_rewards - rejected_lambda * avg_chosen_rewards
 
