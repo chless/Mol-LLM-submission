@@ -1,7 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
-gpus=$1
-molpo_lambda=$2
-rejected_lambda=$3
+gpus="'0,1,2,3,4,5,6,7'"
+molpo_lambda=$1
+rejected_lambda=$2
 
 modality=string+graph
 gnn=gine_tokengt
@@ -26,9 +26,8 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=ablation_molpo-lambdas-(${molpo_lambda})-(${rejected_lambda})_additional-3ep_0425 \
+filename="ablation_molpo-lambdas-${molpo_lambda}-${rejected_lambda}_additional-3ep_0427" \
 data.data_tag=ablation_0411_molpo-replace-0.3 \
-data.raw_data_root=/data/data/Mol-LLM-v7.1 \
 gnn=${gnn} \
 trainer=mistral7b_80gb_molpo \
 trainer.max_epochs=${max_epochs} \
@@ -38,6 +37,6 @@ trainer.total_batch_size=${total_batch_size} \
 trainer.anc_reject_clip=${anc_reject_clip} \
 trainer.molpo_lambda=$molpo_lambda \
 trainer.rejected_lambda=$rejected_lambda \
-pretrained_ckpt_path="'/data/all_checkpoints/ablation_molpo_reject-v2_0423/epoch=02-step=4872.ckpt'" \
+pretrained_ckpt_path="'/data/all_checkpoints/ablation_string+graph_gine_tokengt_0421/last.ckpt'" \
 trainer.every_n_epochs=0
 
