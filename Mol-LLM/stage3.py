@@ -135,7 +135,7 @@ def main(cfg):
     # load pretrained model for model parameter initialization
     if cfg.pretrained_ckpt_path is not None:
         assert cfg.ckpt_path is None, "only one ckpt path should be provided"
-        ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
+        ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu", weights_only=False)
         model.load_state_dict(ckpt["state_dict"], strict=False)
         print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
 
@@ -144,7 +144,7 @@ def main(cfg):
         # outputs = trainer.test(model, datamodule=dm)
         assert "Training done"
     elif cfg.mode == "test":
-        ckpt = torch.load(cfg.ckpt_path, map_location="cpu")
+        ckpt = torch.load(cfg.ckpt_path, map_location="cpu", weights_only=False)
         model.load_state_dict(ckpt["state_dict"], strict=False)
         print(f"loaded trained model from {cfg.ckpt_path}")
         outputs = trainer.test(model, datamodule=dm)
