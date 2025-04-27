@@ -37,6 +37,6 @@ trainer.total_batch_size=${total_batch_size} \
 trainer.anc_reject_clip=${anc_reject_clip} \
 trainer.molpo_lambda=$molpo_lambda \
 trainer.rejected_lambda=$rejected_lambda \
-pretrained_ckpt_path="'/data/all_checkpoints/ablation_string+graph_gine_tokengt_0421/last.ckpt'" \
+pretrained_ckpt_path="'/data/all_checkpoints/ablation_string+graph_gine_tokengt_0421/epoch=05-step=15653.ckpt'" \
 trainer.every_n_epochs=0
 
