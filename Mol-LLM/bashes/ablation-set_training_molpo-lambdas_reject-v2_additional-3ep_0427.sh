@@ -26,7 +26,7 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename="ablation_molpo-lambdas-${molpo_lambda}-${rejected_lambda}_additional-3ep_0427" \
+filename="ablation_molpo-lambdas-${molpo_lambda}-${rejected_lambda}_reject-v2_additional-3ep_0427" \
 data.data_tag=molpo-v2-ablation \
 gnn=${gnn} \
 trainer=mistral7b_80gb_molpo \
