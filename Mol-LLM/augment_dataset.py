@@ -938,7 +938,7 @@ if __name__ == "__main__":
         default="mistralai-Mistral-7B-Instruct-v0.3_string+graph_q32_test_3.3M_0415",
     )
     parser.add_argument("--num_procs", type=int, default=10)
-    parser.add_argument("--num_rejected_graphs", type=int, default=12)
+    parser.add_argument("--num_rejected_graphs", type=int, default=6)
     parser.add_argument("--data_tag", type=str, default="")
 
     args = parser.parse_args()
@@ -958,5 +958,10 @@ if __name__ == "__main__":
     mapped_dataset = dataset.map(
         map_by_substructure_replacement, batched=False, num_proc=args.num_procs
     )
-    mapped_dataset.save_to_disk(dataset_path + "_" + f"molpo-replace-{args.replace_ratio}" + args.data_tag)
-    print("saved augmented dataset:", dataset_path + f"molpo-replace-{args.replace_ratio}" + args.data_tag)
+    mapped_dataset.save_to_disk(
+        dataset_path + "_" + f"molpo-replace-{args.replace_ratio}" + args.data_tag
+    )
+    print(
+        "saved augmented dataset:",
+        dataset_path + f"molpo-replace-{args.replace_ratio}" + args.data_tag,
+    )
