@@ -1284,7 +1284,7 @@ def molpo_loss(
         The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
     """
     # calculate molpo loss
-    if molpo_lambda is not None:
+    if molpo_lambda is not None or isinstance(molpo_lambda, str):
         assert molpo_lambda <= 0, f"molpo_lambda: {molpo_lambda} should be <= 0.0."
         logits = chosen_rewards - rejected_rewards - molpo_lambda * avg_chosen_rewards
     else:
