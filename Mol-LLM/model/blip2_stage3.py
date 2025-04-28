@@ -326,17 +326,14 @@ class Blip2Stage3(pl.LightningModule):
             beta=self.args.beta,
             gamma_beta_ratio=self.args.gamma_beta_ratio,
             molpo_lambda=self.args.molpo_lambda,
-            avg_chosen_rewards=avg_chosen_rewards
+            avg_chosen_rewards=avg_chosen_rewards,
         )
 
         # calculate anchor losses
-        anchor_chosen_losses, anchor_rejected_losses = anchor_loss(
+        anchor_rejected_losses = anchor_loss(
             avg_chosen_rewards=avg_chosen_rewards,
-            chosen_rewards=chosen_rewards,
-            chosen_lambda=self.args.chosen_lambda,
             rejected_rewards=rejected_rewards,
             rejected_lambda=self.args.rejected_lambda,
-            beta=self.args.beta,
             loss_type=self.args.anc_loss_type,
         )
         # apply loss clipping to anchor losses
@@ -1270,7 +1267,7 @@ def molpo_loss(
     beta=1.0,
     gamma_beta_ratio=0.0,
     molpo_lambda=None,
-    avg_chosen_rewards=None
+    avg_chosen_rewards=None,
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
     """Compute the molpo loss for a batch of policy model log probabilities.
 
@@ -1309,28 +1306,24 @@ def molpo_loss(
 
 def anchor_loss(
     avg_chosen_rewards: torch.FloatTensor,
-    chosen_rewards: torch.FloatTensor,
-    chosen_lambda: float,
     rejected_rewards: torch.FloatTensor,
     rejected_lambda: float,
-    beta: float,
     loss_type: str = "sigmoid",
 ):
-    assert rejected_lambda >= 0.0, f"rejected_lambda: {rejected_lambda} should be >= 0.0."
-    chosen_logits = chosen_rewards - chosen_lambda * avg_chosen_rewards
+    assert (
+        rejected_lambda >= 0.0
+    ), f"rejected_lambda: {rejected_lambda} should be >= 0.0."
     rejected_logits = rejected_rewards - rejected_lambda * avg_chosen_rewards
 
     if loss_type == "sigmoid":
-        anchor_chosen_losses = -F.logsigmoid(chosen_logits)
         anchor_rejected_losses = -F.logsigmoid(rejected_logits)
     elif loss_type == "hinge":
-        anchor_chosen_losses = torch.relu(-chosen_logits)
         anchor_rejected_losses = torch.relu(-rejected_logits)
     else:
         raise ValueError(
             f"Unknown loss type: {loss_type}. Should be one of ['sigmoid', 'hinge']"
         )
-    return anchor_chosen_losses, anchor_rejected_losses
+    return anchor_rejected_losses
 
 
 def get_batch_logps(

@@ -82,8 +82,8 @@ molpo_weight: 0.25
 chosen_lambda: 1.0
 anc_rejected_weight: 0.25 
 anc_reject_clip: -1
-rejected_lambda: 1.5
-molpo_lambda : -0.5
+rejected_lambda: 1.2
+molpo_lambda : -0.2
 
 reject_label_mask: false
 
