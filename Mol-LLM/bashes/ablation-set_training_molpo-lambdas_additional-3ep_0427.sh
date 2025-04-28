@@ -7,7 +7,6 @@ modality=string+graph
 gnn=gine_tokengt
 max_epochs=3
 total_batch_size=256
-anc_reject_clip=-1
 
 tasks=(
     "smol-property_prediction-bbbp"
@@ -34,7 +33,6 @@ trainer.max_epochs=${max_epochs} \
 trainer.mol_representation=${modality} \
 trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
-trainer.anc_reject_clip=${anc_reject_clip} \
 trainer.molpo_lambda=$molpo_lambda \
 trainer.rejected_lambda=$rejected_lambda \
 pretrained_ckpt_path="'/data/all_checkpoints/ablation_string+graph_gine_tokengt_0421/last.ckpt'" \
