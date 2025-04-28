@@ -3,6 +3,7 @@ gpus="'0,1,2,3,4,5,6,7'"
 gnn=gine_custom
 file_name=MT_molpo_from-string_only_${gnn}_12ep_0428
 max_epochs=3
+gnn=gine_custom
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
