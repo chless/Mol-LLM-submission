@@ -500,7 +500,7 @@ def extract_and_modify(selfies, replace_ratio=0.1, modify_num=0):
     # Convert SMILES to RDKit Molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
-        raise ValueError("Unable to convert SELFIES to a valid molecule.")
+        raise ValueError(f"Unable to convert smiles: {smiles} to a valid molecule.")
 
     # Generate MACCS Keys
     maccs_keys = MACCSkeys.GenMACCSKeys(mol)
