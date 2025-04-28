@@ -930,15 +930,15 @@ if __name__ == "__main__":
 
     # get arg replace_ratio, dataset_path
     parser = argparse.ArgumentParser()
-    parser.add_argument("--replace_ratio", type=float, default=0.05)
+    parser.add_argument("--replace_ratio", type=float, default=0.3)
     parser.add_argument("--data_dir", type=str, default="/data/data/Mol-LLM-v7.1")
     parser.add_argument(
         "--dataset_path",
         type=str,
-        default="mistralai-Mistral-7B-Instruct-v0.3_string+graph_q32_test_rxn_m2t",
+        default="mistralai-Mistral-7B-Instruct-v0.3_string+graph_q32_test_3.3M_0415",
     )
     parser.add_argument("--num_procs", type=int, default=10)
-    parser.add_argument("--num_rejected_graphs", type=int, default=20)
+    parser.add_argument("--num_rejected_graphs", type=int, default=12)
     parser.add_argument("--data_tag", type=str, default="")
 
     args = parser.parse_args()
