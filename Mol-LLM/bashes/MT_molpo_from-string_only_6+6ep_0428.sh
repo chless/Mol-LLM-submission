@@ -1,0 +1,20 @@
+export TOKENIZERS_PARALLELISM=false;
+gpus="'0,1,2,3,4,5,6,7'"
+gnn=gine_custom
+file_name=MT_molpo_from-string_only_6+6ep_gine_0429
+max_epochs=6
+gnn=gine_custom
+
+python Mol-LLM/stage3.py \
+trainer.devices=$gpus \
+filename=$file_name \
+data=molpo \
+gnn=${gnn} \
+trainer=mistral7b_80gb_molpo \
+trainer.max_epochs=${max_epochs} \
+trainer.mol_representation=string+graph \
+trainer.skip_sanity_check=false \
+pretrained_ckpt_path="'/data/all_checkpoints/MT_mistral7b_string_only_12ep_0415/epoch=05-step=20495.ckpt'" \
+trainer.init_lr=0.00009 \
+trainer.warmup_lr=0.000009
+
