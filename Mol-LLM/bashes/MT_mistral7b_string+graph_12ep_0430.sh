@@ -1,7 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus="'0,1,2,3,4,5,6,7'"
-gnn=gine_tokengt
-file_name=MT_mistral7b_string+graph_${gnn}_12ep_0424
+gnn=gine_custom
+file_name=MT_mistral7b_string+graph_${gnn}_12ep_0430
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
