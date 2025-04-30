@@ -14,7 +14,7 @@ trainer=mistral7b_80gb \
 trainer.max_epochs=${max_epochs} \
 trainer.mol_representation=string_only \
 trainer.skip_sanity_check=false \
-pretrained_ckpt_path="'/data/all_checkpoints/MT_mistral7b_string+graph_12ep_0430/epoch=11-step=40991.ckpt'" \
+pretrained_ckpt_path="'/data/all_checkpoints/MT_mistral7b_string_only_12ep_0415/epoch=11-step=40991.ckpt'" \
 trainer.init_lr=0.00004 \
 trainer.warmup_lr=0.000004 \
 trainer.val_check_interval=0.2
