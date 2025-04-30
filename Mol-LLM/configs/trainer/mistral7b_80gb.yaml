@@ -64,7 +64,7 @@ val_check_interval: 0.5
 test_on_trainset: false
 
 # multimodal training
-mol_representation: string_only
+mol_representation: string+graph
 log_attn_score: true
 eval_modality_util: null
 tune_gnn: true
