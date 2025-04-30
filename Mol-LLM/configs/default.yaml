@@ -1,6 +1,6 @@
 defaults:
   - data: multi_task
-  - gnn: gine_tokengt
+  - gnn: gine_custom
   - trainer: mistral7b_80gb
 
 # General settings
