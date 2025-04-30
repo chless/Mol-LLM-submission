@@ -51,8 +51,8 @@ max_packing_size: -1
 
 weight_decay: 0.05
 min_lr: 0.00001
-init_lr: 0.00006
-warmup_lr: 0.000006
+init_lr: 0.00004
+warmup_lr: 0.000004
 warmup_epochs: 0.25
 scheduler: linear_warmup_cosine_lr
 optimizer: adamw
