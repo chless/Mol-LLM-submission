@@ -1,9 +1,8 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus="'0,1,2,3,4,5,6,7'"
 gnn=gine_custom
-file_name=MT_string+graph_12+6ep_0430
+file_name=MT_string+graph-${gnn}_12+6ep_0501
 max_epochs=6
-gnn=gine_custom
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
@@ -17,5 +16,5 @@ trainer.skip_sanity_check=false \
 pretrained_ckpt_path="'/data/all_checkpoints/MT_mistral7b_string_only_12ep_0415/epoch=11-step=40991.ckpt'" \
 trainer.init_lr=0.00004 \
 trainer.warmup_lr=0.000004 \
-trainer.val_check_interval=0.2
+trainer.val_check_interval=0.25
 

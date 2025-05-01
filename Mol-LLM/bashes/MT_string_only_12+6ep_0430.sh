@@ -1,15 +1,12 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus="'0,1,2,3,4,5,6,7'"
-gnn=gine_custom
 file_name=MT_string_only_12+6ep_0430
 max_epochs=6
-gnn=gine_custom
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
 data=multi_task \
-gnn=${gnn} \
 trainer=mistral7b_80gb \
 trainer.max_epochs=${max_epochs} \
 trainer.mol_representation=string_only \
