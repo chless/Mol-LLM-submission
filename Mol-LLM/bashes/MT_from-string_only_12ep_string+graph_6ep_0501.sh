@@ -1,6 +1,6 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus="'0,1,2,3,4,5,6,7'"
-gnn=gine_custom
+gnn=$1
 file_name=MT_from-string_only_12ep_string+graph-${gnn}_6ep_0501
 max_epochs=6
 
