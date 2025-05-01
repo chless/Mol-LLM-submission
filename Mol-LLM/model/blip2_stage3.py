@@ -1286,7 +1286,8 @@ def molpo_loss(
     margin = chosen_rewards - rejected_rewards
     if margin_clipe_scale > 0:
         max_clip = margin_clipe_scale * torch.abs(avg_chosen_rewards)
-        margin = torch.clamp(margin, max=max_clip)
+        min_clip = -torch.abs(margin)
+        margin = torch.clamp(margin, min=min_clip, max=max_clip)
 
     if molpo_lambda is not None or isinstance(molpo_lambda, str):
         assert molpo_lambda <= 0, f"molpo_lambda: {molpo_lambda} should be <= 0.0."
