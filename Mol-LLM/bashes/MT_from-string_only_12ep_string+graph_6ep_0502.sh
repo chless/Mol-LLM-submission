@@ -7,7 +7,6 @@ python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=$file_name \
 data=multi_task \
-gnn=${gnn} \
 trainer=mistral7b_80gb \
 trainer.max_epochs=${max_epochs} \
 trainer.mol_representation=string+graph \
