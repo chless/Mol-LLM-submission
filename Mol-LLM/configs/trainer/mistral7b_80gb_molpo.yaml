@@ -84,6 +84,7 @@ anc_rejected_weight: 0.25
 anc_reject_clip: -1
 rejected_lambda: 1.2
 molpo_lambda : -0.2
+margin_clip: -1
 
 reject_label_mask: false
 

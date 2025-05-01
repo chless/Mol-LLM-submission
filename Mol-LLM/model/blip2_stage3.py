@@ -327,6 +327,7 @@ class Blip2Stage3(pl.LightningModule):
             gamma_beta_ratio=self.args.gamma_beta_ratio,
             molpo_lambda=self.args.molpo_lambda,
             avg_chosen_rewards=avg_chosen_rewards,
+            margin_clip=self.args.margin_clip,
         )
 
         # calculate anchor losses
@@ -1268,6 +1269,7 @@ def molpo_loss(
     gamma_beta_ratio=0.0,
     molpo_lambda=None,
     avg_chosen_rewards=None,
+    margin_clip=-1,
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
     """Compute the molpo loss for a batch of policy model log probabilities.
 
@@ -1281,11 +1283,16 @@ def molpo_loss(
         The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
     """
     # calculate molpo loss
+    margin = chosen_rewards - rejected_rewards
+    if margin_clip > 0:
+        max_clip = margin_clip * torch.abs(avg_chosen_rewards)
+        margin = torch.clamp(margin, max=max_clip)
+
     if molpo_lambda is not None or isinstance(molpo_lambda, str):
         assert molpo_lambda <= 0, f"molpo_lambda: {molpo_lambda} should be <= 0.0."
-        logits = chosen_rewards - rejected_rewards - molpo_lambda * avg_chosen_rewards
+        logits = margin - molpo_lambda * avg_chosen_rewards
     else:
-        logits = chosen_rewards - rejected_rewards - beta * gamma_beta_ratio
+        logits = margin - beta * gamma_beta_ratio
     if loss_type == "sigmoid":
         losses = -F.logsigmoid(beta * logits)
     elif loss_type == "hinge":
