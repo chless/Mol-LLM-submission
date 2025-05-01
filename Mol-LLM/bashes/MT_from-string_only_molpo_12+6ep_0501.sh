@@ -1,7 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus="'0,1,2,3,4,5,6,7'"
 gnn=$1
-file_name=MT_molpo-${gnn}_from-string_only_12+6ep_0430
+file_name=MT_molpo-${gnn}_from-string_only_12+6ep_0501
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
