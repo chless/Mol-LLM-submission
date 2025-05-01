@@ -327,7 +327,7 @@ class Blip2Stage3(pl.LightningModule):
             gamma_beta_ratio=self.args.gamma_beta_ratio,
             molpo_lambda=self.args.molpo_lambda,
             avg_chosen_rewards=avg_chosen_rewards,
-            margin_clipe_scale=self.args.margin_clipe_scale,
+            margin_clip_scale=self.args.margin_clip_scale,
         )
 
         # calculate anchor losses
@@ -1269,7 +1269,7 @@ def molpo_loss(
     gamma_beta_ratio=0.0,
     molpo_lambda=None,
     avg_chosen_rewards=None,
-    margin_clipe_scale=-1,
+    margin_clip_scale=-1,
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
     """Compute the molpo loss for a batch of policy model log probabilities.
 
@@ -1284,8 +1284,8 @@ def molpo_loss(
     """
     # calculate molpo loss
     margin = chosen_rewards - rejected_rewards
-    if margin_clipe_scale > 0:
-        max_clip = margin_clipe_scale * torch.abs(avg_chosen_rewards)
+    if margin_clip_scale > 0:
+        max_clip = margin_clip_scale * torch.abs(avg_chosen_rewards)
         min_clip = -torch.abs(margin)
         margin = torch.clamp(margin, min=min_clip, max=max_clip)
 
