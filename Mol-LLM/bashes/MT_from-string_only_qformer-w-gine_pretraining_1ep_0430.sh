@@ -1,5 +1,5 @@
 export TOKENIZERS_PARALLELISM=false;
-file_name=MT_from-string_only_qformer_pretraining_1ep_0430
+file_name=MT_from-string_only_qformer-w-gine_pretraining_1ep_0430
 gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \
