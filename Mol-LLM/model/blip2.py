@@ -20,6 +20,7 @@ from transformers import BertTokenizer
 from model.gin_model import GNN, GNN_MoleculeSTM
 from model.tokenGT import BERTTokenGT
 from model.gine_tokengt import GINE_TokenGT
+from collections import OrderedDict
 
 
 class Blip2Base(BaseModel):
@@ -202,12 +203,49 @@ class Blip2Base(BaseModel):
             for n in names:
                 print(f"{n} set to requires_grad: {grad}")
 
-    def get_module_params(cls, model, keyword):
-        stat_dict = model.state_dict()
-        for name, param in model.named_parameters():
-            if keyword not in name:
-                stat_dict.pop(name)
-        return stat_dict
+    def get_params_by_keywords(state_dict, keywords):
+        """
+        Filters a state_dict to include only parameters whose names contain any of the specified keywords.
+
+        Args:
+            state_dict (dict or OrderedDict): The model's state_dict.
+            keywords (str or list of str): A keyword or a list of keywords to search for in parameter names.
+
+        Returns:
+            OrderedDict: A new dictionary containing only the matching parameters.
+                        Using OrderedDict to preserve original parameter order.
+        """
+        if isinstance(keywords, str):
+            keywords = [keywords]  # Convert single keyword to list for uniformity
+
+        # Using a dictionary comprehension for conciseness
+        filtered_params = OrderedDict({
+            param_name: param_tensor
+            for param_name, param_tensor in state_dict.items()
+            if any([keyword in param_name for keyword in keywords])  # Include if any keyword matches
+        })
+        return filtered_params
+
+    def get_params_without_keywords(state_dict, keywords_to_exclude):
+        """
+        Filters a state_dict to include only parameters whose names
+        do NOT contain any of the specified keywords.
+
+        Args:
+            state_dict (dict or OrderedDict): The model's state_dict.
+            keywords_to_exclude (list of str): A list of keywords to exclude from parameter names.
+
+        Returns:
+            OrderedDict: A new dictionary containing only the parameters whose
+                        names do not contain any of the specified keywords.
+        """
+        # Using a dictionary comprehension for conciseness
+        filtered_params = OrderedDict({
+            param_name: param_tensor
+            for param_name, param_tensor in state_dict.items()
+            if not any([keyword in param_name for keyword in keywords_to_exclude])  # Exclude if any keyword matches
+        })
+        return filtered_params
 
     def check_grads(cls, model, keyword):
         names = []
