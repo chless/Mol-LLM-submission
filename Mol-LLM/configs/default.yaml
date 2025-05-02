@@ -16,3 +16,7 @@ wandb_id: null
 debug: false
 ckpt_path: null
 pretrained_ckpt_path: null
+
+shuffle_selfies: false
+shuffle_graph: false
+process_disjoint: true
