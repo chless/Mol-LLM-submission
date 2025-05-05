@@ -469,6 +469,8 @@ class Blip2Stage3(pl.LightningModule):
                 sync_dist=False,
             )
 
+        if not hasattr(self, "task_specific_outputs"):
+            self.task_specific_outputs = {}
         self.task_specific_logging(
             outputs=outputs,
             tasks=tasks,
