@@ -58,6 +58,12 @@ def main(cfg):
     model = Blip2Stage3(cfg)
     print("total params:", sum(p.numel() for p in model.parameters()))
 
+    # when resuming training, load the current epoch information and argparse to datamodule
+    if cfg.ckpt_path is not None:
+        ckpt = torch.load(cfg.ckpt_path, map_location="cpu", weights_only=False)
+        cfg.current_epoch = ckpt["epoch"]
+        del ckpt
+
     # datamodule
     dm = Stage3DM(
         mode=cfg.mode,

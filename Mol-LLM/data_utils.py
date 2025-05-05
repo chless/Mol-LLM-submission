@@ -121,6 +121,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.apply_molpo = args.train_molpo if self.train else args.eval_molpo
 
         self.projector_type = args.projector_type
+        self.current_epoch = args.current_epoch
         self.args = args
 
         if self.mol_representation in ["string+graph", "graph_only"]:
