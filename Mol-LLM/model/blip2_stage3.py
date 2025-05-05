@@ -72,7 +72,7 @@ class Blip2Stage3(pl.LightningModule):
         self.log_model_parameters()
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
-        if hasattr(self, "task_specific_chosen_reward"):
+        if "task_specific_chosen_reward" in checkpoint:
             self.task_specific_chosen_reward = checkpoint["task_specific_chosen_reward"]
 
     def __init__(self, args):
