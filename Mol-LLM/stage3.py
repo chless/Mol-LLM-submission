@@ -63,6 +63,8 @@ def main(cfg):
         ckpt = torch.load(cfg.ckpt_path, map_location="cpu", weights_only=False)
         cfg.current_epoch = ckpt["epoch"]
         del ckpt
+    else:
+        cfg.current_epoch = 0
 
     # datamodule
     dm = Stage3DM(
