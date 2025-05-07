@@ -1,9 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
-modality=$2
-gnn=$3
-task=ablation
-max_epochs=6
+gnn=$2
+max_epochs=1
 total_batch_size=256
 
 tasks=(
@@ -23,13 +21,12 @@ tasks=(
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=${task}_${modality}_${gnn}_0421 \
-data.data_tag=${task}_0411 \
-data.raw_data_root=/data/data/Mol-LLM-v7.1 \
+filename=ablation_qformer-${gnn}_pretraining_1ep_0507 \
+data.data_tag=ablation_0411 \
 gnn=${gnn} \
-trainer=mistral7b_80gb \
+trainer=mistral7b_80gb_llava_pretraining \
 trainer.max_epochs=${max_epochs} \
-trainer.mol_representation=${modality} \
-trainer.skip_sanity_check=false \
-trainer.total_batch_size=${total_batch_size}
+trainer.skip_sanity_check=true \
+trainer.total_batch_size=${total_batch_size} \
+pretrained_ckpt_path="'/data/all_checkpoints/data/all_checkpoints/ablation_string_only_gine_custom_0421/epoch=05-step=15653.ckpt'"
 
