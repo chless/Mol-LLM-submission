@@ -28,5 +28,5 @@ trainer=mistral7b_80gb_llava_pretraining \
 trainer.max_epochs=${max_epochs} \
 trainer.skip_sanity_check=true \
 trainer.total_batch_size=${total_batch_size} \
-pretrained_ckpt_path="'/data/all_checkpoints/data/all_checkpoints/ablation_string_only_gine_custom_0421/epoch=05-step=15653.ckpt'"
+pretrained_ckpt_path="'/data/all_checkpoints/ablation_string_only_gine_custom_0421/epoch=05-step=15653.ckpt'"
 
