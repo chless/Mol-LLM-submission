@@ -79,11 +79,11 @@ gamma_beta_ratio: 0.5
 
 sft_weight: 1.0
 molpo_weight: 0.25
-anc_rejected_weight: 0.25 
+anc_rejected_weight: 0.0
 anc_reject_clip: -1
 rejected_lambda: 1.5
 molpo_lambda : -0.5
-margin_clip_scale: -1
+margin_clip_scale: 1.0
 
 reject_label_mask: false
 
