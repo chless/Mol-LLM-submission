@@ -29,7 +29,7 @@ tasks=(
 echo "==============Executing task: ablation==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=filename \
+filename=${filename} \
 data.data_tag=ablation_0411 \
 gnn=${gnn} \
 trainer=mistral7b_80gb \
