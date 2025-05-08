@@ -54,6 +54,7 @@ class Blip2Stage3(pl.LightningModule):
                 "running_mean" in key
                 or "running_var" in key
                 or "num_batches_tracked" in key
+                or "lora" in key
             ):
                 continue
             try:
