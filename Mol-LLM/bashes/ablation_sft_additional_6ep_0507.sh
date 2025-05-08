@@ -5,10 +5,10 @@ gnn=$3
 max_epochs=6
 total_batch_size=256
 if [ "$modality" != "string_only" ]; then
-    filename=ablation_sft_${modality}_${gnn}_additional_6ep_0508
+    filename=ablation_sft_${modality}_${gnn}_additional_6ep_0507
     pretrained_ckpt_path="'/data/all_checkpoints/ablation_qformer-${gnn}_pretraining_1ep_0507/epoch=00-step=2086_compensated.ckpt'"
 else
-    filename=ablation_sft_${modality}_additional_6ep_0508
+    filename=ablation_sft_${modality}_additional_6ep_0507
     pretrained_ckpt_path="'/data/all_checkpoints/ablation_string_only_gine_custom_0421/epoch=05-step=15653.ckpt'"
 fi
 
