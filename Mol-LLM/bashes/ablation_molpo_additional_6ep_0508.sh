@@ -4,9 +4,9 @@ gnn=$2
 qformer_pretraining=$3
 max_epochs=6
 total_batch_size=256
-filename=ablation_molpo-qformer_pretraining-${qformer_pretraining}_${gnn}_additional_6ep_0507
+filename=ablation_molpo-qformer_pretraining-${qformer_pretraining}_${gnn}_additional_6ep_0508
 if [ "$qformer_pretraining" -eq 1 ]; then
-    pretrained_ckpt_path="'/data/all_checkpoints/ablation_qformer-${gnn}_pretraining_1ep_0507/last.ckpt'"
+    pretrained_ckpt_path="'/data/all_checkpoints/ablation_qformer-${gnn}_pretraining_1ep_0507/epoch=00-step=2086_compensated.ckpt'"
 else
     pretrained_ckpt_path="'/data/all_checkpoints/ablation_string_only_gine_custom_0421/epoch=05-step=15653.ckpt'"
 fi
