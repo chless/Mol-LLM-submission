@@ -1,7 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 modality=$2
-max_epochs=6
+max_epochs=3
 total_batch_size=256
 
 echo "==============Executing task: ablation==============="
