@@ -1,9 +1,15 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
-modality=$2
-gnn=$3
+gnn=$2
+qformer_pretraining=$3
 max_epochs=6
 total_batch_size=256
+filename=ablation-qm9_molpo-qformer_pretraining-${qformer_pretraining}_${gnn}_additional_6ep_0509
+if [ "$qformer_pretraining" -eq 1 ]; then
+    pretrained_ckpt_path="'/data/all_checkpoints/ablation-qm9_qformer-${gnn}_pretraining_1ep_0509/last.ckpt'"
+else
+    pretrained_ckpt_path="'/data/all_checkpoints/ablation-qm9_string_only_gine_custom_0509/last.ckpt'"
+fi
 
 tasks=(
     "bace",
@@ -18,17 +24,16 @@ tasks=(
     "qm9_homo_lumo_gap"
 )
 
+
 echo "==============Executing task: ablation==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
-filename=ablation-pp_${modality}_${gnn}_0508 \
-data.data_tag=ablation-pp_0508 \
+filename=${filename} \
+data.data_tag=ablation-qm9_0509-molpo-replace-0.3 \
 gnn=${gnn} \
-trainer=mistral7b_80gb \
+trainer=mistral7b_80gb_molpo \
 trainer.max_epochs=${max_epochs} \
-trainer.mol_representation=${modality} \
-trainer.skip_sanity_check=true \
+trainer.skip_sanity_check=false \
 trainer.total_batch_size=${total_batch_size} \
-ckpt_path="'/data/all_checkpoints/ablation-pp_string_only_gine_custom_0508/last.ckpt'" \
-wandb_id=u6r4k06v
+pretrained_ckpt_path=${pretrained_ckpt_path}
 
