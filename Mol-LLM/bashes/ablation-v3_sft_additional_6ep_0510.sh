@@ -8,7 +8,7 @@ if [ "$modality" != "string_only" ]; then
     pretrained_ckpt_path="'/data/all_checkpoints/ablation-full-tasks_qformer_pretraining_1ep_0510/last.ckpt'"
 else
     filename=ablation-v3_sft_${modality}_additional_6ep_0510
-    pretrained_ckpt_path="'/data/all_checkpoints/ablation-full-tasks_string_only_0509/epoch=02-step=15571.ckpt'"
+    pretrained_ckpt_path="'/data/all_checkpoints/ablation-full-tasks_string_only_0509/epoch=02-step=14561.ckpt'"
 fi
 
 echo "==============Executing task: ablation==============="
