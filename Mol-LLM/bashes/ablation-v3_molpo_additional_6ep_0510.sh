@@ -3,7 +3,7 @@ gpus="'0,1,2,3,4,5,6,7'"
 max_epochs=6
 total_batch_size=512
 filename=ablation-v3_molpo_additional_6ep_0510
-pretrained_ckpt_path="'/data/all_checkpoints/ablation-full-tasks_qformer_pretraining_1ep_0510/last.ckpt'"
+pretrained_ckpt_path="'/data/all_checkpoints/ablation-full-tasks_qformer_pretraining_1ep_0510/epoch=00-step=4853.ckpt'"
 
 echo "==============Executing task: ablation==============="
 python Mol-LLM/stage3.py \

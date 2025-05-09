@@ -5,7 +5,7 @@ max_epochs=6
 total_batch_size=256
 if [ "$modality" != "string_only" ]; then
     filename=ablation-v3_sft_${modality}_additional_6ep_0510
-    pretrained_ckpt_path="'/data/all_checkpoints/ablation-full-tasks_qformer_pretraining_1ep_0510/last.ckpt'"
+    pretrained_ckpt_path="'/data/all_checkpoints/ablation-full-tasks_qformer_pretraining_1ep_0510/epoch=00-step=4853.ckpt'"
 else
     filename=ablation-v3_sft_${modality}_additional_6ep_0510
     pretrained_ckpt_path="'/data/all_checkpoints/ablation-full-tasks_string_only_0509/epoch=02-step=14561.ckpt'"
