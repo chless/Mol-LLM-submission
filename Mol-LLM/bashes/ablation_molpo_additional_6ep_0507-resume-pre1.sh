@@ -1,0 +1,37 @@
+export TOKENIZERS_PARALLELISM=false;
+gpus="'0,1,2,3,4,5,6,7'"
+gnn=gine_tokengt
+qformer_pretraining=1
+max_epochs=6
+total_batch_size=256
+filename=ablation_molpo-qformer_pretraining-${qformer_pretraining}_${gnn}_additional_6ep_0507
+ckpt_path="'/data/all_checkpoints/ablation_qformer-${gnn}_pretraining_1ep_0507/last.ckpt'"
+
+tasks=(
+    "smol-property_prediction-bbbp"
+    "smol-property_prediction-clintox"
+    "bace"
+    "smol-property_prediction-esol"
+    "smol-property_prediction-lipo"
+    "smol-property_prediction-hiv"
+    "smol-property_prediction-sider"
+    "chebi-20-mol2text"
+    "reagent_prediction"
+    "qm9_homo"
+    "forward_reaction_prediction"
+)
+
+echo "==============Executing task: ablation==============="
+python Mol-LLM/stage3.py \
+trainer.devices=$gpus \
+filename=${filename} \
+data.data_tag=ablation_0411_molpo-replace-0.3 \
+gnn=${gnn} \
+trainer=mistral7b_80gb_molpo \
+trainer.max_epochs=${max_epochs} \
+trainer.skip_sanity_check=false \
+trainer.total_batch_size=${total_batch_size} \
+ckpt_path=${ckpt_path} \
+wandb_id=defrttoi
+
+
