@@ -2,7 +2,7 @@ export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 max_epochs=1
 total_batch_size=256
-ilename=ablation-full-tasks_qformer_pretraining_1ep_0510
+filename=ablation-full-tasks_qformer_pretraining_1ep_0510
 
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
