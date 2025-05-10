@@ -1,8 +1,9 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 data_tag=$2
+ckpt_name=$3
 filename=test_${data_tag}_molpo_0509
-ckpt_path="'/data/all_checkpoints/MT_from-string_only_12ep_molpo-wo-L-rej-margin_clip_scale-1.0_6ep_0502/epoch=05-step=8397.ckpt'"
+ckpt_path="'/data/all_checkpoints/nas/text-mol/all_checkpoints/MT_from-string_only_12ep_molpo-wo-L-rej-margin_clip_scale-1.0_6ep_0502_continue/${ckpt_name}'"
 
 echo "==============Executing task: ablation==============="
 python Mol-LLM/stage3.py \
