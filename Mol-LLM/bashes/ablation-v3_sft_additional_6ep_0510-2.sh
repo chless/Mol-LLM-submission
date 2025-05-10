@@ -5,7 +5,7 @@ max_epochs=6
 total_batch_size=256
 
 filename=ablation-v3_sft_${modality}_additional_6ep_0510-2
-pretrained_ckpt_path="'/data/all_checkpoints/ablation-v3_sft_string+graph_additional_6ep_0510/epoch=05-step=13157.ckpt'"
+pretrained_ckpt_path="'/data/all_checkpoints/ablation-v3_sft_${modality}_additional_6ep_0510/epoch=05-step=13157.ckpt'"
 
 echo "==============Executing task: ablation==============="
 python Mol-LLM/stage3.py \
