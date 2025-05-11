@@ -9,7 +9,7 @@ echo "==============Executing task: ablation==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=${filename} \
-data.data_tag=ablation-v3_0510-molpo-replace-0.3 \
+data.data_tag=ablation-v3_0510_molpo-replace-0.3 \
 trainer=mistral7b_80gb_molpo \
 trainer.max_epochs=${max_epochs} \
 trainer.skip_sanity_check=false \
