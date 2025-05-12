@@ -1,7 +1,7 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
 max_epochs=1
-gnn=moleculeSTM
+gnn=$2
 total_batch_size=256
 filename=ablation-full-tasks_qformer-${gnn}_pretraining_1ep_0512
 
@@ -9,7 +9,7 @@ echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \
 filename=${filename} \
-gnn=gnn \
+gnn=${gnn} \
 data.data_tag=ablation-full-tasks_0509 \
 trainer=mistral7b_80gb_llava_pretraining \
 trainer.max_epochs=${max_epochs} \
