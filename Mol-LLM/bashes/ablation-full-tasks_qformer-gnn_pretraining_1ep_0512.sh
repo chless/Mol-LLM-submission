@@ -4,6 +4,11 @@ max_epochs=1
 gnn=$2
 total_batch_size=256
 filename=ablation-full-tasks_qformer-${gnn}_pretraining_1ep_0512
+if [ "$gnn" == "gnn_scratch" ]; then
+	tune_gnn=true
+else
+	tune_gnn=false
+fi
 
 echo "==============Executing task: $task==============="
 python Mol-LLM/stage3.py \
