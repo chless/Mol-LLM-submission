@@ -12,5 +12,7 @@ filename=${filename} \
 data.data_tag=${data_tag} \
 trainer=mistral7b_80gb \
 trainer.skip_sanity_check=false \
-ckpt_path=${ckpt_path}
+ckpt_path=${ckpt_path} \
+trainer.eval_molpo=false \
+trainer.eval_modality_utile=false \
 
