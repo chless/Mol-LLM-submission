@@ -544,8 +544,8 @@ class Blip2Stage3(pl.LightningModule):
 
     def on_train_epoch_start(self) -> None:
         self.task_specific_outputs = {}
-        if not hasattr(self, "task_specific_chosen_reward"):
-            self.task_specific_chosen_reward = {}
+        # if not hasattr(self, "task_specific_chosen_reward"):
+        self.task_specific_chosen_reward = {}
 
         self.train_list_predictions = []
         self.train_list_targets = []
