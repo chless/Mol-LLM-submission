@@ -12,8 +12,7 @@ trainer.max_epochs=${max_epochs} \
 trainer.mol_representation=string_only \
 trainer.skip_sanity_check=false \
 pretrained_ckpt_path="'/data/all_checkpoints/MT_from-string_only_12ep_string_only_6ep_0502/epoch=05-step=19379.ckpt'" \
-trainer.init_lr=0.00004 \
-trainer.warmup_lr=0.000004 \
+trainer.init_lr=0.00002 \
+trainer.warmup_lr=0.000002 \
 trainer.val_check_interval=0.20 \
 trainer.batch_size=8
-
