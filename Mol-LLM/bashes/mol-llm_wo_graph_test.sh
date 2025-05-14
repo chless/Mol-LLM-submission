@@ -15,4 +15,5 @@ trainer.skip_sanity_check=false \
 ckpt_path=${ckpt_path} \
 trainer.eval_molpo=false \
 trainer.eval_modality_util=false \
+trainer.mol_representation=string_only
 
