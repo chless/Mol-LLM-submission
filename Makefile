@@ -1,5 +1,5 @@
-REPO_PATH=/home/chanhui-lee/text-mol
-CACHE_PATH=/home/chanhui-lee/.cache
+REPO_PATH=/home/user/text-mol
+CACHE_PATH=/home/user/.cache
 DATA_PATH=/data/text-mol
 IMAGE_NAME_TAG=chless/mol-llm:v1
 
