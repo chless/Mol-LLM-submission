@@ -281,11 +281,6 @@ class Blip2Stage3(pl.LightningModule):
                 sft_loss_mask.sum(-1) > 0
             ].sum() / sft_loss_mask.sum()
 
-            # <DEBUG>
-            sft_loss_bug = (sft_instance_loss * chosen_loss_mask.sum(-1))[
-                chosen_loss_mask.sum(-1) > 0
-            ].sum() / chosen_loss_mask.sum()
-            # </DEBUG>
         elif molpo_batch_division == 3:
             policy_sft_logps = out["sft_logps"]
             sft_loss_mask = out["sft_loss_mask"]
@@ -368,10 +363,7 @@ class Blip2Stage3(pl.LightningModule):
         metrics[f"logps/rejected"] = policy_rejected_logps.clone().detach().cpu()
 
         metrics[f"sft_loss"] = sft_loss.clone().detach().cpu()
-        # <DEBUG>
-        if sft_loss_bug is not None:
-            metrics[f"sft_loss_bug"] = sft_loss_bug.clone().detach().cpu()
-        # </DEBUG>
+
         metrics[f"instance_loss"] = sft_instance_loss.clone().detach().cpu()
         metrics[f"molpo_loss"] = losses_molpo.clone().detach().cpu()
         metrics[f"anchor_loss/rejected"] = anchor_rejected_losses.clone().detach().cpu()

@@ -172,7 +172,6 @@ def molecule_evaluate(
             else:
                 prediction_selfies = re.search(r"(?<=<SELFIES>).*", prediction).group()
 
-            # <DEBUG>
             prediction_selfies = prediction_selfies.split("<SELFIES>")[-1]
             prediction_selfies = prediction_selfies.split("</SELFIES>")[0]
 
@@ -180,7 +179,6 @@ def molecule_evaluate(
                 "<SELFIES>" not in prediction_selfies
                 and "</SELFIES>" not in prediction_selfies
             )
-            # </DEBUG>
 
             prediction_smiles = selfies.decoder(prediction_selfies)
             prediction_mol = Chem.MolFromSmiles(prediction_smiles)
