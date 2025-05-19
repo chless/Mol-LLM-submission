@@ -1,8 +1,0 @@
-raw_data_root: 'your data path'
-data_tag: "rxn_t2m"
-
-tasks:
-  - retrosynthesis
-  - reagent_prediction
-  - chebi-20-text2mol
-  - smol-molecule_captioning

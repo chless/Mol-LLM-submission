@@ -63,7 +63,7 @@ RUN pip install -r requirements.txt
 COPY . .
 
 # Install PyTorch and additional Python libraries
-RUN pip install torch torchvision torchaudio && \
+RUN pip install torch torchvision torchaudio flash_attn && \
     pip install --upgrade numpy thinc spacy opencv-python
 
 # Update Zsh configuration

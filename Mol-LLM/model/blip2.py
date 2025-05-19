@@ -18,6 +18,9 @@ from lavis.models.base_model import BaseModel
 from lavis.models.blip2_models.Qformer import BertConfig, BertLMHeadModel
 from transformers import BertTokenizer
 from model.gin_model import GNN, GNN_MoleculeSTM
+from model.tokenGT import BERTTokenGT
+from model.gine_tokengt import GINE_TokenGT
+from collections import OrderedDict
 
 
 class Blip2Base(BaseModel):
@@ -74,10 +77,36 @@ class Blip2Base(BaseModel):
         return Qformer, query_tokens
 
     @classmethod
-    def init_graph_encoder(cls, gin_num_layers, gin_hidden_dim, gin_drop_ratio, args):
+    def init_graph_encoder(cls, args):
+
+        if args.gnn_type == "gine":
+            graph_encoder = GNN_MoleculeSTM(
+                num_layer=args.gnn_num_layers,
+                emb_dim=args.gnn_hidden_dim,
+                gnn_type="gin",
+                drop_ratio=args.drop_ratio,
+                JK=args.gnn_jk,
+                args=args,
+            )
+        elif args.gnn_type == "tokengt":
+            graph_encoder = BERTTokenGT(
+                input_feat_dim=args.input_feat_dim,
+                hidden_dim=args.gnn_hidden_dim,
+                num_layers=args.num_layers,
+                num_heads=args.num_heads,
+                method=args.method,
+                d_p=args.d_p,
+                d_e=args.d_e,
+                use_graph_token=args.use_graph_token,
+                max_position_embeddings=args.max_position_embeddings,
+            )
+        elif args.gnn_type == "gine_tokengt":
+            graph_encoder = GINE_TokenGT(args)
+            ln_graph = LayerNorm(args.gine.gnn_hidden_dim)
+
+            return graph_encoder, ln_graph
 
         if "MoleculeSTM" in args.graph_encoder_ckpt:
-            gnn_class = GNN_MoleculeSTM
             if args.graph_encoder_ckpt is not None:
                 ckpt = torch.load(
                     args.graph_encoder_ckpt, map_location=torch.device("cpu")
@@ -87,29 +116,45 @@ class Blip2Base(BaseModel):
                     if k.startswith("molecule_node_model."):
                         renamed_state_dict[k.replace("molecule_node_model.", "")] = v
                 ckpt = renamed_state_dict
-        else:
-            gnn_class = GNN
-            ckpt = None
-
-        graph_encoder = gnn_class(
-            num_layer=gin_num_layers,
-            emb_dim=gin_hidden_dim,
-            gnn_type="gin",
-            drop_ratio=gin_drop_ratio,
-            JK=args.gnn_jk,
-            args=args,
-        )
-
-        if ckpt is not None:
+                print(f"load graph encoder from {args.graph_encoder_ckpt}")
+                missing_keys, unexpected_keys = graph_encoder.load_state_dict(
+                    ckpt, strict=False
+                )
+                if len(missing_keys) or len(unexpected_keys):
+                    print(missing_keys)
+                    print(unexpected_keys)
+        elif "Custom_gnn_models" in args.graph_encoder_ckpt:
+            ckpt = torch.load(args.graph_encoder_ckpt, map_location=torch.device("cpu"))
+            renamed_state_dict = {}
+            for param, value in ckpt["state_dict"].items():
+                if param.startswith("gnn."):
+                    renamed_state_dict[param.replace("gnn.", "")] = value
+            graph_encoder.load_state_dict(renamed_state_dict, strict=True)
             print(f"load graph encoder from {args.graph_encoder_ckpt}")
-            missing_keys, unexpected_keys = graph_encoder.load_state_dict(
-                ckpt, strict=False
+        elif "scratch" in args.graph_encoder_ckpt:
+            pass
+        else:
+            raise NotImplementedError(
+                f"Please provide a valid graph encoder checkpoint. {args.graph_encoder_ckpt} is not supported."
             )
-            if len(missing_keys) or len(unexpected_keys):
-                print(missing_keys)
-                print(unexpected_keys)
 
-        ln_graph = LayerNorm(gin_hidden_dim)
+        ln_graph = LayerNorm(args.gnn_hidden_dim)
+
+        # qm9_pretrained = torch.load("gnn_ablation/all_except_lumo_homo_gap_scaled/GM_GM_-_-/lightning_logs/version_0/checkpoints/best-model.ckpt")['state_dict']
+        # qm9_renamed_gnn_state_dict = {}
+        # qm9_renamed_lngraph_state_dict = {}
+
+        # for name, param in qm9_pretrained.items():
+        #     if name.startswith("mlp."):
+        #         continue
+        #     if name.startswith('ln_graph.'):
+        #         qm9_renamed_lngraph_state_dict[name.replace("ln_graph.", "")] = param
+        #         continue
+        #     renamed = name.replace("gin.", "")
+        #     qm9_renamed_gnn_state_dict[renamed] = param
+
+        # graph_encoder.load_state_dict(qm9_renamed_gnn_state_dict, strict=True)
+        # ln_graph.load_state_dict(qm9_renamed_lngraph_state_dict, strict=True)
 
         return graph_encoder, ln_graph
 
@@ -157,6 +202,50 @@ class Blip2Base(BaseModel):
         if IsPrint:
             for n in names:
                 print(f"{n} set to requires_grad: {grad}")
+
+    def get_params_by_keywords(state_dict, keywords):
+        """
+        Filters a state_dict to include only parameters whose names contain any of the specified keywords.
+
+        Args:
+            state_dict (dict or OrderedDict): The model's state_dict.
+            keywords (str or list of str): A keyword or a list of keywords to search for in parameter names.
+
+        Returns:
+            OrderedDict: A new dictionary containing only the matching parameters.
+                        Using OrderedDict to preserve original parameter order.
+        """
+        if isinstance(keywords, str):
+            keywords = [keywords]  # Convert single keyword to list for uniformity
+
+        # Using a dictionary comprehension for conciseness
+        filtered_params = OrderedDict({
+            param_name: param_tensor
+            for param_name, param_tensor in state_dict.items()
+            if any([keyword in param_name for keyword in keywords])  # Include if any keyword matches
+        })
+        return filtered_params
+
+    def get_params_without_keywords(state_dict, keywords_to_exclude):
+        """
+        Filters a state_dict to include only parameters whose names
+        do NOT contain any of the specified keywords.
+
+        Args:
+            state_dict (dict or OrderedDict): The model's state_dict.
+            keywords_to_exclude (list of str): A list of keywords to exclude from parameter names.
+
+        Returns:
+            OrderedDict: A new dictionary containing only the parameters whose
+                        names do not contain any of the specified keywords.
+        """
+        # Using a dictionary comprehension for conciseness
+        filtered_params = OrderedDict({
+            param_name: param_tensor
+            for param_name, param_tensor in state_dict.items()
+            if not any([keyword in param_name for keyword in keywords_to_exclude])  # Exclude if any keyword matches
+        })
+        return filtered_params
 
     def check_grads(cls, model, keyword):
         names = []

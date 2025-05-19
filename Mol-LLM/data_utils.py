@@ -118,9 +118,10 @@ class DataCollator(DataCollatorForSeq2Seq):
         self.tokenizer.padding_side = "left"
         self.mol_representation = args.mol_representation
 
-        self.apply_molpo = args.train_simpo if self.train else args.eval_simpo
+        self.apply_molpo = args.train_molpo if self.train else args.eval_molpo
 
         self.projector_type = args.projector_type
+        self.current_epoch = args.current_epoch
         self.args = args
 
         if self.mol_representation in ["string+graph", "graph_only"]:
@@ -142,17 +143,110 @@ class DataCollator(DataCollatorForSeq2Seq):
                 "mol_representation should be one of ['string+graph', 'string_only', 'graph_only']"
             )
 
+    def enumerate_selfies(
+        self,
+        origin_selfies,
+    ):
+        origin_smiles = sf.decoder(origin_selfies)
+
+        isomericSmiles = bool(self.args.isomericSmiles)
+        canonical = bool(self.args.canonical)
+        allHsExplicit = bool(self.args.allHsExplicit)
+
+        processed_smiles = Chem.MolToSmiles(
+            Chem.MolFromSmiles(origin_smiles),
+            isomericSmiles=isomericSmiles,
+            canonical=canonical,
+            doRandom=not canonical,
+            allHsExplicit=allHsExplicit,
+            allBondsExplicit=False,
+            kekuleSmiles=False,
+        )
+        processed_selfies = sf.encoder(processed_smiles)
+        return processed_selfies
+
     def __call__(self, batch, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
 
-        tasks = [task2id(sample.pop("task")) for sample in batch]  # task id
+        tasks = [task2id(sample["task"]) for sample in batch]  # task id
+        task_names = [id2task(task) for task in tasks]
         prompt_text = [sample["prompt_text"] for sample in batch]
         target_text = [sample["target_text"] for sample in batch]
+        input_mol_strings = [sample["input_mol_string"] for sample in batch]
+        list_selfies = [
+            i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
+            for i in input_mol_strings
+        ]
+        list_graphs = [
+            Data(
+                x=torch.tensor(sample["x"], dtype=torch.int64),
+                edge_index=torch.tensor(sample["edge_index"], dtype=torch.int64),
+                edge_attr=torch.tensor(sample["edge_attr"], dtype=torch.int64),
+            )
+            for sample in batch
+        ]
+        # for reagent prediction
+        list_additional_graphs = [
+            Data(
+                x=torch.tensor(sample["additional_x"], dtype=torch.int64),
+                edge_index=torch.tensor(
+                    sample["additional_edge_index"], dtype=torch.int64
+                ),
+                edge_attr=torch.tensor(
+                    sample["additional_edge_attr"], dtype=torch.int64
+                ),
+            )
+            for sample in batch
+        ]
 
         prompt_text = self.select_mol_representation(
             prompt_text, mol_representation=self.mol_representation
         )
+
+        if not self.train and self.args.eval_modality_util in [
+            "string",
+            "graph",
+        ]:
+            shuffled_idx = []
+            # shuffle the selfies_idx, guarantee that the selfies_idx is not in order
+            for i in range(len(list_selfies)):
+                idxs = np.random.choice(
+                    range(len(list_selfies)), size=2, replace=False
+                ).tolist()
+                if i in idxs:
+                    idxs.remove(i)
+                shuffled_idx.append(idxs[0])
+
+            if self.args.eval_modality_util == "string":
+                processed_selfies = [list_selfies[i] for i in shuffled_idx]
+                for i in range(len(prompt_text)):
+                    assert (
+                        list_selfies[i] in prompt_text[i]
+                    ), f"{list_selfies[i]} not in {prompt_text[i]}"
+                    prompt_text[i] = prompt_text[i].replace(
+                        list_selfies[i], processed_selfies[i]
+                    )
+
+            if self.args.eval_modality_util == "graph":
+                list_graphs = [list_graphs[i] for i in shuffled_idx]
+                list_additional_graphs = [
+                    list_additional_graphs[i] for i in shuffled_idx
+                ]
+
+        if self.args.selfies_enumeration:
+            processed_selfies = [
+                self.enumerate_selfies(list_selfies[i])
+                for i in range(len(list_selfies))
+            ]
+            for i in range(len(prompt_text)):
+                assert (
+                    list_selfies[i] in prompt_text[i]
+                ), f"{list_selfies[i]} not in {prompt_text[i]}"
+                prompt_text[i] = prompt_text[i].replace(
+                    list_selfies[i], processed_selfies[i]
+                )
+                list_selfies = processed_selfies
 
         if self.apply_molpo:
             if self.train:
@@ -160,71 +254,29 @@ class DataCollator(DataCollatorForSeq2Seq):
             else:
                 self.reject_cardinal = 0
 
-            # prepare tuples
-            # sft tuple (gw, sw, q, y)
-            # molpo chosen tuple (gw, sl, q, y)
-            # molpo rejected tuple (gl, sl, q, y)
-            input_mol_strings = [sample["input_mol_string"] for sample in batch]
-            list_selfies = [
-                i.replace("<SELFIES> ", "").replace(" </SELFIES>", "")
-                for i in input_mol_strings
-            ]
-
-            prompt_text_sl = prompt_text.copy()
-
-            if self.args.sl_noise_ratio > 0:
-                for i in range(len(prompt_text_sl)):
-                    sw = list_selfies[i]
-                    if input_mol_string_pattern.search(prompt_text_sl[i]):
-                        sl = random_noise_selfies(
-                            selfies=sw,
-                            tokenizer=self.tokenizer,
-                            sl_noise_ratio=self.args.sl_noise_ratio,
-                        )
-                        assert (
-                            sw in prompt_text_sl[i]
-                        ), f"{sw} not in {prompt_text_sl[i]}"
-                        prompt_text_sl[i] = prompt_text_sl[i].replace(sw, sl)
+            prompt_text_reject = prompt_text.copy()
 
             if self.args.apply_preference_system_prompt:
-                for i in range(len(prompt_text_sl)):
+                for i in range(len(prompt_text_reject)):
                     preference_system_prompt = "In the following problems, molecular graph is either accurate or inaccurate. Your predictions should be based primarily on careful understanding of the provided graph."
-                    prompt_text_sl[i] = re.sub(
+                    prompt_text_reject[i] = re.sub(
                         r"(?<=\[INST\]).*(?=\n\n)",
                         preference_system_prompt,
-                        prompt_text_sl[i],
+                        prompt_text_reject[i],
                     )
 
-            prompt_text = (
-                prompt_text + prompt_text_sl * 2
-            )  # ((q, sw), (q, sl), (q, sl))
-            target_text = target_text * 3  # (y, y, y)
-            tasks = tasks * 3
+            prompt_text = prompt_text + prompt_text_reject * (
+                self.args.molpo_batch_division - 1
+            )
+            if hasattr(self.args, "reject_label_mask") and self.args.reject_label_mask:
+                reject_target_text = [sample[f"{self.reject_cardinal}-th_rejected_target_text"] for sample in batch]
+                target_text = target_text + reject_target_text
+            else:
+                target_text = target_text * self.args.molpo_batch_division
+            tasks = tasks * self.args.molpo_batch_division
+            task_names = task_names * self.args.molpo_batch_division
 
-        if "graph" in self.mol_representation:
-            list_graphs = [
-                Data(
-                    x=torch.tensor(sample["x"], dtype=torch.int64),
-                    edge_index=torch.tensor(sample["edge_index"], dtype=torch.int64),
-                    edge_attr=torch.tensor(sample["edge_attr"], dtype=torch.int64),
-                )
-                for sample in batch
-            ]
-            # for reagent prediction
-            list_additional_graphs = [
-                Data(
-                    x=torch.tensor(sample["additional_x"], dtype=torch.int64),
-                    edge_index=torch.tensor(
-                        sample["additional_edge_index"], dtype=torch.int64
-                    ),
-                    edge_attr=torch.tensor(
-                        sample["additional_edge_attr"], dtype=torch.int64
-                    ),
-                )
-                for sample in batch
-            ]
-
-            if self.apply_molpo:
+            if "graph" in self.mol_representation:
                 list_rejected_graphs = [
                     Data(
                         x=torch.tensor(
@@ -265,32 +317,53 @@ class DataCollator(DataCollatorForSeq2Seq):
                     for sample in batch
                 ]
 
-                # (gw, gw, gl)
-                list_graphs = list_graphs * 2 + list_rejected_graphs
+                list_graphs = (
+                    list_graphs * (self.args.molpo_batch_division - 1)
+                    + list_rejected_graphs
+                )
                 list_additional_graphs = (
-                    list_additional_graphs * 2 + list_rejected_additional_graphs
+                    list_additional_graphs * (self.args.molpo_batch_division - 1)
+                    + list_rejected_additional_graphs
                 )
 
+        # address <mol> token in prompt_text, for the case of using graph modality
         if self.projector_type == "mlp" and "graph" in self.mol_representation:
             for i in range(len(prompt_text)):
-                if '|>>|' in prompt_text[i]:
+                if task_names[i] in ["reagent_prediction"]:
                     num_nodes_in_graph = list_graphs[i].x.size(0)
                     num_nodes_mol = "<mol>" * num_nodes_in_graph
                     mol_tokens_pattern = re.compile(r"(<mol>)+(?=</GRAPH>\|>>\|)")
-                    assert mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
-                    prompt_text[i] = mol_tokens_pattern.sub(num_nodes_mol, prompt_text[i])
+                    assert mol_tokens_pattern.search(
+                        prompt_text[i]
+                    ), f"{prompt_text[i]}"
+                    prompt_text[i] = mol_tokens_pattern.sub(
+                        num_nodes_mol, prompt_text[i]
+                    )
 
                     num_additional_nodes_in_graph = list_additional_graphs[i].x.size(0)
                     num_additional_nodes_mol = "<mol>" * num_additional_nodes_in_graph
-                    additional_mol_tokens_pattern = re.compile(r"(?<=\|>>\|<GRAPH>)(<mol>)+")
-                    assert additional_mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
-                    prompt_text[i] = additional_mol_tokens_pattern.sub(num_additional_nodes_mol, prompt_text[i])
+                    additional_mol_tokens_pattern = re.compile(
+                        r"(?<=\|>>\|<GRAPH>)(<mol>)+"
+                    )
+                    assert additional_mol_tokens_pattern.search(
+                        prompt_text[i]
+                    ), f"{prompt_text[i]}"
+                    prompt_text[i] = additional_mol_tokens_pattern.sub(
+                        num_additional_nodes_mol, prompt_text[i]
+                    )
+                elif task_names[i] in TEXT2MOL_BENCHMARKS:
+                    # there is no input <mol> token
+                    pass
                 else:
                     num_nodes_in_graph = list_graphs[i].x.size(0)
                     num_nodes_mol = "<mol>" * num_nodes_in_graph
                     mol_tokens_pattern = re.compile("(<mol>)+")
-                    assert mol_tokens_pattern.search(prompt_text[i]), f"{prompt_text[i]}"
-                    prompt_text[i] = mol_tokens_pattern.sub(num_nodes_mol, prompt_text[i])
+                    assert mol_tokens_pattern.search(
+                        prompt_text[i]
+                    ), f"{prompt_text[i]}"
+                    prompt_text[i] = mol_tokens_pattern.sub(
+                        num_nodes_mol, prompt_text[i]
+                    )
 
         self.tokenizer.padding_side = "left"
         prompt_tokenized = self.tokenizer(
@@ -354,7 +427,7 @@ class DataCollator(DataCollatorForSeq2Seq):
             )  # ['attention_mask']
 
             self.tokenizer.padding_side = "right"
-            eval_features = self.tokenizer.pad(
+            gen_features = self.tokenizer.pad(
                 {
                     "input_ids": [t for t in target_tokenized["input_ids"]],
                 },
@@ -362,16 +435,21 @@ class DataCollator(DataCollatorForSeq2Seq):
                 pad_to_multiple_of=self.pad_to_multiple_of,
                 return_tensors=return_tensors,
             )
-            eval_features.input_ids = eval_features.input_ids.masked_fill(
-                eval_features.input_ids == self.tokenizer.pad_token_id, -100
+            gen_features.input_ids = gen_features.input_ids.masked_fill(
+                gen_features.input_ids == self.tokenizer.pad_token_id, -100
             )
-            features["eval_labels"] = eval_features.input_ids
-            eval_simpo_labels = eval_features.input_ids.clone()
-            for simpo_mask_id in self.tokenizer.simpo_mask_ids:
-                eval_simpo_labels = eval_simpo_labels.masked_fill(
-                    eval_simpo_labels == simpo_mask_id, -100
-                )
-            features["eval_simpo_labels"] = eval_simpo_labels
+            features["gen_labels"] = gen_features.input_ids
+
+            input_mol_strings_tokenized = self.tokenizer(
+                input_mol_strings,
+                truncation=False,
+                max_length=self.max_length,
+                padding=True,
+                return_tensors=return_tensors,
+                add_special_tokens=False,
+            )
+
+            features["input_mol_strings"] = input_mol_strings_tokenized.input_ids
 
         labels_ids = torch.full_like(features["input_ids"], self.tokenizer.pad_token_id)
         for i, target in enumerate(target_tokenized["input_ids"]):
@@ -388,12 +466,24 @@ class DataCollator(DataCollatorForSeq2Seq):
             labels_ids == self.tokenizer.pad_token_id, -100
         )
         features["labels"] = labels_ids
-        simpo_labels_ids = labels_ids.clone()
-        for simpo_mask_id in self.tokenizer.simpo_mask_ids:
-            simpo_labels_ids = simpo_labels_ids.masked_fill(
-                simpo_labels_ids == simpo_mask_id, -100
-            )
-        features["simpo_labels"] = simpo_labels_ids
+        if self.apply_molpo:
+            molpo_labels_ids = labels_ids.clone()
+            for molpo_mask_id in self.tokenizer.molpo_mask_ids:
+                molpo_labels_ids = molpo_labels_ids.masked_fill(
+                    molpo_labels_ids == molpo_mask_id, -100
+                )
+            if hasattr(self.args, "reject_label_mask") and self.args.reject_label_mask:
+                num_chosen = molpo_labels_ids.shape[0] // self.args.molpo_batch_division
+                chosen_molpo_labels_ids = molpo_labels_ids.clone()[:num_chosen]
+                reject_molpo_labels_ids = molpo_labels_ids.clone()[num_chosen:]
+
+                chosen_molpo_labels_ids = chosen_molpo_labels_ids.masked_fill(
+                    chosen_molpo_labels_ids == reject_molpo_labels_ids, -100
+                )
+                molpo_labels_ids = torch.cat(
+                    (chosen_molpo_labels_ids, reject_molpo_labels_ids), dim=0
+                )
+            features["molpo_labels"] = molpo_labels_ids
 
         assert (
             features.input_ids.size(1) <= self.max_length

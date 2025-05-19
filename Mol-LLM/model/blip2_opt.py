@@ -19,8 +19,11 @@ from peft import (
     PeftModel,
 )
 from ogb.utils import smiles2graph
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 from torch_geometric.loader.dataloader import Collater
-from torch_geometric.data import Data
+from torch_geometric.data import Data, Batch
+from torch_geometric.utils import subgraph
 import numpy as np
 from lavis.models.blip2_models.blip2 import (
     # Blip2Base,
@@ -32,6 +35,7 @@ from transformers import OPTForCausalLM
 import model.added_tokens as added_tokens
 
 from torch.nn import CrossEntropyLoss
+from torch.nn.utils.rnn import pad_sequence
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.utils import replace_return_docstrings
 
@@ -65,6 +69,124 @@ def smiles2data(smiles):
     return data
 
 
+def shuffle_masked_embeddings(
+    embeddings: torch.Tensor, mask: torch.Tensor
+) -> torch.Tensor:
+    """
+    embeddings: torch.Tensor of shape (B, L, D)
+    mask:       torch.BoolTensor of shape (B, L)
+
+    Returns a new tensor of same shape where, for each batch b,
+    the rows embeddings[b, mask[b]] are randomly permuted among those positions.
+    """
+    if embeddings.dim() != 3 or mask.dim() != 2:
+        raise ValueError(
+            "Expected embeddings of shape (B, L, D) and mask of shape (B, L)"
+        )
+    B, L, D = embeddings.shape
+    if mask.shape != (B, L):
+        raise ValueError(f"mask shape must be {(B, L)}, got {mask.shape}")
+    if mask.dtype != torch.bool:
+        mask = mask.to(torch.bool)
+
+    shuffled = embeddings.clone()
+
+    for b in range(B):
+        pos = torch.nonzero(mask[b], as_tuple=False).squeeze(1)  # shape (n,)
+        n = pos.size(0)
+        if n > 1:
+            perm = torch.randperm(n, device=embeddings.device)
+            shuffled[b, pos] = embeddings[b, pos[perm]]
+
+    return shuffled
+
+
+def split_batch_by_components(batch: Batch) -> Batch:
+    num_nodes = batch.num_nodes
+    edge_index = batch.edge_index
+    edge_attr = batch.edge_attr if hasattr(batch, "edge_attr") else None
+
+    row, col = edge_index.cpu().numpy()
+    adj = coo_matrix(
+        (np.ones(len(row), dtype=bool), (row, col)), shape=(num_nodes, num_nodes)
+    )
+
+    n_components, labels = connected_components(
+        csgraph=adj, directed=False, return_labels=True
+    )
+    labels = torch.from_numpy(labels).to(edge_index.device)
+
+    new_data_list = []
+    for comp_id in range(n_components):
+        node_mask = labels == comp_id
+        nodes = node_mask.nonzero(as_tuple=False).view(-1)
+
+        sub_ei, sub_ea = subgraph(
+            nodes.cpu().tolist(),
+            edge_index,
+            relabel_nodes=True,
+            num_nodes=num_nodes,
+            edge_attr=edge_attr,
+        )
+        sub_x = batch.x[nodes]
+        sub_batch = batch.batch[nodes]
+        orig_gid = torch.unique(sub_batch)
+        assert (
+            orig_gid.numel() == 1
+        ), "한 컴포넌트가 두 개 이상의 그래프에 걸쳐 있습니다."
+
+        data = Data(x=sub_x, edge_index=sub_ei)
+        if edge_attr is not None:
+            data.edge_attr = sub_ea
+
+        # 노드-레벨 텐서 속성 복사
+        for key, attr in batch.items():
+            if key in ("x", "edge_index", "edge_attr", "batch"):
+                continue
+            if torch.is_tensor(attr) and attr.size(0) == num_nodes:
+                data[key] = attr[nodes]
+            elif torch.is_tensor(attr) and attr.size(0) == batch.num_graphs:
+                data[key] = attr[orig_gid]
+            else:
+                data[key] = attr
+
+        new_data_list.append(data)
+
+    return new_data_list
+    # return Batch.from_data_list(new_data_list)
+
+
+def count_connected_components(
+    edge_index: torch.LongTensor, num_nodes: int = None
+) -> int:
+    if num_nodes is None:
+        num_nodes = int(edge_index.max().item()) + 1
+
+    parent = list(range(num_nodes))
+
+    # Find with path compression
+    def find(u: int) -> int:
+        while parent[u] != u:
+            parent[u] = parent[parent[u]]
+            u = parent[u]
+        return u
+
+    # Union
+    def union(u: int, v: int):
+        ru, rv = find(u), find(v)
+        if ru != rv:
+            parent[rv] = ru
+
+    for u, v in edge_index.t().tolist():
+        union(u, v)
+        union(v, u)
+
+    for i in range(num_nodes):
+        parent[i] = find(i)
+
+    return len(set(parent))
+
+
 import re
 
 
@@ -80,24 +202,19 @@ class Blip2OPT(Blip2Base):
         >>> model = load_model("blip2", "pretrain")
     """
 
-    def __init__(
-        self,
-        bert_name,
-        gin_num_layers,
-        gin_hidden_dim,
-        gin_drop_ratio,
-        tune_gnn=False,
-        num_query_token=32,
-        cross_attention_freq=2,
-        tune_llm="freeze",
-        peft_dir="",
-        llm_model="facebook/galactica-1.3b",
-        prompt="",  # TODO: remove. currently LLM classes not use prompt from args.prompt
-        args=None,
-    ):
+    def __init__(self, args=None):
         super().__init__()
         self.args = args
+        bert_name = args.bert_name
+        tune_gnn = args.tune_gnn
+        num_query_token = args.num_query_token
+        cross_attention_freq = args.cross_attention_freq
+        tune_llm = args.tune_llm
+        peft_dir = args.peft_dir
+        llm_model = args.llm_model
+        prompt = args.prompt
         self.peft_dir = peft_dir
+        gnn_hidden_dim = args.gnn_hidden_dim
 
         # initialize opt model
         self.llm_tokenizer = AutoTokenizer.from_pretrained(
@@ -155,9 +272,7 @@ class Blip2OPT(Blip2Base):
             )
 
         if "graph" in self.args.mol_representation:
-            self.graph_encoder, self.ln_graph = self.init_graph_encoder(
-                gin_num_layers, gin_hidden_dim, gin_drop_ratio, args
-            )
+            self.graph_encoder, self.ln_graph = self.init_graph_encoder(args)
 
             self.tune_gnn = tune_gnn
             if not tune_gnn:
@@ -173,7 +288,7 @@ class Blip2OPT(Blip2Base):
                 self.Qformer, self.query_tokens = self.init_Qformer(
                     bert_name,
                     num_query_token,
-                    gin_hidden_dim,
+                    gnn_hidden_dim,
                     cross_attention_freq,
                     bert_num_hidden_layers=args.bert_num_hidden_layers,
                 )
@@ -192,7 +307,7 @@ class Blip2OPT(Blip2Base):
             elif self.args.projector_type == "mlp":
                 # build self.opt_proj with single layers
                 self.opt_proj = nn.Linear(
-                    gin_hidden_dim, self.llm_model.config.hidden_size
+                    gnn_hidden_dim, self.llm_model.config.hidden_size
                 )
 
     def get_lora_target_modules(self):
@@ -246,21 +361,27 @@ class Blip2OPT(Blip2Base):
 
         self.llm_tokenizer.add_tokens(additional_tokens)
 
-        simpo_mask_tokens = added_tokens.BOOL + added_tokens.FLOAT \
-            + added_tokens.DESCRIPTION + added_tokens.SELFIES \
-            + added_tokens.IUPAC \
+        molpo_mask_tokens = (
+            added_tokens.BOOL
+            + added_tokens.FLOAT
+            + added_tokens.DESCRIPTION
+            + added_tokens.SELFIES
+            + added_tokens.IUPAC
             + added_tokens.MOLFORMULA
-        simpo_mask_tokens += [self.llm_tokenizer.eos_token]
-        self.llm_tokenizer.simpo_mask_tokens = simpo_mask_tokens
+        )
+        molpo_mask_tokens += [self.llm_tokenizer.eos_token]
+        self.llm_tokenizer.molpo_mask_tokens = molpo_mask_tokens
 
         # get ids of task tokens
-        self.llm_tokenizer.simpo_mask_ids = [
+        self.llm_tokenizer.molpo_mask_ids = [
             self.llm_tokenizer.convert_tokens_to_ids(token)
-            for token in simpo_mask_tokens
-        ]# if llm model is mistral, add
+            for token in molpo_mask_tokens
+        ]  # if llm model is mistral, add
         if "mistral" in self.llm_tokenizer.name_or_path:
-            self.llm_tokenizer.simpo_mask_ids += [29473] # '_' token id
-            self.llm_tokenizer.simpo_mask_tokens += [self.llm_tokenizer.convert_ids_to_tokens(29473)]
+            self.llm_tokenizer.molpo_mask_ids += [29473]  # '_' token id
+            self.llm_tokenizer.molpo_mask_tokens += [
+                self.llm_tokenizer.convert_ids_to_tokens(29473)
+            ]
 
         # self.llm_tokenizer.mol_token = added_tokens.MOL_EMBEDDING[0]
         self.llm_tokenizer.add_special_tokens(
@@ -318,11 +439,13 @@ class Blip2OPT(Blip2Base):
             is_mol_token = batch["is_mol_token"]
 
             input_embeds = self.llm_model.get_input_embeddings()(input_ids)
-            input_embeds = self.inject_graph_embeds2input_embeds(
-                input_embeds=input_embeds,
-                is_mol_token=is_mol_token,
-                # graphs=graphs,
-                graphs=(graphs, additional_graphs),
+            input_embeds, graph_avg_norm, moltoken_avg_norm = (
+                self.inject_graph_embeds2input_embeds(
+                    input_embeds=input_embeds,
+                    is_mol_token=is_mol_token,
+                    # graphs=graphs,
+                    graphs=(graphs, additional_graphs),
+                )
             )
 
             outputs = self.llm_model(
@@ -331,6 +454,14 @@ class Blip2OPT(Blip2Base):
                 return_dict=True,
                 labels=targets,
             )
+            results = {
+                "loss": outputs.loss,
+                "instance_loss": outputs.instance_loss,
+                "logits": outputs.logits,
+                "graph_avg_norm": graph_avg_norm,
+                "moltoken_avg_norm": moltoken_avg_norm,
+            }
+
         else:
             outputs = self.llm_model(
                 input_ids=input_ids,
@@ -338,12 +469,12 @@ class Blip2OPT(Blip2Base):
                 return_dict=True,
                 labels=targets,
             )
+            results = {
+                "loss": outputs.loss,
+                "instance_loss": outputs.instance_loss,
+                "logits": outputs.logits,
+            }
 
-        results = {
-            "loss": outputs.loss,
-            "instance_loss": outputs.instance_loss,
-            "logits": outputs.logits,
-        }
         return results
 
     def debug_pred(self, logits, targets):
@@ -377,12 +508,46 @@ class Blip2OPT(Blip2Base):
             mol_edge_attr = graphs["edge_attr"]
             mol_batch = graphs["batch"]
 
+            if self.args.process_disjoint:
+                num_graph_list = []
+                graph_list = []
+                for graph in graphs.to_data_list():
+                    tmp_batch = Batch.from_data_list([graph])
+                    tmp_batch = split_batch_by_components(tmp_batch)
+                    graph_list.extend(tmp_batch)
+                    num_graph_list.append(len(tmp_batch))
+                # graph_batch = split_batch_by_components(graphs)
+                graph_batch = Batch.from_data_list(graph_list)
+                graph_embeds, graph_masks = self.graph_encoder(
+                    graph_batch.x,
+                    graph_batch.edge_index,
+                    graph_batch.edge_attr,
+                    graph_batch.batch,
+                )
+                mol_embeds_list = []
+                mol_mask_list = []
+
+                graph_embeds = torch.split(graph_embeds, num_graph_list, dim=0)
+                graph_masks = torch.split(graph_masks, num_graph_list, dim=0)
+                for graph_embed, graph_mask in zip(graph_embeds, graph_masks):
+                    mol_embeds_list.append(graph_embed[graph_mask])
+                    mol_mask_list.append(graph_mask[graph_mask])
+                mol_embeds = pad_sequence(mol_embeds_list, batch_first=True)
+                mol_masks = pad_sequence(mol_mask_list, batch_first=True)
+            else:
+                mol_embeds, mol_masks = self.graph_encoder(
+                    mol_x, mol_edge_index, mol_edge_attr, mol_batch
+                )
+
             mol_embeds, mol_masks = self.graph_encoder(
                 mol_x, mol_edge_index, mol_edge_attr, mol_batch
             )
             if not self.tune_gnn:
                 mol_embeds = mol_embeds.detach()
             mol_embeds = self.ln_graph(mol_embeds, mol_masks)
+            graph_embedding = mol_embeds[:, 0, :]
+            graph_avg_norm = torch.norm(graph_embedding, p=1, dim=-1)
+
             if self.args.projector_type == "qformer":
                 query_tokens = self.query_tokens.expand(mol_embeds.shape[0], -1, -1)
                 query_output = self.Qformer.bert(
@@ -396,7 +561,8 @@ class Blip2OPT(Blip2Base):
                 mol_tokens = self.opt_proj(mol_embeds)
             mol_token_sequence.append(mol_tokens)
 
-        mol_tokens = torch.cat(mol_token_sequence, dim=1)
+            mol_tokens = torch.cat(mol_token_sequence, dim=1)
+            moltoken_avg_norm = torch.norm(mol_tokens, p=1, dim=-1).mean(1)
 
         num_mol_tokens_per_sample = is_mol_token.sum(dim=1)  # Shape: (batch_size,)
         if (num_mol_tokens_per_sample > 0).any():
@@ -417,7 +583,7 @@ class Blip2OPT(Blip2Base):
                 batch_indices, mol_token_indices, :
             ]
 
-        return input_embeds
+        return input_embeds, graph_avg_norm, moltoken_avg_norm
 
     @torch.no_grad()
     def generate(
@@ -457,10 +623,12 @@ class Blip2OPT(Blip2Base):
             assert (
                 is_mol_token is not None
             ), "is_mol_token should be provided for graph representation"
-            input_embeds = self.inject_graph_embeds2input_embeds(
-                input_embeds=input_embeds,
-                is_mol_token=is_mol_token,
-                graphs=graphs,
+            input_embeds, graph_avg_norm, moltoken_avg_norm = (
+                self.inject_graph_embeds2input_embeds(
+                    input_embeds=input_embeds,
+                    is_mol_token=is_mol_token,
+                    graphs=graphs,
+                )
             )
 
         outputs = self.llm_model.generate(

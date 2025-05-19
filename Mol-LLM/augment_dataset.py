@@ -500,7 +500,7 @@ def extract_and_modify(selfies, replace_ratio=0.1, modify_num=0):
     # Convert SMILES to RDKit Molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
-        raise ValueError("Unable to convert SELFIES to a valid molecule.")
+        raise ValueError(f"Unable to convert smiles: {smiles} to a valid molecule.")
 
     # Generate MACCS Keys
     maccs_keys = MACCSkeys.GenMACCSKeys(mol)
@@ -848,10 +848,11 @@ def add_atoms_based_on_mol(mol, num_atoms_to_add):
     return out
 
 
-def map_by_substructure_replacement(data_point, 
-                                    replace_ratio=0.1,
-                                    num_rejected_graphs=5):
+def map_by_substructure_replacement(
+    data_point, replace_ratio=0.1, num_rejected_graphs=5
+):
 
+    replace_ratio = min(replace_ratio, 1.0)
     task = data_point["task"]
     input_mol_string = data_point["input_mol_string"]
 
@@ -860,9 +861,6 @@ def map_by_substructure_replacement(data_point,
         .replace("</SELFIES>", "")
         .replace(" ", "")
     )
-    if task in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS + MOL2TEXT_BENCHMARKS:
-        replace_ratio *= 2
-        replace_ratio = min(replace_ratio, 1.0)
 
     for i in range(num_rejected_graphs):
         if task in REGRESSION_BENCHMARKS:
@@ -902,9 +900,9 @@ def map_by_substructure_replacement(data_point,
                 dummy_selfies, replace_ratio=replace_ratio
             )["modified_graph"]
         else:
-            rejected_graph = extract_and_modify(
-                selfies, replace_ratio=replace_ratio
-            )["modified_graph"]
+            rejected_graph = extract_and_modify(selfies, replace_ratio=replace_ratio)[
+                "modified_graph"
+            ]
             additional_rejected_graph = extract_and_modify(
                 selfies, replace_ratio=replace_ratio
             )["modified_graph"]
@@ -912,11 +910,15 @@ def map_by_substructure_replacement(data_point,
         data_point[f"{i}-th_rejected_x"] = rejected_graph["node_feat"]
         data_point[f"{i}-th_rejected_edge_index"] = rejected_graph["edge_index"]
         data_point[f"{i}-th_rejected_edge_attr"] = rejected_graph["edge_feat"]
-        data_point[f"{i}-th_additional_rejected_x"] = additional_rejected_graph["node_feat"]
-        data_point[f"{i}-th_additional_rejected_edge_index"] = additional_rejected_graph[
-            "edge_index"
+        data_point[f"{i}-th_additional_rejected_x"] = additional_rejected_graph[
+            "node_feat"
         ]
-        data_point[f"{i}-th_additional_rejected_edge_attr"] = additional_rejected_graph["edge_feat"]
+        data_point[f"{i}-th_additional_rejected_edge_index"] = (
+            additional_rejected_graph["edge_index"]
+        )
+        data_point[f"{i}-th_additional_rejected_edge_attr"] = additional_rejected_graph[
+            "edge_feat"
+        ]
 
     return data_point
 
@@ -928,15 +930,16 @@ if __name__ == "__main__":
 
     # get arg replace_ratio, dataset_path
     parser = argparse.ArgumentParser()
-    parser.add_argument("--replace_ratio", type=float, default=0.05)
+    parser.add_argument("--replace_ratio", type=float, default=0.3)
     parser.add_argument("--data_dir", type=str, default="/data/data/Mol-LLM-v7.1")
     parser.add_argument(
         "--dataset_path",
         type=str,
-        default="mistralai-Mistral-7B-Instruct-v0.3_string+graph_q32_test_rxn_m2t",
+        default="mistralai-Mistral-7B-Instruct-v0.3_string+graph_q32_test_3.3M_0415",
     )
     parser.add_argument("--num_procs", type=int, default=10)
-    parser.add_argument("--data_tag", type=str, default="_augmented")
+    parser.add_argument("--num_rejected_graphs", type=int, default=6)
+    parser.add_argument("--data_tag", type=str, default="")
 
     args = parser.parse_args()
 
@@ -946,12 +949,19 @@ if __name__ == "__main__":
     from functools import partial
 
     map_by_substructure_replacement = partial(
-        map_by_substructure_replacement, replace_ratio=args.replace_ratio
+        map_by_substructure_replacement,
+        replace_ratio=args.replace_ratio,
+        num_rejected_graphs=args.num_rejected_graphs,
     )
 
     random.seed(42)
     mapped_dataset = dataset.map(
         map_by_substructure_replacement, batched=False, num_proc=args.num_procs
     )
-    mapped_dataset.save_to_disk(dataset_path + args.data_tag)
-    print("saved augmented dataset:", dataset_path + args.data_tag)
+    mapped_dataset.save_to_disk(
+        dataset_path + "_" + f"molpo-replace-{args.replace_ratio}" + args.data_tag
+    )
+    print(
+        "saved augmented dataset:",
+        dataset_path + f"molpo-replace-{args.replace_ratio}" + args.data_tag,
+    )

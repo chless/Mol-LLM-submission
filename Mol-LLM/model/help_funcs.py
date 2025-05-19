@@ -16,17 +16,17 @@ import re
 from Levenshtein import distance as lev
 
 
-def caption_evaluate(predictions, targets, tokenizer, prompts):
+def caption_evaluate(predictions, targets, tokenizer, prompts, input_mol_strings):
     references = []
     hypotheses = []
     ref_sentences = []
     hyp_sentences = []
     failure_idxs = []
-    
+
     meteor_scores = []
     rouge_scores = []
     scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"])
-    
+
     patterns = {
         "DESCRIPTION": {
             "dual_side": re.compile(r"(?<=<DESCRIPTION>).*?(?=</DESCRIPTION>)"),
@@ -84,22 +84,22 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
         bleu4 = corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25))
         bleu2 *= 100
         bleu4 *= 100
-        
+
         for ref, hyp in tqdm(zip(references, hypotheses)):
             mscore = meteor_score(ref, hyp)
             meteor_scores.append(mscore)
-        
+
         _meteor_score = np.mean(meteor_scores)
         _meteor_score *= 100
-        
+
         for ref_sen, hyp_sen in tqdm(zip(ref_sentences, hyp_sentences)):
             lscore = scorer.score(hyp_sen, ref_sen)
             rouge_scores.append(lscore)
-        
+
         rouge_1 = np.mean([rs["rouge1"].fmeasure for rs in rouge_scores]) * 100
         rouge_2 = np.mean([rs["rouge2"].fmeasure for rs in rouge_scores]) * 100
         rouge_l = np.mean([rs["rougeL"].fmeasure for rs in rouge_scores]) * 100
-            
+
     else:
         bleu2 = 0
         bleu4 = 0
@@ -120,6 +120,7 @@ def caption_evaluate(predictions, targets, tokenizer, prompts):
         "predictions": [predictions[i] for i in failure_idxs],
         "targets": [targets[i] for i in failure_idxs],
         "prompts": [prompts[i] for i in failure_idxs],
+        "input_mol_strings": [input_mol_strings[i] for i in failure_idxs],
     }
     return evaluation_results, failed_cases
 
@@ -132,7 +133,9 @@ from rdkit import RDLogger
 import selfies
 
 
-def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
+def molecule_evaluate(
+    predictions, targets, tokenizer, prompts, input_mol_strings, morgan_r=2
+):
     MACCS_sims = []
     morgan_sims = []
     RDK_sims = []
@@ -169,7 +172,7 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
             else:
                 prediction_selfies = re.search(r"(?<=<SELFIES>).*", prediction).group()
 
-            #<DEBUG>
+            # <DEBUG>
             prediction_selfies = prediction_selfies.split("<SELFIES>")[-1]
             prediction_selfies = prediction_selfies.split("</SELFIES>")[0]
 
@@ -177,7 +180,7 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
                 "<SELFIES>" not in prediction_selfies
                 and "</SELFIES>" not in prediction_selfies
             )
-            #</DEBUG>
+            # </DEBUG>
 
             prediction_smiles = selfies.decoder(prediction_selfies)
             prediction_mol = Chem.MolFromSmiles(prediction_smiles)
@@ -199,21 +202,13 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
 
             levs.append(lev(target_canonical_smiles, prediction_canonical_smiles))
 
-            pred_selfies = tokenizer.tokenize(
-                prediction_canonical_selfies
-            )
-            pred_smiles = tokenizer.tokenize(
-                prediction_canonical_smiles
-            )
+            pred_selfies = tokenizer.tokenize(prediction_canonical_selfies)
+            pred_smiles = tokenizer.tokenize(prediction_canonical_smiles)
             pred_selfies_list.append(pred_selfies)
             pred_smiles_list.append(pred_smiles)
 
-            ref_selfies = tokenizer.tokenize(
-                target_canonical_selfies
-            )
-            ref_smiles = tokenizer.tokenize(
-                target_canonical_smiles
-            )
+            ref_selfies = tokenizer.tokenize(target_canonical_selfies)
+            ref_smiles = tokenizer.tokenize(target_canonical_smiles)
             ref_selfies_list.append([ref_selfies])
             ref_smiles_list.append([ref_smiles])
 
@@ -275,6 +270,7 @@ def molecule_evaluate(predictions, targets, tokenizer, prompts, morgan_r=2):
         "predictions": [predictions[i] for i in failure_idxs],
         "targets": [targets[i] for i in failure_idxs],
         "prompts": [prompts[i] for i in failure_idxs],
+        "input_mol_strings": [input_mol_strings[i] for i in failure_idxs],
     }
     return results, failed_cases
 
@@ -318,25 +314,34 @@ def pad_and_concat(tensor_list, fill_value=0):
     raise NotImplementedError()
 
 
-def get_task_specific_list(predictions, targets, tasks, prompts):
+def get_task_specific_list(predictions, targets, tasks, prompts, input_mol_strings):
     unique_tasks = list(set(tasks))
     task_specific_predictions = {t: [] for t in unique_tasks}
     task_specific_targets = {t: [] for t in unique_tasks}
     task_specific_prompts = {t: [] for t in unique_tasks}
+    task_specific_input_mol_strings = {t: [] for t in unique_tasks}
     for i, t in enumerate(tasks):
         task_specific_predictions[t].append(predictions[i])
         task_specific_targets[t].append(targets[i])
         task_specific_prompts[t].append(prompts[i])
+        task_specific_input_mol_strings[t].append(input_mol_strings[i])
     return (
         task_specific_predictions,
         task_specific_targets,
         task_specific_prompts,
+        task_specific_input_mol_strings,
     )
 
 
 # correspond to all the tasks other than classification
 def per_device_evaluate(
-    predictions, targets, tasks, prompts, tokenizer, total_task_subtask_pairs
+    predictions,
+    targets,
+    tasks,
+    prompts,
+    input_mol_strings,
+    tokenizer,
+    total_task_subtask_pairs,
 ):
     # get unique items from all_tasks
     unique_tasks = list(set(tasks))
@@ -348,7 +353,9 @@ def per_device_evaluate(
         "smol-name_conversion-s2i",
     ] + CLASSIFICATION_BENCHMARKS
 
-    unique_tasks = [t for t in unique_tasks if t.split("/")[0] not in tasks_to_be_removed]
+    unique_tasks = [
+        t for t in unique_tasks if t.split("/")[0] not in tasks_to_be_removed
+    ]
 
     evaluation_results = {task: dict() for task in unique_tasks}
 
@@ -356,12 +363,14 @@ def per_device_evaluate(
         task_specific_predictions,
         task_specific_targets,
         task_specific_prompts,
-    ) = get_task_specific_list(predictions, targets, tasks, prompts)
+        task_specific_input_mol_strings,
+    ) = get_task_specific_list(predictions, targets, tasks, prompts, input_mol_strings)
     failed_cases = {
         "predictions": [],
         "targets": [],
         "prompts": [],
         "tasks": [],
+        "input_mol_strings": [],
     }
 
     # initialize evaluation results for all tasks with null values
@@ -414,6 +423,7 @@ def per_device_evaluate(
         task_predictions = task_specific_predictions[t]
         task_targets = task_specific_targets[t]
         task_prompts = task_specific_prompts[t]
+        task_input_mol_strings = task_specific_input_mol_strings[t]
         task_name = t.split("/")[0]
 
         if task_name in REGRESSION_BENCHMARKS:
@@ -421,6 +431,7 @@ def per_device_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
                 prompts=task_prompts,
+                input_mol_strings=task_input_mol_strings,
             )
         elif (
             task_name in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS
@@ -430,6 +441,7 @@ def per_device_evaluate(
                 targets=task_targets,
                 tokenizer=tokenizer,
                 prompts=task_prompts,
+                input_mol_strings=task_input_mol_strings,
             )
         elif task_name in MOL2TEXT_BENCHMARKS:
             results, _failed_cases = caption_evaluate(
@@ -437,6 +449,7 @@ def per_device_evaluate(
                 targets=task_targets,
                 tokenizer=tokenizer,
                 prompts=task_prompts,
+                input_mol_strings=task_input_mol_strings,
             )
         else:
             raise NotImplementedError("Task not implemented")
@@ -452,6 +465,7 @@ def per_device_evaluate(
             )
 
     return evaluation_results, failed_cases
+
 
 def classification_evaluate(total_labels, total_probs):
     total_preds = total_probs.argmax(dim=-1)
@@ -484,12 +498,13 @@ def classification_evaluate(total_labels, total_probs):
     }
     return evaluation_results
 
+
 # correspond to classification tasks
 def total_device_evaluate(
     total_labels, total_tasks, total_probs, classification_task_subtask_pairs
 ):
     evaluation_results = {}
-    
+
     # initialize evaluation results for classification tasks with null values
     for t in classification_task_subtask_pairs:
         task_name = t.split("/")[0]
@@ -503,11 +518,11 @@ def total_device_evaluate(
             "num_instances": 0,
         }
         evaluation_results[t] = results
-    
+
     unique_tasks = list(set(total_tasks))
     task_specific_labels = {t: [] for t in unique_tasks}
     task_specific_probs = {t: [] for t in unique_tasks}
-    
+
     for i, t in enumerate(total_tasks):
         task_specific_labels[t].append(total_labels[i])
         task_specific_probs[t].append(total_probs[i])
@@ -552,7 +567,9 @@ def convert_logit2binary_prob(logits, predictions, tokenizer):
     boolean_bos_id = tokenizer.encode([bos_token])[-1]
 
     prediction_position_ids = torch.zeros(logits.shape[:-1], dtype=torch.bool)
-    is_using_prediction_position_ids = torch.zeros((logits.shape[0], 2), dtype=torch.bool).to(logits.device)
+    is_using_prediction_position_ids = torch.zeros(
+        (logits.shape[0], 2), dtype=torch.bool
+    ).to(logits.device)
 
     for idx, pred in enumerate(predictions):
         # first, inspect that pred includes boolean tokens
@@ -560,7 +577,9 @@ def convert_logit2binary_prob(logits, predictions, tokenizer):
         # third, get position id of the prediction token between the boolean tokens
         pred_token_ids = tokenizer.encode(pred, add_special_tokens=False)
         try:
-            assert re.search(f"{bos_token}.+{eos_token}", pred).group(), f"pred should be searched by re pattern {bos_token}.+{eos_token}"
+            assert re.search(
+                f"{bos_token}.+{eos_token}", pred
+            ).group(), f"pred should be searched by re pattern {bos_token}.+{eos_token}"
             boolean_bos_position = pred_token_ids.index(boolean_bos_id)
             prediction_position_ids[idx, boolean_bos_position + 1] = True
             is_using_prediction_position_ids[idx, :] = True
@@ -586,7 +605,7 @@ def convert_logit2binary_prob(logits, predictions, tokenizer):
     return total_probs
 
 
-def regression_evaluate(predictions, targets, prompts):
+def regression_evaluate(predictions, targets, prompts, input_mol_strings):
 
     total_labels = []
     total_predictions = []
@@ -604,7 +623,9 @@ def regression_evaluate(predictions, targets, prompts):
         # only calculate metrics if the prediction is a float
         # else, increment the failure count
         try:
-            assert "<|.|>" in predictions[i], f"Prediction should include <|.|> token for proper magnitude of order, but {predictions[i]}"
+            assert (
+                "<|.|>" in predictions[i]
+            ), f"Prediction should include <|.|> token for proper magnitude of order, but {predictions[i]}"
             prediction = (
                 re.search(r"(?<=<FLOAT>).*?(?=</FLOAT>)", predictions[i])
                 .group()
@@ -638,5 +659,6 @@ def regression_evaluate(predictions, targets, prompts):
         "predictions": [predictions[i] for i in failure_idxs],
         "targets": [targets[i] for i in failure_idxs],
         "prompts": [prompts[i] for i in failure_idxs],
+        "input_mol_strings": [input_mol_strings[i] for i in failure_idxs],
     }
     return evaluation_results, failed_cases

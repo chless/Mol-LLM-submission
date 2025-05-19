@@ -1,5 +1,5 @@
-raw_data_root: 'your data path'
-data_tag:
+raw_data_root: /data/data/Mol-LLM-v7.1
+data_tag: 3.3M_0415
 
 
 tasks:

@@ -1,6 +1,6 @@
 defaults:
   - data: multi_task
-  - gnn: moleculeSTM_freeze
+  - gnn: gine_tokengt
   - trainer: mistral7b_80gb
 
 # General settings
@@ -16,3 +16,7 @@ wandb_id: null
 debug: false
 ckpt_path: null
 pretrained_ckpt_path: null
+
+shuffle_selfies: false
+shuffle_graph: false
+process_disjoint: true

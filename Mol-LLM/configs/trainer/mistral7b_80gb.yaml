@@ -14,7 +14,7 @@ load_in_8bit: false
 lora_r: 64
 lora_alpha: 32
 lora_dropout: 0.1
-selfies_token_path: "selfies_dict.txt path"
+selfies_token_path: Mol-LLM/model/selfies_dict.txt
 add_selfies_tokens: true
 prompt: "[START_I_SMILES]{}[END_I_SMILES]"
 
@@ -28,11 +28,11 @@ max_steps: -1
 max_epochs: 12
 every_n_epochs: 1
 task: null
-logging_dir: "your logging path"
+logging_dir: /data/all_checkpoints/
 llava_pretraining: 0
 second_stage_start_epoch: 4
 num_workers: 0
-skip_sanity_check: true
+skip_sanity_check: false
 
 # accumulate_grad_batches: 11
 total_batch_size: 1024
@@ -58,20 +58,24 @@ warmup_epochs: 0.25
 scheduler: linear_warmup_cosine_lr
 optimizer: adamw
 log_every_n_steps: 50
+gradient_clip_val: 0.5
 
 val_check_interval: 0.5
-check_val_every_n_epoch: 1
-trainset_resize: -1
-valset_resize: -1
-testset_resize: -1
 test_on_trainset: false
 
 # multimodal training
-mol_representation: string_only
+mol_representation: string+graph
 log_attn_score: true
+eval_modality_util: null
+tune_gnn: true
 
-# simpo
-train_simpo: false
-eval_simpo: false
+# molpo
+train_molpo: false
+eval_molpo: false
 
 find_unused_parameters: false
+
+selfies_enumeration: false
+isomericSmiles: false
+canonical: false
+allHsExplicit: false

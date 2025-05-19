@@ -58,6 +58,14 @@ def main(cfg):
     model = Blip2Stage3(cfg)
     print("total params:", sum(p.numel() for p in model.parameters()))
 
+    # when resuming training, load the current epoch information and argparse to datamodule
+    if cfg.ckpt_path is not None:
+        ckpt = torch.load(cfg.ckpt_path, map_location="cpu", weights_only=False)
+        cfg.current_epoch = ckpt["epoch"]
+        del ckpt
+    else:
+        cfg.current_epoch = 0
+
     # datamodule
     dm = Stage3DM(
         mode=cfg.mode,
@@ -99,6 +107,7 @@ def main(cfg):
         project=cfg.wandb_project,
         entity=cfg.wandb_entity,
         id=cfg.wandb_id,
+        resume="allow",
     )
 
     tb_logger = TensorBoardLogger(
@@ -119,9 +128,9 @@ def main(cfg):
         "max_steps": cfg.max_steps,
         "max_epochs": cfg.max_epochs,
         "val_check_interval": cfg.val_check_interval,
-        "check_val_every_n_epoch": cfg.check_val_every_n_epoch,
         "accumulate_grad_batches": cfg.accumulate_grad_batches,
         "log_every_n_steps": cfg.log_every_n_steps,
+        "gradient_clip_val": cfg.gradient_clip_val,
     }
 
     if cfg.skip_sanity_check:
@@ -134,26 +143,27 @@ def main(cfg):
     # load pretrained model for model parameter initialization
     if cfg.pretrained_ckpt_path is not None:
         assert cfg.ckpt_path is None, "only one ckpt path should be provided"
-        ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu")
+        ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu", weights_only=False)
         model.load_state_dict(ckpt["state_dict"], strict=False)
         print(f"loaded pretrained model from {cfg.pretrained_ckpt_path}")
 
     if cfg.mode in {"ft"}:
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
-        outputs = trainer.test(model, datamodule=dm)
+        # outputs = trainer.test(model, datamodule=dm)
+        assert "Training done"
     elif cfg.mode == "test":
-        ckpt = torch.load(cfg.ckpt_path, map_location="cpu")
+        ckpt = torch.load(cfg.ckpt_path, map_location="cpu", weights_only=False)
         model.load_state_dict(ckpt["state_dict"], strict=False)
         print(f"loaded trained model from {cfg.ckpt_path}")
         outputs = trainer.test(model, datamodule=dm)
+        if cfg.filename is not None:
+            update_result_csv(
+                logger_dir=trainer.logger.log_dir,
+                outputs=outputs,
+            )
+        assert "Testing done"
     else:
         raise NotImplementedError()
-
-    if cfg.filename is not None:
-        update_result_csv(
-            logger_dir=trainer.logger.log_dir,
-            outputs=outputs,
-        )
 
 
 def update_result_csv(outputs, logger_dir, task_names=None):
