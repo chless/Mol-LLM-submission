@@ -1,8 +1,8 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus=$1
-data_tag=$2
-filename=test_${data_tag}_molpo_0510
-ckpt_path="'/data/all_checkpoints/MT_from-string_only_12ep_molpo-wo-L-rej-margin_clip_scale-1.0_6ep_0502_continue/epoch=00-step=1614.ckpt'"
+data_tag=3.3M_0415_molpo-replace-0.3
+filename="{your_filename}" # Replace with your actual filename
+ckpt_path="{your_ckpt_path}" # Replace with your actual checkpoint path'"
 
 echo "==============Executing task: ablation==============="
 python Mol-LLM/stage3.py \
@@ -12,7 +12,5 @@ filename=${filename} \
 data.data_tag=${data_tag} \
 trainer=mistral7b_80gb \
 trainer.skip_sanity_check=false \
-ckpt_path=${ckpt_path} \
-trainer.eval_molpo=false \
-trainer.eval_modality_utile=false \
+ckpt_path=${ckpt_path}
 

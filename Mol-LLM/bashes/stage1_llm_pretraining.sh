@@ -1,5 +1,5 @@
 export TOKENIZERS_PARALLELISM=false;
-file_name='MT_mistral7b_string_only_12ep_0415'
+file_name='stage1_llm_pretraining'
 gpus="'0,1,2,3,4,5,6,7'"
 
 python Mol-LLM/stage3.py \

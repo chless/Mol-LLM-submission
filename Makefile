@@ -1,7 +1,7 @@
 REPO_PATH=/home/user/text-mol
 CACHE_PATH=/home/user/.cache
 DATA_PATH=/data/text-mol
-IMAGE_NAME_TAG=chless/mol-llm:v1
+IMAGE_NAME_TAG=user/mol-llm:v1
 
 build-image:
 	docker build -t $(IMAGE_NAME_TAG) .

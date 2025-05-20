@@ -1,7 +1,6 @@
 export TOKENIZERS_PARALLELISM=false;
 gpus="'0,1,2,3,4,5,6,7'"
-margin_clip_scale=1.0
-file_name=MT_from-string_only_12ep_molpo-wo-L-rej-margin_clip_scale-${margin_clip_scale}_6ep_0502
+file_name=stage3_mol-llm
 
 python Mol-LLM/stage3.py \
 trainer.devices=$gpus \

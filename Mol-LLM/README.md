@@ -1,139 +1,27 @@
 # Introduction
 
-The code is built upon [MolCA](https://github.com/acharkq/MolCA).
-Thanks for the authors.
+This repository provide necessary code, model, and testset to reproduce results in the paper "Mol-LLM: Multimodal Generalist Molecular LLM with Improved Graph Utilization", to provide rich information during rebuttal process.
 
-# Quick Start
+# Access to Model and Dataset
+The model checkpoitns and testsets are available via [GDrive](https://drive.google.com/drive/folders/1lgPgkcdA_EMX5iQlhyJa-DgBEO4tBxa1?usp=sharing).
+* Mol-LLM [[GDrive]](https://drive.google.com/file/d/1Oun_iGZah61T9bP3mGqJPCANCtGBKxgs/view?usp=sharing)
+* Mol-LLM (w/o Graph) [[GDrive]](https://drive.google.com/file/d/12abcNyngE1ByrDAduB1zGE-lwuCNFRnl/view?usp=sharing)
+* Testset [[GDrive]](https://drive.google.com/drive/folders/1D6nqfwmc5IxG9DT6NrPtFLCvtgNasJbG?usp=sharing)
 
-For multi-task instruction tuning using 2D molecular graph and 1D SELFIES representation,
-execute following command:
 
-```
-export TOKENIZERS_PARALLELISM=false;
+# Installation
+For easy and fast reproduction, all environments are built based on `docker` and `Makefile`.
+1. Build `docker` image using `Makefile`: `make build-image`
+2. Before initialize `docker` container, set following volume mounting path in `Makefile`
+   * `REPO_PATH=/home/{user_name}/text-mol` : The path of the repository
+   * `CACHE_PATH=/home/{user_name}/.cache` : Huggingface cache path
+   * `IMAGE_NAME_TAG={user_name}/mol-llm:v1` : The name of the built docker image
+3. FInally, initialize docker container using `Makefile`: `make init-container`
 
-python3 MolCA/stage3.py \
---devices $gpus \
---root multi_task \
---mode ft \
---llm_model facebook/galactica-1.3b \
---tune_llm lora \
---lora_r 64 \
---per_device_batch_size_cls 5 \
---per_device_batch_size_reg 10 \
---per_device_batch_size_rxn 10 \
---per_device_batch_size_rea 5 \
---per_device_batch_size_trn 5 \
---per_device_inference_batch_size_cls 70 \
---per_device_inference_batch_size_reg 70 \
---per_device_inference_batch_size_rxn 30 \
---per_device_inference_batch_size_rea 30 \
---per_device_inference_batch_size_trn 30 \
---val_check_interval 2500 \
---max_epochs 15 \
---second_stage_start_epoch 5 \
---num_beam 1 \
---raw_data_root MolCA/data/<YOUR_DATA_PATH> \
---gen_max_len 280 \
---prompt_max_len 280 \
---label_max_len 280 \
---logging_dir MolCA/all_checkpoints \
---graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
---valset_resize 2400 \
---skip_sanity_check \
---llava_pretraining 1 \
---num_query_token 32 \
---bert_num_hidden_layers 5 \
---mol_string_randomization_ratio -1 \
---mol_representation string+graph \
---filename $filename\
-```
+# Reproduction of results
+* To reproduce performance of `Mol-LLM` through Main Table 1-4, run the following command:  `bash /text-mol/Mol-LLM/bashes/mol-llm_test.sh "'{your_gpu_devices}'"`
+  * For example, if you want to run evaluation with `GPU=0,1`, then input `your_gpu_devices=0,1`
+* To reproduce performance of `Mol-LLM (w/o Graph)` through Main Table 1-4, run the following command: `bash /text-mol/Mol-LLM/bashes/mol-llm_wo_graph_test.sh "'{your_gpu_devices}'"`
 
-# Quick Start
 
-For multi-task instruction tuning using 2D molecular graph representation only,
-execute following command:
 
-```
-export TOKENIZERS_PARALLELISM=false;
-
-python3 MolCA/stage3.py \
---devices $gpus \
---root multi_task \
---mode ft \
---llm_model facebook/galactica-1.3b \
---tune_llm lora \
---lora_r 64 \
---per_device_batch_size_cls 5 \
---per_device_batch_size_reg 10 \
---per_device_batch_size_rxn 10 \
---per_device_batch_size_rea 5 \
---per_device_batch_size_trn 5 \
---per_device_inference_batch_size_cls 70 \
---per_device_inference_batch_size_reg 70 \
---per_device_inference_batch_size_rxn 30 \
---per_device_inference_batch_size_rea 30 \
---per_device_inference_batch_size_trn 30 \
---val_check_interval 2500 \
---max_epochs 15 \
---second_stage_start_epoch 5 \
---num_beam 1 \
---raw_data_root MolCA/data/<YOUR_DATA_PATH> \
---gen_max_len 280 \
---prompt_max_len 280 \
---label_max_len 280 \
---logging_dir MolCA/all_checkpoints \
---graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
---valset_resize 2400 \
---skip_sanity_check \
---llava_pretraining 1 \
---num_query_token 32 \
---bert_num_hidden_layers 5 \
---mol_string_randomization_ratio -1 \
---mol_representation graph_only \
---filename $filename\
-```
-
-# Quick Start
-
-For multi-task instruction tuning using 2D molecular 1D SELFIES representation only,
-execute following command:
-
-```
-export TOKENIZERS_PARALLELISM=false;
-
-python3 MolCA/stage3.py \
---devices $gpus \
---root multi_task \
---mode ft \
---llm_model facebook/galactica-1.3b \
---tune_llm lora \
---lora_r 64 \
---per_device_batch_size_cls 5 \
---per_device_batch_size_reg 10 \
---per_device_batch_size_rxn 10 \
---per_device_batch_size_rea 5 \
---per_device_batch_size_trn 5 \
---per_device_inference_batch_size_cls 70 \
---per_device_inference_batch_size_reg 70 \
---per_device_inference_batch_size_rxn 30 \
---per_device_inference_batch_size_rea 30 \
---per_device_inference_batch_size_trn 30 \
---val_check_interval 2500 \
---max_epochs 15 \
---second_stage_start_epoch 5 \
---num_beam 1 \
---raw_data_root MolCA/data/<YOUR_DATA_PATH> \
---gen_max_len 280 \
---prompt_max_len 280 \
---label_max_len 280 \
---logging_dir MolCA/all_checkpoints \
---graph_encoder_ckpt MolCA/MoleculeSTM/molecule_model.pth \
---valset_resize 2400 \
---skip_sanity_check \
---llava_pretraining 1 \
---num_query_token 32 \
---bert_num_hidden_layers 5 \
---mol_string_randomization_ratio -1 \
---mol_representation string_only \
---filename $filename\
-```
