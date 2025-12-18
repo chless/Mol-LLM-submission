@@ -3,10 +3,11 @@
 This repository provide necessary code, model, and testset to reproduce results in the paper "Mol-LLM: Multimodal Generalist Molecular LLM with Improved Graph Utilization", to provide rich information during rebuttal process.
 
 # Access to Model and Dataset
-The model checkpoints and test set are available via Google Drive and Huggingface. After downloading the checkpoints and test set, adjust the path to each file by following the instructions in the Installation.
-* Mol-LLM [[GDrive]](https://drive.google.com/file/d/1CxLY4rOGiHMwvUvyhUO-ovT2ehhtcDGM/view?usp=sharing)
-* Mol-LLM (w/o Graph) [[GDrive]](https://drive.google.com/file/d/1jjPsSElKNfakZ9J_Hk82pL9gxipzpLVA/view?usp=sharing)
-* Testset is available via [Hugginface](https://huggingface.co/datasets/Chanhui/Mol-LLM-test).
+The model checkpoints and test set are available via Google Drive and Huggingface. 
+After downloading the checkpoints and test set, adjust the path to each file by following the instructions in the Installation.
+* Mol-LLM [[GDrive]](https://drive.google.com/file/d/1CxLY4rOGiHMwvUvyhUO-ovT2ehhtcDGM/view?usp=sharing)[[Huggingface]](https://huggingface.co/KU-AGI/Mol-LLM)
+* Mol-LLM (w/o Graph) [[GDrive]](https://drive.google.com/file/d/1jjPsSElKNfakZ9J_Hk82pL9gxipzpLVA/view?usp=sharing)[[Huggingface]](https://huggingface.co/KU-AGI/Mol-LLM-wo-graph)
+* Testset is available via [Hugginface](https://huggingface.co/datasets/KU-AGI/Mol-LLM).
 
 
 # Installation
