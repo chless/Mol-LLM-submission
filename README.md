@@ -1,15 +1,16 @@
 # Introduction
 
-This repository provide necessary code, model, and testset to reproduce results in the paper "Mol-LLM: Multimodal Generalist Molecular LLM with Improved Graph Utilization", to provide rich information during rebuttal process.
+This repository provide necessary code, model, and test dataset to reproduce results in the paper "Mol-LLM: Multimodal Generalist Molecular LLM with Improved Graph Utilization", to support rebuttal process by providing detailed information.
 
 # Access to Model and Dataset
-Regarding reproduction, the **model checkpoints and test dataset** are available via [GDrive](https://drive.google.com/drive/folders/1bEl9dB2SD9aQ3hhk2Yg8o5oTX0Hqjj9x?usp=sharing), and corresponding model and dataset cards are available at [Huggingface](https://huggingface.co/collections/KU-AGI/mol-llm).
-After acceptance, the **model checkpoints and train and test dataset** will be available via [Huggingface](https://huggingface.co/collections/KU-AGI/mol-llm).
+For reproducibility, the **model checkpoints and test dataset** are available via [GDrive](https://drive.google.com/drive/folders/1bEl9dB2SD9aQ3hhk2Yg8o5oTX0Hqjj9x?usp=sharing).
+The corresponding model card and dataset cards are available on [Huggingface](https://huggingface.co/collections/KU-AGI/mol-llm), while download is only available for test dataset.
+After acceptance, the **model checkpoints and train and test dataset** will be released via [Huggingface](https://huggingface.co/collections/KU-AGI/mol-llm).
 
 * Mol-LLM [[GDrive]](https://drive.google.com/file/d/1CxLY4rOGiHMwvUvyhUO-ovT2ehhtcDGM/view?usp=sharing)[[Huggingface]](https://huggingface.co/KU-AGI/Mol-LLM)
 * Mol-LLM (w/o Graph) [[GDrive]](https://drive.google.com/file/d/1jjPsSElKNfakZ9J_Hk82pL9gxipzpLVA/view?usp=sharing)[[Huggingface]](https://huggingface.co/KU-AGI/Mol-LLM-wo-graph)
-* Testset [[GDrive]](https://drive.google.com/drive/folders/1bvdwcSffydgX5ErUaIK9EskTd2TSjupR?usp=sharing)[Hugginface](https://huggingface.co/datasets/KU-AGI/Mol-LLM-testset).
-After downloading the checkpoints and test set, adjust the path to each file by following the instructions in the Installation.
+* Testset [[GDrive]](https://drive.google.com/drive/folders/1bvdwcSffydgX5ErUaIK9EskTd2TSjupR?usp=sharing)[[Hugginface]](https://huggingface.co/datasets/KU-AGI/Mol-LLM-testset).
+After downloading the checkpoints and test dataset, adjust the path to each file by following the instructions in the Installation.
 
 
 # Installation
