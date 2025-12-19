@@ -9,7 +9,7 @@ After acceptance, the **model checkpoints and train and test dataset** will be r
 
 * Mol-LLM [[GDrive]](https://drive.google.com/file/d/1CxLY4rOGiHMwvUvyhUO-ovT2ehhtcDGM/view?usp=sharing)[[Huggingface]](https://huggingface.co/KU-AGI/Mol-LLM)
 * Mol-LLM (w/o Graph) [[GDrive]](https://drive.google.com/file/d/1jjPsSElKNfakZ9J_Hk82pL9gxipzpLVA/view?usp=sharing)[[Huggingface]](https://huggingface.co/KU-AGI/Mol-LLM-wo-graph)
-* Testset [[GDrive]](https://drive.google.com/drive/folders/1bvdwcSffydgX5ErUaIK9EskTd2TSjupR?usp=sharing)[[Hugginface]](https://huggingface.co/datasets/KU-AGI/Mol-LLM-testset).
+* Testset [[GDrive]](https://drive.google.com/drive/folders/1bvdwcSffydgX5ErUaIK9EskTd2TSjupR?usp=sharing)[[Huggingface]](https://huggingface.co/datasets/KU-AGI/Mol-LLM-testset).
 After downloading the checkpoints and test dataset, adjust the path to each file by following the instructions in the Installation.
 
 
