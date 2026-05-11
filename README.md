@@ -15,7 +15,7 @@ After downloading the checkpoints and test dataset, adjust the path to each file
 
 # Installation
 For easy and fast reproduction, all environments are built based on `docker` and `Makefile`.
-Installation takes around half an hour in total.
+Installation would take around half an hour in total.
 1. Build `docker` image using `Makefile`: `make build-image`
 2. Before initialize `docker` container, set following volume mounting path in `Makefile`
    * `REPO_PATH=/home/{user_name}/text-mol` : The path of the repository
@@ -24,9 +24,19 @@ Installation takes around half an hour in total.
 3. FInally, initialize docker container using `Makefile`: `make init-container`
 
 # Reproduction of results
-* To reproduce performance of `Mol-LLM` through Main Table 1-4, run the following command:  `bash /text-mol/Mol-LLM/bashes/mol-llm_test.sh "'{your_gpu_devices}'"`
+* To reproduce performance of `Mol-LLM` reported in Main Tables 1–4, run the following command (around 2 hours on an 8×A100 server):  `bash /text-mol/Mol-LLM/bashes/mol-llm_test.sh "'{your_gpu_devices}'"`
   * For example, if you want to run evaluation with `GPU=0,1`, then input `your_gpu_devices=0,1`
-* To reproduce performance of `Mol-LLM (w/o Graph)` through Main Table 1-4, run the following command: `bash /text-mol/Mol-LLM/bashes/mol-llm_wo_graph_test.sh "'{your_gpu_devices}'"`
+* To reproduce the results of `Mol-LLM (w/o Graph)` through Main Table 1-4, run the following command (around 2 hours on an 8×A100 server): `bash /text-mol/Mol-LLM/bashes/mol-llm_wo_graph_test.sh "'{your_gpu_devices}'"`
+* Demo inference example (about 10–30 seconds for a single example, on a A100 server):
+  ```text
+  # Demo input: log-solubility prediction from a SELFIES+GRAPH prompt
+  <s>[INST] You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation.
+
+  What is the log solubility of <SELFIES>...</SELFIES><GRAPH>...</GRAPH> in water? [/INST]
+  
+  # Expected output:
+  <FLOAT> <|-|><|4|><|.|><|4|><|7|><|2|><|0|> </FLOAT>
+  ```
 
 
 
