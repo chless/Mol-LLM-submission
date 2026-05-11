@@ -15,6 +15,7 @@ After downloading the checkpoints and test dataset, adjust the path to each file
 
 # Installation
 For easy and fast reproduction, all environments are built based on `docker` and `Makefile`.
+Installation takes around half an hour in total.
 1. Build `docker` image using `Makefile`: `make build-image`
 2. Before initialize `docker` container, set following volume mounting path in `Makefile`
    * `REPO_PATH=/home/{user_name}/text-mol` : The path of the repository
