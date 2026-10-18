@@ -26,7 +26,6 @@ from torch_geometric.data import Data, Batch
 from torch_geometric.utils import subgraph
 import numpy as np
 from lavis.models.blip2_models.blip2 import (
-    # Blip2Base,
     disabled_train,
 )
 from model.blip2 import Blip2Base
@@ -41,7 +40,6 @@ from transformers.utils import replace_return_docstrings
 
 from typing import Optional, List, Tuple, Union
 
-# get logging from transformers library
 from transformers import logging
 
 logger = logging.get_logger(__name__)
@@ -92,7 +90,7 @@ def shuffle_masked_embeddings(
     shuffled = embeddings.clone()
 
     for b in range(B):
-        pos = torch.nonzero(mask[b], as_tuple=False).squeeze(1)  # shape (n,)
+        pos = torch.nonzero(mask[b], as_tuple=False).squeeze(1)
         n = pos.size(0)
         if n > 1:
             perm = torch.randperm(n, device=embeddings.device)
@@ -139,7 +137,6 @@ def split_batch_by_components(batch: Batch) -> Batch:
         if edge_attr is not None:
             data.edge_attr = sub_ea
 
-        # 노드-레벨 텐서 속성 복사
         for key, attr in batch.items():
             if key in ("x", "edge_index", "edge_attr", "batch"):
                 continue
@@ -153,7 +150,6 @@ def split_batch_by_components(batch: Batch) -> Batch:
         new_data_list.append(data)
 
     return new_data_list
-    # return Batch.from_data_list(new_data_list)
 
 
 def count_connected_components(
@@ -164,14 +160,12 @@ def count_connected_components(
 
     parent = list(range(num_nodes))
 
-    # Find with path compression
     def find(u: int) -> int:
         while parent[u] != u:
             parent[u] = parent[parent[u]]
             u = parent[u]
         return u
 
-    # Union
     def union(u: int, v: int):
         ru, rv = find(u), find(v)
         if ru != rv:
@@ -216,9 +210,7 @@ class Blip2OPT(Blip2Base):
         self.peft_dir = peft_dir
         gnn_hidden_dim = args.gnn_hidden_dim
 
-        # initialize opt model
         self.llm_tokenizer = AutoTokenizer.from_pretrained(
-            # llm_model, use_fast=False, padding_side="right"
             llm_model,
             revision=getattr(args, "llm_revision", None),
             use_fast=False,
@@ -237,7 +229,7 @@ class Blip2OPT(Blip2Base):
         n_old_vocab = self.llm_model.get_input_embeddings().weight.shape[0]
         self.llm_model.resize_token_embeddings(
             len(self.llm_tokenizer)
-        )  # this will cause bug when full fine-tuning the opt model
+        )
         self.n_added_tokens = (
             self.llm_model.get_input_embeddings().weight.shape[0] - n_old_vocab
         )
@@ -325,7 +317,6 @@ class Blip2OPT(Blip2Base):
                     revision=getattr(args, "bert_revision", None),
                 )
 
-                ## remove the unused parameters
                 self.Qformer.cls = None
                 self.Qformer.bert.embeddings.word_embeddings = None
                 self.Qformer.bert.embeddings.position_embeddings = None
@@ -337,7 +328,6 @@ class Blip2OPT(Blip2Base):
                     self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
                 )
             elif self.args.projector_type == "mlp":
-                # build self.opt_proj with single layers
                 self.opt_proj = nn.Linear(
                     gnn_hidden_dim, self.llm_model.config.hidden_size
                 )
@@ -359,27 +349,21 @@ class Blip2OPT(Blip2Base):
             )
 
     def add_necessary_tokens(self):
-        # pad toekn for galactica is "<pad>""
         if not self.llm_tokenizer.pad_token:
             self.llm_tokenizer.add_special_tokens({"pad_token": "<pad>"})
         if not self.llm_tokenizer.eos_token:
             self.llm_tokenizer.add_special_tokens({"eos_token": "\n"})
 
         if self.args.add_selfies_tokens:
-            # Read txt from selfies_token_path
             with open(self.args.selfies_token_path, "r") as f:
                 selfies_tokens = f.readlines()
                 selfies_tokens = [token.strip() for token in selfies_tokens]
             self.llm_tokenizer.add_tokens(selfies_tokens)
-            # get token id of the selfies_tokens
             self.llm_tokenizer.selfies_token_ids = [
                 self.llm_tokenizer.convert_tokens_to_ids(token)
                 for token in selfies_tokens
             ]
             self.llm_tokenizer.added_selfies_tokens = selfies_tokens
-            # remove '.' from the marked list for selfies token
-            # self.llm_tokenizer.added_selfies_tokens.remove(".")
-            # self.llm_tokenizer.selfies_token_ids.remove(36)
             print(f"Added {len(selfies_tokens)} selfies tokens to the tokenizer")
 
         additional_tokens = [
@@ -404,18 +388,16 @@ class Blip2OPT(Blip2Base):
         molpo_mask_tokens += [self.llm_tokenizer.eos_token]
         self.llm_tokenizer.molpo_mask_tokens = molpo_mask_tokens
 
-        # get ids of task tokens
         self.llm_tokenizer.molpo_mask_ids = [
             self.llm_tokenizer.convert_tokens_to_ids(token)
             for token in molpo_mask_tokens
-        ]  # if llm model is mistral, add
+        ]
         if "mistral" in self.llm_tokenizer.name_or_path:
-            self.llm_tokenizer.molpo_mask_ids += [29473]  # '_' token id
+            self.llm_tokenizer.molpo_mask_ids += [29473]
             self.llm_tokenizer.molpo_mask_tokens += [
                 self.llm_tokenizer.convert_ids_to_tokens(29473)
             ]
 
-        # self.llm_tokenizer.mol_token = added_tokens.MOL_EMBEDDING[0]
         self.llm_tokenizer.add_special_tokens(
             {"additional_special_tokens": [added_tokens.MOL_EMBEDDING[0]]}
         )
@@ -456,8 +438,8 @@ class Blip2OPT(Blip2Base):
             raise NotImplementedError()
 
     def forward(self, batch):
-        input_ids = batch.input_ids  # ['input_ids']
-        target_ids = batch.labels  # ['labels']
+        input_ids = batch.input_ids
+        target_ids = batch.labels
 
 
         attention_mask = batch.get("attention_mask", None)
@@ -478,7 +460,6 @@ class Blip2OPT(Blip2Base):
                 self.inject_graph_embeds2input_embeds(
                     input_embeds=input_embeds,
                     is_mol_token=is_mol_token,
-                    # graphs=graphs,
                     graphs=(graphs, additional_graphs),
                     position_ids=position_ids,
                 )
@@ -533,8 +514,6 @@ class Blip2OPT(Blip2Base):
             target = targets[i]
             target_mask = target_masks[i]
 
-            # prediction = self.llm_tokenizer.decode(max_logit)
-            # label = self.llm_tokenizer.decode(target)
 
             prediction = self.llm_tokenizer.decode(max_logit[target_mask])
             label = self.llm_tokenizer.decode(target[target_mask])
@@ -578,7 +557,6 @@ class Blip2OPT(Blip2Base):
                     tmp_batch = split_batch_by_components(tmp_batch)
                     graph_list.extend(tmp_batch)
                     num_graph_list.append(len(tmp_batch))
-                # graph_batch = split_batch_by_components(graphs)
                 graph_batch = Batch.from_data_list(graph_list)
                 graph_embeds, graph_masks = self.graph_encoder(
                     graph_batch.x,
@@ -628,7 +606,7 @@ class Blip2OPT(Blip2Base):
         mol_tokens = torch.cat(mol_token_sequence, dim=1)
         moltoken_avg_norm = torch.norm(mol_tokens, p=1, dim=-1).mean(1)
 
-        num_mol_tokens_per_sample = is_mol_token.sum(dim=1)  # Shape: (batch_size,)
+        num_mol_tokens_per_sample = is_mol_token.sum(dim=1)
         if (num_mol_tokens_per_sample > 0).any():
             if position_ids is not None and is_mol_token.size(0) == 1 and bool(
                 (position_ids[0, 1:] - position_ids[0, :-1] < 0).any()
@@ -681,7 +659,6 @@ class Blip2OPT(Blip2Base):
     def generate(
         self,
         graphs,
-        # input_tokens,
         input_ids,
         attention_mask,
         is_mol_token=None,
@@ -731,9 +708,7 @@ class Blip2OPT(Blip2Base):
             temperature=temperature,
             num_beams=num_beams,
             max_new_tokens=max_length,
-            # min_length=min_length,
-            min_new_tokens=min_length,  # TODO: change to min_new_tokens for all layered methods
-            # pad_token_id=self.pad_token_id,
+            min_new_tokens=min_length,
             eos_token_id=self.llm_tokenizer.eos_token_id,
             repetition_penalty=repetition_penalty,
             length_penalty=length_penalty,
@@ -745,7 +720,6 @@ class Blip2OPT(Blip2Base):
         )
 
         batch_size, sequence_length = outputs.sequences.shape
-        # stack logtis
         logits_stacked = torch.zeros(
             batch_size,
             0,
@@ -775,8 +749,6 @@ _CONFIG_FOR_DOC = "OPTConfig"
 class OPTForCausalLM_Custom(OPTForCausalLM):
     def __init__(self, config):
         super().__init__(config)
-        # conventional decoder implementation does not support sequence packing
-        # new implementations for pos embeds, 4d causal attention mask is required for sequence packing
         self.model.decoder = OPTDecoder_sequence_packing(config)
 
     @replace_return_docstrings(
@@ -883,7 +855,6 @@ class OPTForCausalLM_Custom(OPTForCausalLM):
             return_dict if return_dict is not None else self.config.use_return_dict
         )
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -900,21 +871,16 @@ class OPTForCausalLM_Custom(OPTForCausalLM):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
 
-            # custom forward to get not reduced loss
             loss_fct_not_reduced = CrossEntropyLoss(reduction="none")
             loss_not_reduced = loss_fct_not_reduced(shift_logits, shift_labels).view(
                 labels.size(0), -1
             )
-            # normalization exclude default ignore index -100
             instance_non_pad_tokens = torch.where(
                 shift_labels != -100,
                 torch.tensor(1).to(shift_labels.device),
@@ -924,7 +890,6 @@ class OPTForCausalLM_Custom(OPTForCausalLM):
                 dim=-1
             ) / instance_non_pad_tokens.sum(dim=-1)
 
-            # cross entropy aggregate not row-wise, but sum of all instances
             loss = (
                 loss_not_reduced * instance_non_pad_tokens
             ).sum() / instance_non_pad_tokens.sum()
@@ -1073,7 +1038,6 @@ class OPTDecoder_sequence_packing(OPTDecoder):
             return_dict if return_dict is not None else self.config.use_return_dict
         )
 
-        # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError(
                 "You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time"
@@ -1095,12 +1059,9 @@ class OPTDecoder_sequence_packing(OPTDecoder):
         past_key_values_length = (
             past_key_values[0][0].shape[2] if past_key_values is not None else 0
         )
-        # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values_length + seq_length
 
-        # embed positions
         if self._use_flash_attention_2:
-            # 2d mask is passed through the layers
             causal_attention_mask = (
                 attention_mask
                 if (attention_mask is not None and 0 in attention_mask)
@@ -1112,12 +1073,10 @@ class OPTDecoder_sequence_packing(OPTDecoder):
                 else attention_mask
             )
         else:
-            # 4d mask is passed through the layers
             if attention_mask is None:
                 attention_mask = torch.ones(
                     batch_size, mask_seq_length, device=inputs_embeds.device
                 )
-            # NOTE: implemented for passing 4d causal mask for sequence packing
             elif len(attention_mask.shape) == 4 and attention_mask.shape[1] == 1:
                 attention_mask = attention_mask.to(
                     dtype=inputs_embeds.dtype, device=inputs_embeds.device
@@ -1145,12 +1104,10 @@ class OPTDecoder_sequence_packing(OPTDecoder):
                 )
                 use_cache = False
 
-        # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
-        # check if head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask], ["head_mask"]):
             if attn_mask is not None:
                 if attn_mask.size()[0] != (len(self.layers)):
@@ -1160,7 +1117,6 @@ class OPTDecoder_sequence_packing(OPTDecoder):
                     )
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -1207,7 +1163,6 @@ class OPTDecoder_sequence_packing(OPTDecoder):
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)
 
-        # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
@@ -1226,15 +1181,12 @@ class OPTDecoder_sequence_packing(OPTDecoder):
         )
 
 
-# NOTE: implemented for positional embedding not affected by packed sequence
 class OPTLearnedPositionalEmbedding_sequence_packing(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int):
-        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
@@ -1243,22 +1195,18 @@ class OPTLearnedPositionalEmbedding_sequence_packing(nn.Embedding):
     ):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         attention_mask = attention_mask.long()
-        # NOTE: implemented for positional embedding not affected by packed sequence
         if len(attention_mask.shape) == 4:
             attention_mask = attention_mask.squeeze(1)
-            # TODO: mark the padding token as -1, though it does not affect the loss calculation
             positions = attention_mask.sum(dim=-1) - 1
             assert (
                 positions.max() < self.num_embeddings
             ), f"Positional index is out of range: position {positions.max()} >= num_embeddings {self.num_embeddings}"
         else:
-            # create positions depending on attention_mask
             positions = (
                 torch.cumsum(attention_mask, dim=1).type_as(attention_mask)
                 * attention_mask
             ).long() - 1
 
-            # cut positions if `past_key_values_length` is > 0
             positions = positions[:, past_key_values_length:]
 
         return super().forward(positions + self.offset)

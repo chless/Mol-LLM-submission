@@ -77,7 +77,6 @@ class LinearWarmupCosineLRScheduler:
         assert self.min_lr < self.init_lr, "min_lr should be less than init_lr"
 
     def step(self, cur_step):
-        # assuming the warmup iters less than one epoch
         if cur_step < self.warmup_steps:
             warmup_lr_schedule(
                 step=cur_step,

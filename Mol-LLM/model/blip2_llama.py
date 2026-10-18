@@ -31,8 +31,6 @@ from typing import Optional, List, Tuple, Union
 _CONFIG_FOR_DOC = "OPTConfig"
 
 
-# @registry.register_model("blip2")
-# @registry.register_model("blip2_feature_extractor")
 class Blip2Llama(Blip2OPT):
     """
     BLIP2 first-stage model with Q-former and ViT.
@@ -57,7 +55,7 @@ class Blip2Llama(Blip2OPT):
         tune_llm="freeze",
         peft_dir="",
         llm_model="facebook/galactica-1.3b",
-        prompt="",  # TODO: remove. currently LLM classes not use prompt from args.prompt
+        prompt="",
         args=None,
     ):
         super().__init__(
@@ -112,7 +110,6 @@ class Blip2Llama(Blip2OPT):
             raise ValueError("llm_model template formatting is not implemented")
 
     def add_special_token(self):
-        # pad toekn for llama-3.1-8B is "<|finetune_right_pad_id|>"
         self.llm_tokenizer.add_special_tokens(
             {"pad_token": "<|finetune_right_pad_id|>"}
         )
@@ -188,7 +185,6 @@ class LlamaForCausalLM_Custom(LlamaForCausalLM):
             return_dict if return_dict is not None else self.config.use_return_dict
         )
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -218,21 +214,16 @@ class LlamaForCausalLM_Custom(LlamaForCausalLM):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
 
-            # custom forward to get not reduced loss
             loss_fct_not_reduced = CrossEntropyLoss(reduction="none")
             loss_not_reduced = loss_fct_not_reduced(shift_logits, shift_labels).view(
                 labels.size(0), -1
             )
-            # normalization exclude default ignore index -100
             instance_non_pad_tokens = torch.where(
                 shift_labels != -100,
                 torch.tensor(1).to(shift_labels.device),
@@ -242,7 +233,6 @@ class LlamaForCausalLM_Custom(LlamaForCausalLM):
                 dim=-1
             ) / instance_non_pad_tokens.sum(dim=-1)
 
-            # cross entropy aggregate not row-wise, but sum of all instances
             loss = (
                 loss_not_reduced * instance_non_pad_tokens
             ).sum() / instance_non_pad_tokens.sum()
@@ -360,7 +350,6 @@ class LlamaModel_sequence_packing(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):
             return_legacy_cache = True
@@ -395,10 +384,8 @@ class LlamaModel_sequence_packing(LlamaModel):
         )
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
@@ -441,7 +428,6 @@ class LlamaModel_sequence_packing(LlamaModel):
 
         hidden_states = self.norm(hidden_states)
 
-        # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 

@@ -72,7 +72,6 @@ class Text2Mol_translation(evaluate.Metric):
         
         RDLogger.DisableLog('rdApp.*')
         bleu_scores = []
-        #meteor_scores = []
 
         references = []
         hypotheses = []
@@ -91,16 +90,10 @@ class Text2Mol_translation(evaluate.Metric):
             references.append([gt_tokens])
             hypotheses.append(out_tokens)
 
-            # mscore = meteor_score([gt], out)
-            # meteor_scores.append(mscore)
 
-        # BLEU score
         bleu_score = corpus_bleu(references, hypotheses)
         if verbose: print('BLEU score:', bleu_score)
 
-        # Meteor score
-        # _meteor_score = np.mean(meteor_scores)
-        # print('Average Meteor score:', _meteor_score)
 
         rouge_scores = []
 
@@ -123,7 +116,6 @@ class Text2Mol_translation(evaluate.Metric):
                 m_gt = Chem.MolFromSmiles(gt)
 
                 if Chem.MolToInchi(m_out) == Chem.MolToInchi(m_gt): num_exact += 1
-                #if gt == out: num_exact += 1 #old version that didn't standardize strings
             except:
                 bad_mols += 1
 
@@ -132,13 +124,11 @@ class Text2Mol_translation(evaluate.Metric):
             levs.append(lev(out, gt))
 
 
-        # Exact matching score
         exact_match_score = num_exact/(i+1)
         if verbose:
             print('Exact Match:')
             print(exact_match_score)
 
-        # Levenshtein score
         levenshtein_score = np.mean(levs)
         if verbose:
             print('Levenshtein:')

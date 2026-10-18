@@ -101,7 +101,7 @@ for each optimizer step:
     update trainable parameters
 ```
 
-S2 compares graphs for the same answer. S3 supervises the paired answer under its graph. S4 compares answers under the original graph; its alternative answer may differ from the selected graph's paired answer. All terms retain the original prompt.
+S2 compares graphs for the same answer. S3 supervises the paired answer under its graph. S4 compares answers under the original graph; its alternative answer may differ from the selected graph's paired answer. All terms retain the original prompt. Both preference losses use the same scaling factor (`beta=0.5`) and task scale estimated from the exponential moving average of original-answer log probabilities.
 
 MolPO training uses [train.sh](Mol-LLM/bashes/running_scripts_for_revision/train.sh) and [revision_molpo.yaml](Mol-LLM/configs/trainer/revision_molpo.yaml). Training additionally requires `MOLLLM_STAGE2_CHECKPOINT`, which is not included in the release.
 

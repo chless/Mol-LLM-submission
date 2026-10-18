@@ -331,7 +331,6 @@ def get_task_specific_list(predictions, targets, tasks, prompts, input_mol_strin
     )
 
 
-# correspond to all the tasks other than classification
 def per_device_evaluate(
     predictions,
     targets,
@@ -341,9 +340,7 @@ def per_device_evaluate(
     tokenizer,
     total_task_subtask_pairs,
 ):
-    # get unique items from all_tasks
     unique_tasks = list(set(tasks))
-    # remove tasks_to_be_removed
     tasks_to_be_removed = [
         "smol-name_conversion-i2f",
         "smol-name_conversion-s2f",
@@ -371,8 +368,6 @@ def per_device_evaluate(
         "input_mol_strings": [],
     }
 
-    # initialize evaluation results for all tasks with null values
-    # necessary to make uniform shape of evaluation results
     for t in total_task_subtask_pairs:
         if t.split("/")[0] in tasks_to_be_removed:
             continue
@@ -388,7 +383,7 @@ def per_device_evaluate(
             }
         elif (
             task_name in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS
-        ):  # output is a molecule
+        ):
             results = {
                 "validity_ratio": null_value,
                 "MACCS_FTS": null_value,
@@ -410,7 +405,6 @@ def per_device_evaluate(
             }
         else:
             raise NotImplementedError("Task not implemented")
-        # update number of instances
         results["num_instances"] = 0
         evaluation_results[t] = results
 
@@ -433,7 +427,7 @@ def per_device_evaluate(
             )
         elif (
             task_name in TEXT2MOL_BENCHMARKS + REACTION_BENCHMARKS
-        ):  # output is a molecule
+        ):
             results, _failed_cases = molecule_evaluate(
                 predictions=task_predictions,
                 targets=task_targets,
@@ -451,7 +445,6 @@ def per_device_evaluate(
             )
         else:
             raise NotImplementedError("Task not implemented")
-        # update number of instances
         results["num_instances"] = len(task_predictions)
         evaluation_results[t] = results
 
@@ -468,11 +461,9 @@ def per_device_evaluate(
 def classification_evaluate(total_labels, total_probs):
     total_preds = total_probs.argmax(dim=-1)
 
-    # Convert tensors to numpy arrays for use with scikit-learn metrics
     total_preds_np = total_preds.numpy()
     total_labels_np = total_labels.numpy()
 
-    # Calculate metrics
     acc = accuracy_score(y_true=total_labels_np, y_pred=total_preds_np)
     f1 = f1_score(y_true=total_labels_np, y_pred=total_preds_np)
     prec = precision_score(y_true=total_labels_np, y_pred=total_preds_np)
@@ -482,7 +473,7 @@ def classification_evaluate(total_labels, total_probs):
             y_true=total_labels_np,
             y_score=total_probs[
                 :, 1
-            ].numpy(),  # Use y_score here because roc_auc_score expects probability scores
+            ].numpy(),
         )
     except:
         roc_auc = float("nan")
@@ -497,13 +488,11 @@ def classification_evaluate(total_labels, total_probs):
     return evaluation_results
 
 
-# correspond to classification tasks
 def total_device_evaluate(
     total_labels, total_tasks, total_probs, classification_task_subtask_pairs
 ):
     evaluation_results = {}
 
-    # initialize evaluation results for classification tasks with null values
     for t in classification_task_subtask_pairs:
         task_name = t.split("/")[0]
         null_value = float("nan")
@@ -538,7 +527,6 @@ def total_device_evaluate(
             )
         else:
             raise NotImplementedError("Task not implemented")
-        # update number of instances
         results["num_instances"] = len(total_labels)
         evaluation_results[t] = results
 
@@ -555,9 +543,6 @@ from sklearn.metrics import (
 
 
 def convert_logit2binary_prob(logits, predictions, tokenizer):
-    # WARNING: for specific LLM tokenizer, behaviour might be different
-    # below code is for mistral7B tokenizer
-    # if you want to use this function for other tokenizer, you should check working, and modify if necessary
     True_token_id = tokenizer.encode("True")[-1]
     False_token_id = tokenizer.encode("False")[-1]
 
@@ -570,9 +555,6 @@ def convert_logit2binary_prob(logits, predictions, tokenizer):
     ).to(logits.device)
 
     for idx, pred in enumerate(predictions):
-        # first, inspect that pred includes boolean tokens
-        # second, inspect that there is only one token between boolean tokens
-        # third, get position id of the prediction token between the boolean tokens
         pred_token_ids = tokenizer.encode(pred, add_special_tokens=False)
         try:
             assert re.search(
@@ -618,8 +600,6 @@ def regression_evaluate(predictions, targets, prompts, input_mol_strings):
         label = label.replace("<|", "").replace("|>", "")
         label = float(label)
 
-        # only calculate metrics if the prediction is a float
-        # else, increment the failure count
         try:
             assert (
                 "<|.|>" in predictions[i]
@@ -639,7 +619,6 @@ def regression_evaluate(predictions, targets, prompts, input_mol_strings):
             failure_idxs.append(i)
     failure_rate = len(failure_idxs) / len(predictions)
 
-    # Calculate regression metrics: mae, mse, rmse
     total_labels = np.array(total_labels)
     total_predictions = np.array(total_predictions)
 

@@ -115,8 +115,6 @@ gin_weight_list = [
     "batch_norms.3.bias",
     "batch_norms.4.weight",
     "batch_norms.4.bias",
-    # "blip2model.ln_graph.weight",
-    # "blip2model.ln_graph.bias",
 ]
 
 qformer_weight_list = [
@@ -232,9 +230,6 @@ qformer_weight_list = [
     "bert.encoder.layer.4.output_query.dense.bias",
     "bert.encoder.layer.4.output_query.LayerNorm.weight",
     "bert.encoder.layer.4.output_query.LayerNorm.bias",
-    # "blip2model.opt_proj.weight",
-    # "blip2model.opt_proj.bias",
-    # "blip2model.query_tokens",
 ]
 
 qm9_name2idx = {
@@ -260,60 +255,6 @@ qm9_name2idx = {
 }
 
 model_settings = {
-    # "GM_GM_-_-": {
-    #     "backbone": "GIN->MLP",
-    #     "activate_GIN": True,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": None,
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GM_M_-_-": {
-    #     "backbone": "GIN->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": None,
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GM_M_MoleculeSTM_-": {
-    #     "backbone": "GIN->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "MoleculeSTM",
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GM_M_StringGraph_-": {
-    #     "backbone": "GIN->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "StringGraph",
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GM_M_MolPO_-": {
-    #     "backbone": "GIN->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "MolPO",
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GQM_QM_StringGraph_-": {
-    #     "backbone": "GIN->QFormer->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": True,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "StringGraph",
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
     "GQM_QM_MolPO_-": {
         "backbone": "GIN->QFormer->MLP",
         "activate_GIN": False,
@@ -391,7 +332,6 @@ class QM9DataModule(pl.LightningDataModule):
             try:
                 graph_dict = smiles2graph(smiles)
             except:
-                # print(f"Error in smiles: {smiles}")
                 continue
             graph_data = Data(
                 x=torch.tensor(graph_dict['node_feat'], dtype=torch.long),
@@ -400,8 +340,6 @@ class QM9DataModule(pl.LightningDataModule):
                 y=targets[i]
             )
             graphs.append(graph_data)
-            # if i == 10000:
-            #     break
 
         val_size = 3000
         test_size = 3000
@@ -437,10 +375,8 @@ class FunctionalGroupDataModule(pl.LightningDataModule):
             try:
                 graph_dict = smiles2graph(smiles)
                 func_groups = check_functional_groups(smiles)
-                # Convert the functional groups to a boolean tensor
                 func_groups = torch.tensor(list(func_groups.values()), dtype=torch.float32) > 0
             except:
-                # print(f"Error in smiles: {smiles}")
                 continue
             graph_data = Data(
                 x=torch.tensor(graph_dict['node_feat'], dtype=torch.long),
@@ -449,8 +385,6 @@ class FunctionalGroupDataModule(pl.LightningDataModule):
                 y=func_groups
             )
             graphs.append(graph_data)
-            # if i == 50000:
-            #     break
 
         val_size = 3000
         test_size = 3000
@@ -489,14 +423,12 @@ class TaskModel(pl.LightningModule):
         mp_ckpt = torch.load(mp_ckpt_path, map_location='cpu')
         ms_ckpt = torch.load(ms_ckpt_path, map_location='cpu')
 
-        ################## Initialize GNN ##################
         self.gin = GNN_MoleculeSTM(
             num_layer=5,
             emb_dim=300,
             gnn_type="gin",
             drop_ratio=0.0,
             JK="last",
-            # args=args,
         )
         self.ln_graph = LayerNorm(300)
         if task == "funcgroup":
@@ -507,7 +439,6 @@ class TaskModel(pl.LightningModule):
             raise ValueError(f"Invalid task: {task}")
 
 
-        ################## Initialize MLP ##################
         if self.backbone == "GIN->MLP":
             self.mlp = nn.Sequential(
                 nn.Linear(300, 1024),
@@ -537,12 +468,10 @@ class TaskModel(pl.LightningModule):
         else:
             raise ValueError(f"Invalid backbone type: {self.backbone}")
 
-        ################## Initialize Qformer ##################
         bert_name = "allenai/scibert_scivocab_uncased"
         n_query_token = 32
         encoder_config = BertConfig.from_pretrained(bert_name)
         encoder_config.encoder_width = 300
-        # insert cross-attention layer every other block
         encoder_config.add_cross_attention = True
         encoder_config.cross_attention_freq = 2
         encoder_config.query_length = n_query_token
@@ -551,8 +480,6 @@ class TaskModel(pl.LightningModule):
         self.query_tokens = nn.Parameter(
             torch.zeros(1, n_query_token, encoder_config.hidden_size)
         )
-        # query_tokens.data.normal_(mean=0.0, std=encoder_config.initializer_range)
-        ## remove the unused parameters
         self.Qformer.cls = None
         self.Qformer.bert.embeddings.word_embeddings = None
         self.Qformer.bert.embeddings.position_embeddings = None
@@ -563,7 +490,6 @@ class TaskModel(pl.LightningModule):
             self.Qformer.config.hidden_size, 4096
         )
 
-        ################## Load pre-trained weights - GIN ##################
         if self.initial_GIN == "StringGraph":
             for name in gin_weight_list:
                 self.gin.state_dict()[name].copy_(sg_ckpt['state_dict']['blip2model.graph_encoder.'+name])
@@ -584,15 +510,10 @@ class TaskModel(pl.LightningModule):
         else:
             pass
 
-        ################## Load pre-trained weights - Q-Former ##################
         if self.initial_QFormer == "StringGraph":
             for name in qformer_weight_list:
                 self.Qformer.state_dict()[name].copy_(sg_ckpt['state_dict']['blip2model.Qformer.'+name])
             self.query_tokens.data.copy_(sg_ckpt['state_dict']['blip2model.query_tokens'])
-            # self.Qformer.bert.embeddings.LayerNorm.load_state_dict({
-            #     "weight": sg_ckpt['state_dict']['blip2model.Qformer.bert.embeddings.LayerNorm.weight'],
-            #     "bias": sg_ckpt['state_dict']['blip2model.Qformer.bert.embeddings.LayerNorm.bias']
-            # }, strict=True)
             self.opt_proj.load_state_dict({
                 "weight": sg_ckpt['state_dict']['blip2model.opt_proj.weight'],
                 "bias": sg_ckpt['state_dict']['blip2model.opt_proj.bias']
@@ -601,26 +522,19 @@ class TaskModel(pl.LightningModule):
             for name in qformer_weight_list:
                 self.Qformer.state_dict()[name].copy_(mp_ckpt['state_dict']['blip2model.Qformer.'+name])
             self.query_tokens.data.copy_(mp_ckpt['state_dict']['blip2model.query_tokens'])
-            # self.Qformer.bert.embeddings.LayerNorm.load_state_dict({
-            #     "weight": sg_ckpt['state_dict']['blip2model.Qformer.bert.embeddings.LayerNorm.weight'],
-            #     "bias": sg_ckpt['state_dict']['blip2model.Qformer.bert.embeddings.LayerNorm.bias']
-            # }, strict=True)
             self.opt_proj.load_state_dict({
                 "weight": mp_ckpt['state_dict']['blip2model.opt_proj.weight'],
                 "bias": mp_ckpt['state_dict']['blip2model.opt_proj.bias']
             }, strict=True)
         
-        ################## Freeze parameters - GIN ##################
         if not self.activate_GIN:
             for param in self.gin.parameters():
                 param.requires_grad = False
         
-        ################## Freeze parameters - Q-Former ##################
         if not self.activate_QFormer:
             for param in self.Qformer.parameters():
                 param.requires_grad = False
 
-        ################## Freeze parameters - MLP ##################
         if not self.activate_MLP:
             for param in self.mlp.parameters():
                 param.requires_grad = False
@@ -630,7 +544,6 @@ class TaskModel(pl.LightningModule):
             if self.backbone == "GIN->MLP":
                 output, _ = self.gin(x, edge_index, edge_attr, batch)
                 graph_embedding = output[:, :1, :]
-                # node_embedding = output[:, 1:, :]
                 pred = self.mlp(graph_embedding.squeeze(1))
             elif self.backbone == "GIN->QFormer->MLP":
                 mol_embeds, mol_masks = self.gin(
@@ -654,7 +567,6 @@ class TaskModel(pl.LightningModule):
             if self.backbone == "GIN->MLP":
                 output, _ = self.gin(x, edge_index, edge_attr, batch)
                 graph_embedding = output[:, :1, :]
-                # node_embedding = output[:, 1:, :]
                 pred = self.mlp(graph_embedding.squeeze(1)).squeeze(1)
             elif self.backbone == "GIN->QFormer->MLP":
                 mol_embeds, mol_masks = self.gin(
@@ -750,25 +662,21 @@ class TaskModel(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
     def on_train_epoch_start(self):
-        # log gin parameter weights mean
         for name, param in self.gin.state_dict().items():
             try:
                 self.logger.log_metrics({f"GIN_parameters/{name}_mean": param.mean()}, step=self.current_epoch)
             except:
-                self.logger.log_metrics({f"GIN_parameters/{name}": param}, step=self.current_epoch) # for scalar values such as running_var of BatchNorm
-        # log Qformer parameter weights mean
+                self.logger.log_metrics({f"GIN_parameters/{name}": param}, step=self.current_epoch)
         for name, param in self.Qformer.state_dict().items():
             try:
                 self.logger.log_metrics({f"Qformer_parameters/{name}_mean": param.float().mean()}, step=self.current_epoch)
             except:
                 self.logger.log_metrics({f"Qformer_parameters/{name}": param}, step=self.current_epoch)
-        # log MLP parameter weights mean
         for name, param in self.mlp.state_dict().items():
             try:
                 self.logger.log_metrics({f"MLP_parameters/{name}_mean": param.float().mean()}, step=self.current_epoch)
             except:
                 self.logger.log_metrics({f"MLP_parameters/{name}": param}, step=self.current_epoch)
-        # Log learning rate
         self.logger.log_metrics({'hyperparameters/lr': self.lr}, step=self.current_epoch)
 
 
@@ -849,7 +757,6 @@ class ValidationCallback(Callback):
         self.test_labels = []
 
 
-# 학습 실행 코드
 if __name__ == '__main__':
 
     qm9_tasks = list(qm9_name2idx.keys())
@@ -865,7 +772,7 @@ if __name__ == '__main__':
 
 
 
-    task = "funcgroup" # "funcgroup" or "qm9"
+    task = "funcgroup"
     if task == "funcgroup":
         for model_type in model_types:
             data_module = FunctionalGroupDataModule(batch_size=128)
@@ -875,7 +782,6 @@ if __name__ == '__main__':
                 max_epochs=300,
                 accelerator='auto',
                 devices=[4,5,6,7],
-                # devices=[4],
                 default_root_dir=f'./gnn_ablation/funcgroup/{model_type}',
                 callbacks=[checkpoint_callback, validation_callback],
                 strategy='ddp_find_unused_parameters_true'
@@ -897,7 +803,6 @@ if __name__ == '__main__':
                 trainer = pl.Trainer(
                     max_epochs=50,
                     accelerator='auto',
-                    # devices=[4,5,6,7],
                     devices=[4],
                     default_root_dir=f'./gnn_ablation/{qm9_task}/{model_type}',
                     callbacks=[checkpoint_callback, validation_callback],

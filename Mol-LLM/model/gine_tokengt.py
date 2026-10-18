@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-# from transformers import BertTokenizer
 from model.gin_model import GNN, GNN_MoleculeSTM
 from model.tokenGT import BERTTokenGT
 
@@ -29,7 +28,6 @@ class GINE_TokenGT(nn.Module):
             use_graph_token=args.tokengt.use_graph_token,
             max_position_embeddings=args.tokengt.max_position_embeddings
         )
-        ##### load pretrained GINE #####
         ckpt = torch.load(
             args.gine.graph_encoder_ckpt, map_location=torch.device("cpu")
         )
@@ -40,7 +38,6 @@ class GINE_TokenGT(nn.Module):
         self.graph_encoder_gine.load_state_dict(renamed_state_dict, strict=True)
         print(f"load graph encoder from {args.gine.graph_encoder_ckpt}")
 
-        ##### load pretrained TokenGT #####
         ckpt = torch.load(
             args.tokengt.graph_encoder_ckpt, map_location=torch.device("cpu")
         )
@@ -58,11 +55,9 @@ class GINE_TokenGT(nn.Module):
         gine_output, gine_mask = self.graph_encoder_gine(x, edge_index, edge_attr, batch)
         tokengt_output, tokengt_mask = self.graph_encoder_tokengt(x, edge_index, edge_attr, batch)
 
-        # apply layer normalization
         gine_output = self.layer_norm_gine(gine_output)
         tokengt_output = self.layer_norm_tokengt(tokengt_output)
 
-        # concatenate the outputs
         output = torch.concat((gine_output, tokengt_output), dim=1)
         mask = torch.concat((gine_mask, tokengt_mask), dim=1)
 

@@ -6,7 +6,6 @@ from torch_geometric.nn import global_add_pool
 from torch.amp import autocast
 from torch_geometric.utils import subgraph
 
-# from transformers import BertConfig, BertModel
 from flash_attn.models.bert import BertConfig, BertEncoder
 
 
@@ -49,20 +48,14 @@ class GraphFeatureTokenizer(torch.nn.Module):
         self.method = method
         self.use_graph_token = use_graph_token
 
-        # Learnable type embeddings to distinguish between nodes and edges
         self.E_V = nn.Parameter(torch.Tensor(1, d_e))
         self.E_E = nn.Parameter(torch.Tensor(1, d_e))
 
-        # Linear projection to match input_feat_dim
         self.edge_proj = nn.Linear(3, input_feat_dim)
 
-        # Input dimension includes: original features + 2 positional embeddings
-        # + type embedding
         self.input_dim = input_feat_dim + 2 * d_p + d_e
-        # Linear projection to transformer's hidden dimension
         self.w_in = nn.Linear(self.input_dim, hidden_dim)
 
-        # Optional learnable [graph] token embedding
         if self.use_graph_token:
             self.graph_token = nn.Parameter(torch.Tensor(1, hidden_dim))
 
@@ -86,39 +79,28 @@ class GraphFeatureTokenizer(torch.nn.Module):
         Args:
             data (Batch): PyG batch containing multiple graphs
         """
-        # x = data.x
-        # edge_index = data.edge_index
-        # edge_attr = data.edge_attr
-        # batch = data.batch
         data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, batch=batch)
         data.num_graphs = batch.max().item() + 1
 
         num_nodes = x.size(0)
         num_edges = edge_index.size(1)
 
-        # Generate structural node identifiers (positional embeddings)
         P = self.generate_node_identifiers(data)
 
-        # Expand type embeddings to match batch size
         E_V = self.E_V.expand(num_nodes, self.d_e)
         E_E = self.E_E.expand(num_edges, self.d_e)
 
-        # Combine node features with positional and type embeddings
         X_v = torch.cat([x, P, P, E_V], dim=1)
-        # Project to transformer dimension
         X_v_proj = self.w_in(X_v)
 
-        # Get positional embeddings for source and target nodes of each edge
         P_u = P[edge_index[0]]
         P_v = P[edge_index[1]]
-        # Combine edge features with positional and type embeddings
         if edge_attr.numel() == 0:
             edge_attr = edge_attr.reshape(num_edges, self.edge_proj.in_features)
         edge_attr = self.edge_proj(edge_attr.float())
         X_e = torch.cat([edge_attr, P_u, P_v, E_E], dim=1)
         X_e_proj = self.w_in(X_e)
 
-        # Arrange tokens into sequences and create attention masks
         tokens, attention_masks = self.prepare_tokens(
             data, X_v_proj, X_e_proj, batch, edge_index
         )
@@ -137,8 +119,6 @@ class GraphFeatureTokenizer(torch.nn.Module):
         device = x.device
         num_graphs = data.batch.max().item() + 1
 
-        # dummpy_P = torch.zeros((x.size(0), self.d_p), device=device)
-        # return dummpy_P
 
         P_list = []
 
@@ -147,16 +127,12 @@ class GraphFeatureTokenizer(torch.nn.Module):
             num_nodes = node_mask.sum().item()
 
             if self.method == "orf":
-                # Generate orthogonal random features using QR decomposition
                 G = torch.empty((num_nodes, num_nodes), device=device).normal_(
                     mean=0, std=1
                 )
-                # Orthonormalize
                 P, _ = torch.linalg.qr(G)
 
-                # Handle dimension mismatch
                 if num_nodes < self.d_p:
-                    # Pad if fewer nodes than desired dimensions
                     P = F.pad(P, (0, self.d_p - num_nodes), mode="constant", value=0)
                 elif num_nodes > self.d_p:
                     perm = torch.randperm(num_nodes, device=device)
@@ -165,10 +141,8 @@ class GraphFeatureTokenizer(torch.nn.Module):
 
             elif self.method == "laplacian":
                 sub_edge_index, _ = subgraph(node_mask, edge_index, relabel_nodes=True)
-                # Compute Laplacian eigenvectors
                 P = self.compute_laplacian_eigenvectors(sub_edge_index, num_nodes)
 
-                # Handle dimension mismatch
                 if num_nodes < self.d_p:
                     P = F.pad(P, (0, self.d_p - num_nodes), mode="constant", value=0)
                 elif num_nodes > self.d_p:
@@ -233,38 +207,31 @@ class GraphFeatureTokenizer(torch.nn.Module):
         device = X_v_proj.device
         num_graphs = data.num_graphs
 
-        # Use torch.bincount to count nodes and edges per graph
         node_num = torch.bincount(batch, minlength=num_graphs)
         edge_batch = batch[edge_index[0]]
         edge_num = torch.bincount(edge_batch, minlength=num_graphs)
 
-        # Determine maximum sequence length
         max_node_num = int(node_num.max().item())
         max_edge_num = int(edge_num.max().item())
         seq_len = max_node_num + max_edge_num
         if self.use_graph_token:
             seq_len += 1
 
-        # Initialize token tensors and attention masks
         tokens = torch.zeros((num_graphs, seq_len, self.hidden_dim), device=device)
         attention_masks = torch.zeros(
             (num_graphs, seq_len), dtype=torch.bool, device=device
         )
 
-        # Calculate cumulative sums for indexing
         node_ptr = torch.cat([node_num.new_zeros(1), node_num.cumsum(0)])
         edge_ptr = torch.cat([edge_num.new_zeros(1), edge_num.cumsum(0)])
 
-        # Fill in tokens and attention masks for each graph
         for i in range(num_graphs):
             idx = 0
-            # Add graph token if enabled
             if self.use_graph_token:
                 tokens[i, idx] = self.graph_token
                 attention_masks[i, idx] = True
                 idx += 1
 
-            # Add node tokens
             n_start = int(node_ptr[i].item())
             n_end = int(node_ptr[i + 1].item())
             n_nodes = n_end - n_start
@@ -272,7 +239,6 @@ class GraphFeatureTokenizer(torch.nn.Module):
             attention_masks[i, idx : idx + n_nodes] = True
             idx += max_node_num
 
-            # Add edge tokens
             e_start = int(edge_ptr[i].item())
             e_end = int(edge_ptr[i + 1].item())
             n_edges = e_end - e_start
@@ -314,17 +280,14 @@ class TokenGT(nn.Module):
     ):
         super().__init__()
 
-        # Graph tokenizer: converts graph structure into sequence of tokens
         self.tokenizer = GraphFeatureTokenizer(
             input_feat_dim, hidden_dim, method, d_p, d_e, use_graph_token
         )
 
-        # Standard transformer encoder layer with multi-head attention
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=hidden_dim, nhead=num_heads, dropout=dropout, batch_first=True
         )
 
-        # Stack multiple encoder layers
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
     def forward(self, x, edge_index, edge_attr, batch) -> torch.Tensor:
@@ -332,7 +295,6 @@ class TokenGT(nn.Module):
         Args:
             data (Batch): PyG batch object containing graphs
         """
-        # Convert graphs into token sequences and attention masks
         tokens, attention_masks = self.tokenizer(x, edge_index, edge_attr, batch)
         output = self.encoder(tokens, src_key_padding_mask=~attention_masks)
 
@@ -372,7 +334,6 @@ class BERTTokenGT(nn.Module):
     ):
         super().__init__()
 
-        # Graph tokenizer: converts graph structure into sequence of tokens
         self.tokenizer = GraphFeatureTokenizer(
             input_feat_dim, hidden_dim, method, d_p, d_e, use_graph_token
         )
@@ -387,7 +348,7 @@ class BERTTokenGT(nn.Module):
             max_position_embeddings=max_position_embeddings,
             is_decoder=False,
             use_flash_attn=True,
-            add_pooling_layer=False,  # We just want the encoder
+            add_pooling_layer=False,
         )
         self.encoder = BertEncoder(config)
 
@@ -396,7 +357,6 @@ class BERTTokenGT(nn.Module):
         Args:
             data (Batch): PyG batch object containing graphs
         """
-        # Convert graphs into token sequences and attention masks
         tokens, attention_masks = self.tokenizer(x, edge_index, edge_attr, batch)
         output = self.encoder(hidden_states=tokens, key_padding_mask=attention_masks)
 
@@ -406,7 +366,6 @@ class BERTTokenGT(nn.Module):
 import numpy as np
 import torch
 
-# from torch_geometric.contrib.nn import TokenGT
 from torch_geometric.data import Batch, Data
 
 

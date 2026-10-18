@@ -13,11 +13,9 @@ from peft import get_peft_model, LoraConfig, TaskType, PeftModel
 from lavis.models.blip2_models.blip2 import disabled_train
 from model.blip2 import Blip2Base
 
-# from model.smiles_t5_captioning
 from lavis.models.blip2_models.modeling_t5 import T5ForConditionalGeneration
 from transformers import AutoTokenizer, T5TokenizerFast
 
-# , T5ForConditionalGeneration
 
 
 class Blip2T5(Blip2Base):
@@ -68,7 +66,6 @@ class Blip2T5(Blip2Base):
             self.graph_encoder.num_features,
             cross_attention_freq,
         )
-        ### remove the unused parameters
         self.Qformer.cls = None
         self.Qformer.bert.embeddings.word_embeddings = None
         self.Qformer.bert.embeddings.position_embeddings = None
@@ -77,10 +74,8 @@ class Blip2T5(Blip2Base):
             layer.intermediate = None
 
         assert llm_model == "laituan245/molt5-large"
-        ## initialize opt model
-        # self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_model)
         self.llm_tokenizer = T5TokenizerFast.from_pretrained(llm_model)
-        self.llm_tokenizer.add_tokens("<mol>")  # molecule placeholder
+        self.llm_tokenizer.add_tokens("<mol>")
         self.mol_token = "<mol>"
         self.llm_tokenizer.mol_token_id = self.llm_tokenizer(
             "<mol>", add_special_tokens=False
@@ -91,7 +86,7 @@ class Blip2T5(Blip2Base):
         )
         self.llm_model.resize_token_embeddings(
             len(self.llm_tokenizer)
-        )  ## this will cause bug when full fine-tuning the opt model
+        )
 
         self.tune_llm = tune_llm
         if tune_llm == "lora":
@@ -123,10 +118,6 @@ class Blip2T5(Blip2Base):
         else:
             raise NotImplementedError()
 
-        ## fixme: this is different from the original BLIP2
-        # self.eos_token_id = self.llm_tokenizer(
-        #     "\n", add_special_tokens=False
-        # ).input_ids[0]
         self.eos_token_id = self.llm_tokenizer(
             "</s>", add_special_tokens=False
         ).input_ids[0]
@@ -146,7 +137,7 @@ class Blip2T5(Blip2Base):
         query_output = self.Qformer.bert(
             query_embeds=query_tokens,
             encoder_hidden_states=graph_embeds,
-            encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
+            encoder_attention_mask=graph_masks,
             return_dict=True,
         )
         mol_tokens = self.opt_proj(query_output.last_hidden_state)
@@ -224,12 +215,10 @@ class Blip2T5(Blip2Base):
                 num_beams=num_beams,
                 max_length=max_length,
                 min_length=min_length,
-                # pad_token_id=self.pad_token_id,
                 eos_token_id=self.eos_token_id,
                 repetition_penalty=repetition_penalty,
                 length_penalty=length_penalty,
                 num_return_sequences=num_captions,
-                # use_cache=False,
             )
             output_text = self.llm_tokenizer.batch_decode(
                 outputs, skip_special_tokens=True

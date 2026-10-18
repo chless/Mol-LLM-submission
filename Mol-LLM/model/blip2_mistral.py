@@ -24,8 +24,6 @@ import logging
 _CONFIG_FOR_DOC = "MistralConfig"
 
 
-# @registry.register_model("blip2")
-# @registry.register_model("blip2_feature_extractor")
 class Blip2Mistral(Blip2OPT):
     """
     BLIP2 first-stage model with Q-former and ViT.
@@ -206,7 +204,6 @@ class MistralForCausalLM_custom(MistralForCausalLM):
             return_dict if return_dict is not None else self.config.use_return_dict
         )
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -256,21 +253,16 @@ class MistralForCausalLM_custom(MistralForCausalLM):
         loss = None
         loss_sum = label_token_count = None
         if labels is not None:
-            # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
 
-            # custom forward to get not reduced loss
             loss_fct_not_reduced = CrossEntropyLoss(reduction="none")
             loss_not_reduced = loss_fct_not_reduced(shift_logits, shift_labels).view(
                 labels.size(0), -1
             )
-            # normalization exclude default ignore index -100
             instance_non_pad_tokens = torch.where(
                 shift_labels != -100,
                 torch.tensor(1).to(shift_labels.device),

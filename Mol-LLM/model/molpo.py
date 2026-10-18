@@ -30,29 +30,12 @@ S4_POSITIONAL = 'positional_diff_v1'
 S4_SCORING_POLICIES = (S4_POSITIONAL,)
 S4_DEFAULT_POLICY = S4_POSITIONAL
 S4_POLICY_KEY = 'answer_correction_scoring_policy'
-S4_SCALE_UNSCALED = 'unscaled_v1'
-S4_SCALE_POLICIES = (S4_SCALE_UNSCALED,)
-S4_SCALE_KEY = 'answer_correction_scale_policy'
+def preference_pair_loss(margin, beta, kappa):
+    return kappa * F.softplus(-beta * margin / kappa)
 
-def s4_scale_policy(args):
-    policy = getattr(args, S4_SCALE_KEY, None) or S4_SCALE_UNSCALED
-    if policy not in S4_SCALE_POLICIES:
-        raise ValueError(f'unknown {S4_SCALE_KEY}={policy!r}; expected one of {S4_SCALE_POLICIES}')
-    return policy
+def preference_pair_slope(margin, beta, kappa):
+    return beta * torch.sigmoid(-beta * margin / kappa)
 
-
-def s4_beta(args):
-    beta = getattr(args, 'answer_correction_beta', None)
-    beta = 1.0 if beta is None else float(beta)
-    if beta <= 0:
-        raise ValueError('answer correction beta must be positive')
-    return beta
-
-def s4_pair_loss(margin, beta):
-    return F.softplus(-beta * margin) / beta
-
-def s4_pair_slope(margin, beta):
-    return torch.sigmoid(-beta * margin)
 S4_ELIGIBLE, S4_EQUAL, S4_CHOSEN_PREFIX, S4_REJECTED_PREFIX, S4_EMPTY = (0, 1, 2, 3, 4)
 S4_REASONS = {
     S4_EQUAL: 'equal_content',
@@ -299,9 +282,11 @@ def original_molpo_inputs(batch, logits, gathered_logps, gathered_selected):
     finally:
         set_active_plan(plan, seg)
 
-def answer_preference_loss(chosen_logps, rejected_logps, weights, chosen_count, beta: float=1.0):
+def answer_preference_loss(chosen_logps, rejected_logps, weights, chosen_count, beta, kappa):
     if beta <= 0:
-        raise ValueError('answer correction beta must be positive')
+        raise ValueError('preference beta must be positive')
+    if kappa.shape != chosen_logps.shape or not bool(torch.isfinite(kappa).all() & (kappa > 1e-6).all()):
+        raise ValueError('answer preference requires a positive graph task scale per pair')
     if chosen_logps.shape != rejected_logps.shape or weights.shape != chosen_logps.shape:
         raise ValueError('answer preference pair/weight shapes differ')
     if not bool(torch.isfinite(chosen_logps).all() & torch.isfinite(rejected_logps).all()):
@@ -310,10 +295,10 @@ def answer_preference_loss(chosen_logps, rejected_logps, weights, chosen_count, 
     if denominator <= 0:
         raise ValueError('empty chosen population')
     margin = chosen_logps.float() - rejected_logps.float()
-    loss = (weights.float() * s4_pair_loss(margin, beta)).sum() / denominator
+    loss = (weights.float() * preference_pair_loss(margin, beta, kappa)).sum() / denominator
     return (loss, margin)
 
-def model_answer_correction(model, batch, logits=None, gathered_logps=None, gathered_selected=None):
+def model_answer_correction(model, batch, logits=None, gathered_logps=None, gathered_selected=None, tasks=None):
     weight = float(getattr(model.args, 'answer_correction_weight', 0.0) or 0.0)
     if not weight:
         return (None, {})
@@ -355,13 +340,12 @@ def model_answer_correction(model, batch, logits=None, gathered_logps=None, gath
             ),
         )
     s4_scoring_policy(model.args)
-    s4_scale_policy(model.args)
-    return _positional_answer_correction(model, batch, weight, per_task, logits, gathered_logps, gathered_selected)
+    return _positional_answer_correction(model, batch, weight, per_task, logits, gathered_logps, gathered_selected, tasks)
 
-def _record_answer_loss_per_row(per_task, indices, margin, weights, beta, weight):
+def _record_answer_loss_per_row(per_task, indices, margin, weights, beta, kappa, weight):
     row_loss = per_task['answer_correction/loss_per_row']
-    pair_loss = weights.detach().float() * s4_pair_loss(
-        margin.detach().float(), beta
+    pair_loss = weights.detach().float() * preference_pair_loss(
+        margin.detach().float(), beta, kappa
     )
     row_loss.index_add_(0, indices, pair_loss.to(row_loss.dtype))
     per_task['answer_correction/weighted_loss_per_row'] = weight * row_loss
@@ -457,7 +441,7 @@ def positional_keep(ids_c, pair_c, within_c, ids_r, pair_r, within_r, n):
     differ = chosen != rejected
     return (differ[pair_c, within_c], differ[pair_r, within_r])
 
-def _positional_answer_correction(model, batch, weight, per_task, logits, gathered_logps, gathered_selected):
+def _positional_answer_correction(model, batch, weight, per_task, logits, gathered_logps, gathered_selected, tasks):
     tok = model.blip2model.llm_tokenizer
     drop = [*tok.molpo_mask_ids, tok.pad_token_id]
     indices = batch['answer_correction_indices']
@@ -520,16 +504,24 @@ def _positional_answer_correction(model, batch, weight, per_task, logits, gather
         raise ValueError('S4 eligibility differs from the collator reason codes')
     q_c = sum_c[eligible] / cnt_c[eligible].to(sum_c.dtype)
     q_r = sum_r[eligible] / cnt_r[eligible].to(sum_r.dtype)
-    beta = s4_beta(model.args)
+    beta = float(model.args.beta)
+    if tasks is None or len(tasks) != int(chosen_count):
+        raise ValueError('answer preference requires one graph task per original example')
+    kappa = model._molpo_window_kappa.scales(
+        tasks, device=q_c.device, dtype=q_c.dtype
+    )[indices[eligible]]
+    seeded = model._molpo_window_kappa.seeded(tasks, device=weights.device)
+    weights = weights * seeded[indices].to(weights.dtype)
     live_w = weights[eligible]
-    loss, margin_live = answer_preference_loss(q_c, q_r, live_w, chosen_count, beta)
-    _record_answer_loss_per_row(per_task, indices[eligible], margin_live, live_w, beta, weight)
+    loss, margin_live = answer_preference_loss(q_c, q_r, live_w, chosen_count, beta, kappa)
+    _record_answer_loss_per_row(per_task, indices[eligible], margin_live, live_w, beta, kappa, weight)
     margin = torch.zeros(n, dtype=margin_live.dtype, device=margin_live.device)
     margin[eligible] = margin_live.detach()
     slope = torch.zeros_like(margin)
-    slope[eligible] = s4_pair_slope(
+    slope[eligible] = preference_pair_slope(
         margin_live.detach(),
         beta,
+        kappa,
     )
     gradient_mass = weight * (weights * slope).sum() / chosen_count.float()
     active_pairs, active_margins, margin_gradients = (

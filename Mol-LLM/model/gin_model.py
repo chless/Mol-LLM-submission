@@ -10,14 +10,13 @@ from torch_geometric.nn import (
 )
 import torch.nn.functional as F
 
-# from torch_scatter import scatter_add
 from torch_geometric.nn.inits import glorot, zeros
 from dataclasses import dataclass
 
-num_atom_type = 120  # including the extra mask tokens
+num_atom_type = 120
 num_chirality_tag = 3
 
-num_bond_type = 6  # including aromatic and self-loop edge, and extra masked tokens
+num_bond_type = 6
 num_bond_direction = 3
 
 
@@ -35,7 +34,6 @@ class GINConv(MessagePassing):
 
     def __init__(self, emb_dim, aggr="add"):
         super(GINConv, self).__init__(aggr="add")
-        # multi-layer perceptron
         self.mlp = torch.nn.Sequential(
             torch.nn.Linear(emb_dim, 2 * emb_dim),
             torch.nn.ReLU(),
@@ -49,22 +47,10 @@ class GINConv(MessagePassing):
         self.aggr = aggr
 
     def forward(self, x, edge_index, edge_attr):
-        # add self loops in the edge space
-        # print('--------------------')
-        # print('x:', x.shape)
-        # print('edge_index:',edge_index.shape)
         edge_index, edge_attr = add_self_loops(
             edge_index, edge_attr, fill_value=0, num_nodes=x.size(0)
         )
 
-        # add features corresponding to self-loop edges.
-        # self_loop_attr = torch.zeros(x.size(0), 2)
-        # self_loop_attr[:,0] = 4 #bond type for self-loop edge
-        # self_loop_attr = self_loop_attr.to(edge_attr.device).to(edge_attr.dtype)
-        # print('edge_attr:',edge_attr.shape)
-        # print('self_loop_attr:',self_loop_attr.shape)
-        # print('--------------------')
-        # edge_attr = torch.cat((edge_attr, self_loop_attr), dim = 0)
 
         edge_embeddings = self.edge_embedding1(edge_attr[:, 0]) + self.edge_embedding2(
             edge_attr[:, 1]
@@ -95,7 +81,6 @@ class GCNConv(MessagePassing):
         self.aggr = aggr
 
     def norm(self, edge_index, num_nodes, dtype):
-        ## assuming that self-loops have been already added in edge_index
         edge_weight = torch.ones(
             (edge_index.size(1),), dtype=dtype, device=edge_index.device
         )
@@ -107,12 +92,10 @@ class GCNConv(MessagePassing):
         return deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
 
     def forward(self, x, edge_index, edge_attr):
-        # add self loops in the edge space
         edge_index = add_self_loops(edge_index, num_nodes=x.size(0))
 
-        # add features corresponding to self-loop edges.
         self_loop_attr = torch.zeros(x.size(0), 2)
-        self_loop_attr[:, 0] = 4  # bond type for self-loop edge
+        self_loop_attr[:, 0] = 4
         self_loop_attr = self_loop_attr.to(edge_attr.device).to(edge_attr.dtype)
         edge_attr = torch.cat((edge_attr, self_loop_attr), dim=0)
 
@@ -161,12 +144,10 @@ class GATConv(MessagePassing):
 
     def forward(self, x, edge_index, edge_attr):
 
-        # add self loops in the edge space
         edge_index = add_self_loops(edge_index, num_nodes=x.size(0))
 
-        # add features corresponding to self-loop edges.
         self_loop_attr = torch.zeros(x.size(0), 2)
-        self_loop_attr[:, 0] = 4  # bond type for self-loop edge
+        self_loop_attr[:, 0] = 4
         self_loop_attr = self_loop_attr.to(edge_attr.device).to(edge_attr.dtype)
         edge_attr = torch.cat((edge_attr, self_loop_attr), dim=0)
 
@@ -210,12 +191,10 @@ class GraphSAGEConv(MessagePassing):
         self.aggr = aggr
 
     def forward(self, x, edge_index, edge_attr):
-        # add self loops in the edge space
         edge_index = add_self_loops(edge_index, num_nodes=x.size(0))
 
-        # add features corresponding to self-loop edges.
         self_loop_attr = torch.zeros(x.size(0), 2)
-        self_loop_attr[:, 0] = 4  # bond type for self-loop edge
+        self_loop_attr[:, 0] = 4
         self_loop_attr = self_loop_attr.to(edge_attr.device).to(edge_attr.dtype)
         edge_attr = torch.cat((edge_attr, self_loop_attr), dim=0)
 
@@ -269,7 +248,6 @@ class GNN(torch.nn.Module):
         torch.nn.init.xavier_uniform_(self.x_embedding1.weight.data)
         torch.nn.init.xavier_uniform_(self.x_embedding2.weight.data)
 
-        ##List of MLPs
         self.gnns = torch.nn.ModuleList()
         for layer in range(num_layer):
             if gnn_type == "gin":
@@ -283,14 +261,12 @@ class GNN(torch.nn.Module):
 
         self.pool = global_mean_pool
 
-        ##List of batchnorms
         self.batch_norms = torch.nn.ModuleList()
         for layer in range(num_layer):
             self.batch_norms.append(torch.nn.BatchNorm1d(emb_dim))
         self.num_features = emb_dim
         self.cat_grep = True
 
-    # def forward(self, x, edge_index, edge_attr):
     def forward(self, *argv):
         if len(argv) == 4:
             x, edge_index, edge_attr, batch = argv[0], argv[1], argv[2], argv[3]
@@ -311,15 +287,12 @@ class GNN(torch.nn.Module):
         for layer in range(self.num_layer):
             h = self.gnns[layer](h_list[layer], edge_index, edge_attr)
             h = self.batch_norms[layer](h)
-            # h = F.dropout(F.relu(h), self.drop_ratio, training = self.training)
             if layer == self.num_layer - 1:
-                # remove relu for the last layer
                 h = F.dropout(h, self.drop_ratio, training=self.training)
             else:
                 h = F.dropout(F.relu(h), self.drop_ratio, training=self.training)
             h_list.append(h)
 
-        ## Different implementations of Jk-concat
         if self.JK == "concat":
             node_representation = torch.cat(h_list, dim=1)
         elif self.JK == "last":
@@ -333,16 +306,16 @@ class GNN(torch.nn.Module):
         else:
             raise ValueError("Invalid graph pooling type.")
 
-        h_graph = self.pool(node_representation, batch)  # shape = [B, D]
+        h_graph = self.pool(node_representation, batch)
         batch_node, batch_mask = to_dense_batch(
             node_representation, batch
-        )  # shape = [B, n_max, D],
+        )
         batch_mask = batch_mask.bool()
 
         if self.cat_grep:
             batch_node = torch.cat(
                 (h_graph.unsqueeze(1), batch_node), dim=1
-            )  # shape = [B, n_max+1, D]
+            )
             batch_mask = torch.cat(
                 [
                     torch.ones(
@@ -370,21 +343,16 @@ def reverse_to_dense_batch(dense_x, mask):
         batch (Tensor): The original batch vector.
     """
     batch_size, max_num_nodes, num_features = dense_x.shape
-    num_nodes = mask.sum(dim=1)  # Number of actual nodes in each graph
+    num_nodes = mask.sum(dim=1)
 
-    # Initialize a list to hold the node features
     original_features = []
-    # Initialize a list to hold the batch indices
     batch_indices = []
 
     for i in range(batch_size):
-        # Extract the features of the actual nodes (where mask is True)
         actual_node_features = dense_x[i, mask[i]]
         original_features.append(actual_node_features)
-        # Create a batch index for these nodes
         batch_indices.extend([i] * num_nodes[i].item())
 
-    # Concatenate all node features and convert batch indices to a tensor
     x = torch.cat(original_features, dim=0)
     batch = torch.tensor(batch_indices, dtype=torch.long)
 
@@ -410,22 +378,19 @@ class GNN_Decoder(GNN):
         batch_node = self.projection_layer(batch_node)
         batch_mask = batch_mask[
             :, 1:
-        ]  # remove the first node featuer which is mean-pooled graph feature
+        ]
         x, batch = reverse_to_dense_batch(batch_node, batch_mask)
 
         h_list = [x]
         for layer in range(self.num_layer):
             h = self.gnns[layer](h_list[layer], edge_index, edge_attr)
             h = self.batch_norms[layer](h)
-            # h = F.dropout(F.relu(h), self.drop_ratio, training = self.training)
             if layer == self.num_layer - 1:
-                # remove relu for the last layer
                 h = F.dropout(h, self.drop_ratio, training=self.training)
             else:
                 h = F.dropout(F.relu(h), self.drop_ratio, training=self.training)
             h_list.append(h)
 
-        ## Different implementations of Jk-concat
         if self.JK == "concat":
             node_representation = torch.cat(h_list, dim=1)
         elif self.JK == "last":
@@ -492,7 +457,6 @@ class GNN_graphpred(torch.nn.Module):
 
         self.gnn = GNN(num_layer, emb_dim, JK, drop_ratio, gnn_type=gnn_type)
 
-        # Different kind of graph pooling
         if graph_pooling == "sum":
             self.pool = global_add_pool
         elif graph_pooling == "mean":
@@ -515,7 +479,6 @@ class GNN_graphpred(torch.nn.Module):
         else:
             raise ValueError("Invalid graph pooling type.")
 
-        # For graph-level binary classification
         if graph_pooling[:-1] == "set2set":
             self.mult = 2
         else:
@@ -531,7 +494,6 @@ class GNN_graphpred(torch.nn.Module):
             )
 
     def from_pretrained(self, model_file):
-        # self.gnn = GNN(self.num_layer, self.emb_dim, JK = self.JK, drop_ratio = self.drop_ratio)
         missing_keys, unexpected_keys = self.gnn.load_state_dict(torch.load(model_file))
         print(missing_keys)
         print(unexpected_keys)
@@ -565,7 +527,6 @@ class AtomEncoder(torch.nn.Module):
     def __init__(self, emb_dim):
         super(AtomEncoder, self).__init__()
         full_atom_feature_dims = get_atom_feature_dims()
-        # pretrained moleculestm ckpt use different atom feature dims
         full_atom_feature_dims[1] = 4
 
         self.atom_embedding_list = torch.nn.ModuleList()
@@ -653,7 +614,6 @@ class GNN_MoleculeSTM(nn.Module):
 
         self.atom_encoder = AtomEncoder(emb_dim)
 
-        ###List of MLPs
         self.gnns = nn.ModuleList()
         for layer in range(num_layer):
             if gnn_type == "gin":
@@ -663,14 +623,12 @@ class GNN_MoleculeSTM(nn.Module):
 
         self.pool = global_mean_pool
 
-        ###List of batchnorms
         self.batch_norms = nn.ModuleList()
         for layer in range(num_layer):
             self.batch_norms.append(nn.BatchNorm1d(emb_dim))
         self.num_features = emb_dim
         self.cat_grep = True
 
-    # def forward(self, x, edge_index, edge_attr):
     def forward(self, *argv):
         if len(argv) == 4:
             x, edge_index, edge_attr, batch = argv[0], argv[1], argv[2], argv[3]
@@ -691,15 +649,12 @@ class GNN_MoleculeSTM(nn.Module):
         for layer in range(self.num_layer):
             h = self.gnns[layer](h_list[layer], edge_index, edge_attr)
             h = self.batch_norms[layer](h)
-            # h = F.dropout(F.relu(h), self.drop_ratio, training = self.training)
             if layer == self.num_layer - 1:
-                # remove relu for the last layer
                 h = F.dropout(h, self.drop_ratio, training=self.training)
             else:
                 h = F.dropout(F.relu(h), self.drop_ratio, training=self.training)
             h_list.append(h)
 
-        ### Different implementations of Jk-concat
         if self.JK == "concat":
             node_representation = torch.cat(h_list, dim=1)
         elif self.JK == "last":
@@ -713,16 +668,16 @@ class GNN_MoleculeSTM(nn.Module):
         else:
             raise ValueError("not implemented.")
 
-        h_graph = self.pool(node_representation, batch)  # shape = [B, D]
+        h_graph = self.pool(node_representation, batch)
         batch_node, batch_mask = to_dense_batch(
             node_representation, batch
-        )  # shape = [B, n_max, D],
+        )
         batch_mask = batch_mask.bool()
 
         if self.cat_grep:
             batch_node = torch.cat(
                 (h_graph.unsqueeze(1), batch_node), dim=1
-            )  # shape = [B, n_max+1, D]
+            )
             batch_mask = torch.cat(
                 [
                     torch.ones(

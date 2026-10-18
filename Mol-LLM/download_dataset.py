@@ -31,10 +31,6 @@ from data_utils import (
     TEXT2MOL_BENCHMARKS,
 )
 
-# token added to implement a custom sequence tokenization. This token is added at
-# corpus cleaning step and removed in pretokenization. The digits are added to increase the chance
-# that they do not occur in the corpus. The digits are escaped so that the token does not appear
-# literally in the source code in case we ever include it in the training data.
 
 
 
@@ -85,10 +81,8 @@ def wrap_label(label, task):
         else:
             label = format(float(label), ".10f")
 
-        # force to predict the sign of label first
         if "-" not in label and "+" not in label:
             label = "+" + label
-        # unify the length of label to 7
         label = label[:7]
         converted_label = "".join([f"<|{char}|>" for char in label])
         return label_tokens[0] + " " + converted_label + " " + label_tokens[1]
@@ -101,8 +95,6 @@ def wrap_label(label, task):
 from torch_geometric.data import InMemoryDataset, Data
 
 
-# TODO use task or refactor it
-# getitem shoul return enough information that what is label, and what is the label meaning (to format instruction)
 class MoleculeNetDatasetDeepChem(Dataset):
     def __init__(self, data, task_subtask_pair, subtask_idx=0, prompt=None):
         self.data = data
@@ -142,7 +134,6 @@ class MoleculeNetDatasetDeepChem(Dataset):
     def get_necessary_data(self, index):
         instruction = np.random.choice(self.instruction_templates)
         smiles = self.smiles_list[index]
-        # set molecule string representation as selfies
         input_mol_string = sf.encoder(smiles)
         input_mol_string = (
             added_tokens.SELFIES[0] + input_mol_string + added_tokens.SELFIES[1]
@@ -159,24 +150,23 @@ class MoleculeNetDatasetDeepChem(Dataset):
             label = wrap_label(label, self.task)
 
         graph = smiles2data(smiles)
-        # randomly select one instruction from list
         return graph, label, input_mol_string, instruction
 
     def set_label_fullname(self):
         self.label_full_name = None
         if self.task == "tox21":
             self.label_full_name = [
-                "androgen receptor, full (AR, full)",  # AR
-                "androgen receptor, LBD (AR, LBD)",  # AR, LBD
-                "aryl hydrocarbon receptor (AhR)",  # AhR
+                "androgen receptor, full (AR, full)",
+                "androgen receptor, LBD (AR, LBD)",
+                "aryl hydrocarbon receptor (AhR)",
                 "aromatase",
-                "estrogen receptor alpha, full (ER, full)",  # ER
-                "estrogen receptor alpha, LBD (ER, LBD)",  # ER, LBD
-                "peroxisome proliferator-activated receptor gamma (PPAR-gamma)",  # PPAR-gamma
+                "estrogen receptor alpha, full (ER, full)",
+                "estrogen receptor alpha, LBD (ER, LBD)",
+                "peroxisome proliferator-activated receptor gamma (PPAR-gamma)",
                 "nuclear factor (erythroid-derived 2)-like 2/antioxidant responsive element (Nrf2/ARE)",
                 "ATPase family AAA domain containing 5 (ATAD5)",
-                "heat shock factor response element (HSE)",  # HSE
-                "mitochondrial membrane potential (MMP)",  # MMP
+                "heat shock factor response element (HSE)",
+                "mitochondrial membrane potential (MMP)",
                 "tumor suppressor protein p53",
             ]
 
@@ -235,7 +225,6 @@ class MolInstructionDatset(Dataset):
     def __init__(self, data, task_subtask_pair, **kwargs):
         self.data = data
         self.task = task_subtask_pair
-        #self.task, self.subtask = task_subtask_pair.split("/")
 
         self.set_necesary_data()
 
@@ -285,23 +274,21 @@ class MolInstructionDatset(Dataset):
 
     def get_necessary_data(self, index):
         instruction = np.random.choice(self.instruction_templates)
-        input = self.input_list[index]  # if mol_string, representation is selfies
-        label = self.label_list[index]  # if mol_string, representation is selfies
+        input = self.input_list[index]
+        label = self.label_list[index]
 
         if self.task in REACTION_BENCHMARKS:
-            # two smiles in input0
             if self.task in ["reagent_prediction"]:
                 assert ">>" in input
                 list_selfies = input.split(
                     ">>"
-                )  # reagent prediction has two selfies in input
+                )
                 input_mol_string = input.replace(
                     ">>",
                     f"{added_tokens.SELFIES[1]}{added_tokens.REACTION_DIRECTION[0]}{added_tokens.SELFIES[0]}",
                 )
                 list_smiles = [sf.decoder(s) for s in list_selfies]
                 graph = [smiles2data(s) for s in list_smiles]
-            # one smiles in input and one smiles in output
             else:
                 input_mol_string = input
                 smiles = sf.decoder(input_mol_string)
@@ -311,7 +298,6 @@ class MolInstructionDatset(Dataset):
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
         else:
-            # one selfies in input
             input_mol_string = input
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
@@ -323,7 +309,6 @@ class MolInstructionDatset(Dataset):
 
         return graph, label, input_mol_string, instruction
 
-    # LLM input order: <instruction><qformer_output><smiles_tokens>
     def __getitem__(self, index):
         graph = self.graph_list[index]
         label = self.label_list[index]
@@ -398,7 +383,7 @@ class ChEBIDataset(Dataset):
             instruction = instruction.replace("<INPUT>", description)
             graph = smiles2data(
                 "CC"
-            )  # null smiles, just input dummy graph for batch processing
+            )
             input_mol_string = "<None>"
         elif self.task in MOL2TEXT_BENCHMARKS:
             label = descriptiopn
@@ -411,7 +396,6 @@ class ChEBIDataset(Dataset):
         )
         return graph, label, input_mol_string, instruction
 
-    # LLM input order: <instruction><qformer_output><smiles_tokens>
     def __getitem__(self, index):
         graph = self.graph_list[index]
         label = self.label_list[index]
@@ -445,7 +429,6 @@ class SMolInstructDataset(Dataset):
         self.instruction_list = []
         self.label_list = []
 
-        # pre-load data
         raw_inputs = self.data["raw_input"][:]
         raw_outputs = self.data["raw_output"][:]
 
@@ -497,7 +480,7 @@ class SMolInstructDataset(Dataset):
             instruction = instruction.replace("<INPUT>", description)
             graph = smiles2data(
                 "CC"
-            )  # null smiles, just input dummy graph for batch processing
+            )
             input_mol_string = "<None>"
             label = re.sub(r"\s*;\s*", ".", label)
         elif self.task in REACTION_BENCHMARKS:
@@ -505,13 +488,11 @@ class SMolInstructDataset(Dataset):
             input_mol_string = raw_input
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
-        # multi labeled property prediction datasets
         elif self.task in ["smol-property_prediction-sider"]:
             instance_input = self.data[index]["input"]
             assert re.search(r"\[.*\]", instance_input) is not None
             instruction = re.sub(r"\[.*\]", "<INPUT>", instance_input)
 
-            # use re sub to replace ";" with "."
             input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
@@ -520,7 +501,6 @@ class SMolInstructDataset(Dataset):
             in MOL2TEXT_BENCHMARKS + CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS
         ):
             instruction = np.random.choice(self.instruction_templates)
-            # use re sub to replace ";" with "."
             input_mol_string = re.sub(r"\s*;\s*", ".", raw_input)
             smiles = sf.decoder(input_mol_string)
             graph = smiles2data(smiles)
@@ -534,7 +514,6 @@ class SMolInstructDataset(Dataset):
 
         return graph, label, input_mol_string, instruction
 
-    # LLM input order: <instruction><qformer_output><smiles_tokens>
     def __getitem__(self, index):
         graph = self.graph_list[index]
         label = self.label_list[index]
@@ -558,7 +537,6 @@ def smiles2data(smiles):
     return data
 
 
-# torch_geometric.data.Data variants for paired graph data, i.e. reagent prediction
 class PairData(Data):
     def __inc__(self, key: str, value: Any, *args, **kwargs) -> Any:
         if key == "edge_index":
@@ -606,17 +584,15 @@ def get_task_subtask_info(target_benchmarks):
 
 
 def get_dataset(task_name, raw_data_root):
-    # get dataset from deepchem
     if "smol" in task_name:
         smol_dataset = load_dataset(
             "osunlp/SMolInstruct",
             use_selfies=True,
-            insert_core_tags=False,  # loada data w/o core tags such as <SELFIES>, </SELFIES>
+            insert_core_tags=False,
             trust_remote_code=True,
         )
-        _task = re.sub("smol-", "", task_name)  # remove smol- from smol-<task_name>
+        _task = re.sub("smol-", "", task_name)
 
-        # DEBUG: to avoid lengthy processing time
         train_dataset = smol_dataset["train"].filter(lambda x: x["task"] == _task)
         valid_dataset = smol_dataset["validation"].filter(lambda x: x["task"] == _task)
         test_dataset = smol_dataset["test"].filter(lambda x: x["task"] == _task)
@@ -629,7 +605,6 @@ def get_dataset(task_name, raw_data_root):
         loading_fn = getattr(dc.molnet, f"load_{task_name}")
     elif task_name in ["qm9_additional_label"]:
         loading_fn = dc.molnet.load_qm9
-    # TODO: address biot5 datasets
     elif task_name == "bace":
         train_dataset = pd.read_csv(
             os.path.join(raw_data_root, "raw/BioT5_bace_train.csv")
@@ -642,7 +617,6 @@ def get_dataset(task_name, raw_data_root):
         )
         tasks = [task_name]
     elif "chebi-20" in task_name:
-        # load data from csv
         train_dataset = pd.read_csv(
             os.path.join(raw_data_root, "raw/BioT5_chebi20_train.csv")
         )
@@ -655,7 +629,6 @@ def get_dataset(task_name, raw_data_root):
 
         tasks = [task_name]
 
-    # mol-instruction datasets
     elif task_name in [
         "reagent_prediction",
         "forward_reaction_prediction",
@@ -691,7 +664,6 @@ def get_dataset(task_name, raw_data_root):
     else:
         raise NotImplementedError
 
-    # dataset from deepchem
     if (
         task_name in CLASSIFICATION_BENCHMARKS + REGRESSION_BENCHMARKS
         and task_name not in ["qm9_homo", "qm9_lumo", "qm9_homo_lumo_gap", "bace"]
@@ -708,7 +680,6 @@ def get_dataset(task_name, raw_data_root):
         )
         train_dataset, valid_dataset, test_dataset = datasets
     else:
-        # dataset from mol-instruction is already loaded
         pass
     return tasks, train_dataset, valid_dataset, test_dataset
 
@@ -725,7 +696,6 @@ if __name__ == "__main__":
     import os
     import random
 
-    # get arg replace_ratio, dataset_path
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_dir", type=str, default="Mol-LLM/configs/download/")
     parser.add_argument("--config", type=str, default="hopv_homo")
@@ -735,11 +705,9 @@ if __name__ == "__main__":
 
     
     arg_path = os.path.join(args.config_dir, args.config) + ".yaml"
-    # read config file
     with open(arg_path, "r") as f:
         cfg = yaml.safe_load(f)
 
-    # convert args to be accessible its values by attributes
     cfg = from_dict(cfg)
 
     raw_data_root = cfg.raw_data_root
@@ -776,7 +744,7 @@ if __name__ == "__main__":
         else:
             task_subtask_pair = f"{task_name}/{subtasks[subtask_idx]}"
 
-        data_split = new_dataset[1:]  # train_set, val_set, test_set
+        data_split = new_dataset[1:]
         if "smol" in task_name:
             dataset = SMolInstructDataset
         elif task_name in [
@@ -788,7 +756,6 @@ if __name__ == "__main__":
             dataset = MoleculeNetDatasetDeepChem
         elif task_name in ["chebi-20-mol2text", "chebi-20-text2mol"]:
             dataset = ChEBIDataset
-        # qm9 in regression benchmark is processed via MolInstructionDataset
         elif task_name in [
             "chebi-20-text2mol",
             "chebi-20-mol2text",
@@ -841,7 +808,6 @@ if __name__ == "__main__":
                 list_dict_data.append(dict_data)
 
             dataset = datasets.Dataset.from_list(list_dict_data)
-            # save datset
             dataset.save_to_disk(
                 f"{raw_data_root}/{task_name}_subtask-{subtask_idx}_{split}"
             )
@@ -876,7 +842,6 @@ if __name__ == "__main__":
 
     concat_trainset = datasets.concatenate_datasets(trainsets)
     concat_testset = datasets.concatenate_datasets(testsets)
-    #concat_testset = datasets.concatenate_datasets(testsets + trainsets + valsets)
         
     from transformers import AutoTokenizer
     system_prompt = "You are a helpful assistant for molecular chemistry, to address tasks including molecular property classification, molecular property regression, chemical reaction prediction, molecule captioning, molecule generation."
@@ -944,14 +909,12 @@ if __name__ == "__main__":
         lambda x: prepare_data_instance(
             x, system_prompt=system_prompt,
         ),
-            # use 36 processes
             num_proc=args.train_procs
     )
     mapped_testset = concat_testset.map(
         lambda x: prepare_data_instance(
             x, system_prompt=system_prompt,
         ),
-            # use 36 processes
             num_proc=args.test_procs
     )
     llm_model = "mistralai/Mistral-7B-Instruct-v0.3"

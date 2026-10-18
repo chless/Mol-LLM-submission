@@ -35,8 +35,6 @@ class Blip2Base(BaseModel):
         return tokenizer
 
     def maybe_autocast(self, dtype=torch.float16):
-        # if on cpu, don't use autocast
-        # if on gpu, use autocast with dtype if provided, otherwise use torch.float16
         enable_autocast = self.device != torch.device("cpu")
 
         if enable_autocast:
@@ -63,7 +61,6 @@ class Blip2Base(BaseModel):
 
         encoder_config = BertConfig.from_pretrained(bert_name, revision=revision)
         encoder_config.encoder_width = graph_width
-        # insert cross-attention layer every other block
         encoder_config.add_cross_attention = True
         encoder_config.cross_attention_freq = cross_attention_freq
         encoder_config.query_length = num_query_token
@@ -141,21 +138,8 @@ class Blip2Base(BaseModel):
 
         ln_graph = LayerNorm(args.gnn_hidden_dim)
 
-        # qm9_pretrained = torch.load("gnn_ablation/all_except_lumo_homo_gap_scaled/GM_GM_-_-/lightning_logs/version_0/checkpoints/best-model.ckpt")['state_dict']
-        # qm9_renamed_gnn_state_dict = {}
-        # qm9_renamed_lngraph_state_dict = {}
 
-        # for name, param in qm9_pretrained.items():
-        #     if name.startswith("mlp."):
-        #         continue
-        #     if name.startswith('ln_graph.'):
-        #         qm9_renamed_lngraph_state_dict[name.replace("ln_graph.", "")] = param
-        #         continue
-        #     renamed = name.replace("gin.", "")
-        #     qm9_renamed_gnn_state_dict[renamed] = param
 
-        # graph_encoder.load_state_dict(qm9_renamed_gnn_state_dict, strict=True)
-        # ln_graph.load_state_dict(qm9_renamed_lngraph_state_dict, strict=True)
 
         return graph_encoder, ln_graph
 
@@ -189,7 +173,6 @@ class Blip2Base(BaseModel):
 
         msg = self.load_state_dict(state_dict, strict=False)
 
-        # logging.info("Missing keys {}".format(msg.missing_keys))
         logging.info("load checkpoint from %s" % url_or_filename)
 
         return msg
@@ -217,13 +200,12 @@ class Blip2Base(BaseModel):
                         Using OrderedDict to preserve original parameter order.
         """
         if isinstance(keywords, str):
-            keywords = [keywords]  # Convert single keyword to list for uniformity
+            keywords = [keywords]
 
-        # Using a dictionary comprehension for conciseness
         filtered_params = OrderedDict({
             param_name: param_tensor
             for param_name, param_tensor in state_dict.items()
-            if any([keyword in param_name for keyword in keywords])  # Include if any keyword matches
+            if any([keyword in param_name for keyword in keywords])
         })
         return filtered_params
 
@@ -240,11 +222,10 @@ class Blip2Base(BaseModel):
             OrderedDict: A new dictionary containing only the parameters whose
                         names do not contain any of the specified keywords.
         """
-        # Using a dictionary comprehension for conciseness
         filtered_params = OrderedDict({
             param_name: param_tensor
             for param_name, param_tensor in state_dict.items()
-            if not any([keyword in param_name for keyword in keywords_to_exclude])  # Exclude if any keyword matches
+            if not any([keyword in param_name for keyword in keywords_to_exclude])
         })
         return filtered_params
 

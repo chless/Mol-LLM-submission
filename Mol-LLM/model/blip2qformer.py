@@ -16,8 +16,6 @@ from torch.nn import functional as F
 from typing import Any, Iterable, Iterator, List, Optional, Sized, Tuple, Union, Dict
 from model.help_funcs import pad_and_concat
 
-# from lavis.common.registry import registry
-# from lavis.models.base_model import all_gather_with_grad, concat_all_gather
 from lavis.models.blip2_models.blip2 import (
     disabled_train,
 )
@@ -25,7 +23,6 @@ from lavis.models.blip_models.blip_outputs import BlipOutput
 from lavis.common.dist_utils import is_dist_avail_and_initialized
 from model.blip2 import Blip2Base
 
-# from pytorch_lightning.utilities import distributed
 
 
 @torch.no_grad()
@@ -34,7 +31,6 @@ def concat_all_gather(tensor):
     Performs all_gather operation on the provided tensors.
     *** Warning ***: torch.distributed.all_gather has no gradient.
     """
-    # if use distributed training
     if not is_dist_avail_and_initialized():
         return tensor
 
@@ -48,19 +44,7 @@ def concat_all_gather(tensor):
     return output
 
 
-# @torch.no_grad()
-# def pl_concat_all_gather(tensor):
-#     """
-#     Performs all_gather operation on the provided tensors.
-#     *** Warning ***: torch.distributed.all_gather has no gradient.
-#     """
-#     # if use distributed training
-#     if not is_dist_avail_and_initialized():
-#         return tensor
 
-#     tensors_gather = distributed.gather_all_tensors(tensor)
-#     output = torch.cat(tensors_gather, dim=0)
-#     return output
 
 
 @torch.no_grad()
@@ -69,7 +53,6 @@ def pl_concat_all_gather(tensor, padding=False, fill_value=0):
     Performs all_gather operation on the provided tensors.
     *** Warning ***: torch.distributed.all_gather has no gradient.
     """
-    # if use distributed training
     if not is_dist_avail_and_initialized():
         return tensor
 
@@ -102,28 +85,23 @@ def _gather_all_tensors(result: Tensor, group: Optional[Any] = None) -> List[Ten
     if group is None:
         group = torch.distributed.group.WORLD
 
-    # Convert tensors to contiguous format
     result = result.contiguous()
 
     world_size = torch.distributed.get_world_size(group)
     torch.distributed.barrier(group=group)
 
-    # If the tensor is scalar, things are easy
     if result.ndim == 0:
         return _simple_gather_all_tensors(result, group, world_size)
 
-    # 1. Gather sizes of all tensors
     local_size = torch.tensor(result.shape, device=result.device)
     local_sizes = [torch.zeros_like(local_size) for _ in range(world_size)]
     torch.distributed.all_gather(local_sizes, local_size, group=group)
     max_size = torch.stack(local_sizes).max(dim=0).values
     all_sizes_equal = all(all(ls == max_size) for ls in local_sizes)
 
-    # 2. If shapes are all the same, then do a simple gather:
     if all_sizes_equal:
         return _simple_gather_all_tensors(result, group, world_size)
 
-    # 3. If not, we need to pad each local tensor to maximum size, gather and then truncate
     pad_dims = []
     pad_by = (max_size - local_size).detach().cpu()
     for val in reversed(pad_by):
@@ -146,8 +124,6 @@ def _simple_gather_all_tensors(
     return gathered_result
 
 
-# @registry.register_model("blip2")
-# @registry.register_model("blip2_feature_extractor")
 class Blip2Qformer(Blip2Base):
     """
     BLIP2 first-stage model with Q-former and ViT.
@@ -220,22 +196,20 @@ class Blip2Qformer(Blip2Base):
         """
         batch_size = features_graph.size(0)
 
-        # normalized features
         features_graph = F.normalize(features_graph, dim=-1)
         features_text = F.normalize(features_text, dim=-1)
 
-        # cosine similarity as logits
         sim_q2t = (
             features_graph.unsqueeze(1) @ features_text.unsqueeze(-1)
-        ).squeeze()  # shape = [B, 1, num_qs, D]; shape = [B, D, 1]; output shape = [B, B, num_qs]
-        sim_g2t, _ = sim_q2t.max(-1)  # shape = [B, B]
+        ).squeeze()
+        sim_g2t, _ = sim_q2t.max(-1)
 
         logits_per_graph = sim_g2t / self.temperature
         logits_per_text = logits_per_graph.t()
 
         labels = torch.arange(
             batch_size, dtype=torch.long, device=self.device
-        )  # 大小为B
+        )
         loss_graph = F.cross_entropy(logits_per_graph, labels)
         loss_text = F.cross_entropy(logits_per_text, labels)
         loss = (loss_graph + loss_text) / 2
@@ -261,22 +235,20 @@ class Blip2Qformer(Blip2Base):
         """
         bs = features_graph.size(0)
 
-        # cosine similarity as logits
         sim_q2t = (
             features_graph.unsqueeze(1) @ features_text_all.unsqueeze(-1)
-        ).squeeze()  # shape = [B, 1, num_qs, D]; shape = [B * num_gpus, D, 1]; output shape = [B, B * num_gpus, num_qs]
-        sim_g2t, _ = sim_q2t.max(-1)  # shape = [B, B * num_gpus]
+        ).squeeze()
+        sim_g2t, _ = sim_q2t.max(-1)
 
         logits_per_graph = sim_g2t / self.temperature
 
         sim_t2q = (
             features_text.unsqueeze(1).unsqueeze(1)
             @ features_graph_all.permute(0, 2, 1)
-        ).squeeze()  # shape = [B, 1, 1, D]; [B*num_gpus, D, num_qs]; output shape = [B, B*num_gpus, 1, num_qs]
+        ).squeeze()
         sim_t2g, _ = sim_t2q.max(-1)
         logits_per_text = sim_t2g / self.temperature
 
-        # labels = torch.arange(bs, dtype=torch.long, device=self.device)
         rank = dist.get_rank()
         labels = torch.linspace(rank * bs, rank * bs + bs - 1, bs, dtype=int).to(
             self.device
@@ -296,8 +268,6 @@ class Blip2Qformer(Blip2Base):
             return loss
 
     def forward(self, batch):
-        ## v2: gather results from all gpus
-        ###============== Image-text Contrastive ===================###
         graph, text, mask = batch
         batch_node, batch_mask = self.graph_encoder(graph)
         if not self.tune_gnn:
@@ -309,16 +279,16 @@ class Blip2Qformer(Blip2Base):
         query_output = self.Qformer.bert(
             query_embeds=query_tokens,
             encoder_hidden_states=batch_node,
-            encoder_attention_mask=batch_mask,  # fixme: check whether this mask is correct
+            encoder_attention_mask=batch_mask,
             use_cache=True,
             return_dict=True,
         )
         graph_feats = self.graph_proj(
             query_output.last_hidden_state
-        )  # shape = [B, num_q, D]
+        )
         text_output = self.Qformer.bert(
             text, attention_mask=mask, return_dict=True
-        )  # shape = [B, n_max, D]
+        )
         text_feats = self.text_proj(text_output.last_hidden_state[:, 0, :])
 
         text_feats, graph_feats = F.normalize(text_feats, p=2, dim=-1), F.normalize(
@@ -328,15 +298,13 @@ class Blip2Qformer(Blip2Base):
             text_feats
         ), pl_concat_all_gather(
             graph_feats
-        )  # shape = [B * num_gpus, D]
+        )
         sim_g2t, sim_t2g, loss_gtc = self.contrast_global(
             graph_feats, text_feats, graph_feats_all, text_feats_all, return_sim=True
         )
 
-        ###============== Image-text Matching ===================###
         loss_gtm = 0
         if self.gtm:
-            ## not aggregate global tensor because of their different shapes
             g_emb_world = batch_node
             g_mask_world = batch_mask
             text_ids_world = text
@@ -347,7 +315,6 @@ class Blip2Qformer(Blip2Base):
                 weights_g2t = F.softmax(sim_g2t, dim=1) + 1e-4
                 weights_g2t.fill_diagonal_(0)
 
-            # select a negative graph for each text
             graph_embeds_neg = []
             graph_mask_neg = []
             for b in range(batch_size):
@@ -358,7 +325,6 @@ class Blip2Qformer(Blip2Base):
             graph_embeds_neg = torch.stack(graph_embeds_neg, dim=0)
             graph_mask_neg = torch.stack(graph_mask_neg, dim=0)
 
-            # select a negative text for each image
             text_ids_neg = []
             text_atts_neg = []
             for b in range(batch_size):
@@ -369,7 +335,7 @@ class Blip2Qformer(Blip2Base):
             text_ids_neg = torch.stack(text_ids_neg, dim=0)
             text_atts_neg = torch.stack(text_atts_neg, dim=0)
 
-            text_ids_all = torch.cat([text, text, text_ids_neg], dim=0)  # pos, pos, neg
+            text_ids_all = torch.cat([text, text, text_ids_neg], dim=0)
             text_atts_all = torch.cat(
                 [mask, mask, text_atts_neg],
                 dim=0,
@@ -383,7 +349,7 @@ class Blip2Qformer(Blip2Base):
 
             graph_embeds_all = torch.cat(
                 [batch_node, graph_embeds_neg, batch_node], dim=0
-            )  # pos, neg, pos
+            )
             graph_atts_all = torch.cat([batch_mask, graph_mask_neg, batch_mask], dim=0)
 
             output_itm = self.Qformer.bert(
@@ -397,7 +363,7 @@ class Blip2Qformer(Blip2Base):
 
             vl_embeddings = output_itm.last_hidden_state[
                 :, : query_tokens_itm.size(1), :
-            ]  # keep query tokens only
+            ]
             vl_output = self.gtm_head(vl_embeddings)
             logits = vl_output.mean(dim=1)
 
@@ -410,7 +376,6 @@ class Blip2Qformer(Blip2Base):
             ).to(text.device)
             loss_gtm = F.cross_entropy(logits, itm_labels)
 
-        ##================= Image Captioning ========================##
         loss_lm = 0
         if self.lm:
             decoder_input_ids = text.clone()
@@ -441,8 +406,6 @@ class Blip2Qformer(Blip2Base):
         )
 
     def forward_v3(self, batch):
-        ## v3: use smiles instruction
-        ###============== Image-text Contrastive ===================###
         graphs, text_tokens, prompt_tokens = batch
         graph_embeds, graph_masks = self.graph_encoder(graphs)
         if not self.tune_gnn:
@@ -452,7 +415,6 @@ class Blip2Qformer(Blip2Base):
         device = text_tokens.input_ids.device
         batch_size = graph_embeds.shape[0]
 
-        ##
         query_tokens = self.query_tokens.expand(graph_embeds.shape[0], -1, -1)
         query_atts = torch.ones(
             query_tokens.size()[:-1], dtype=torch.long, device=device
@@ -465,20 +427,20 @@ class Blip2Qformer(Blip2Base):
             query_embeds=query_tokens,
             attention_mask=attention_mask_gtc,
             encoder_hidden_states=graph_embeds,
-            encoder_attention_mask=graph_masks,  # fixme: check whether this mask is correct
+            encoder_attention_mask=graph_masks,
             use_cache=True,
             return_dict=True,
         )
 
         query_output = query_output.last_hidden_state[
             :, : query_tokens.size(1), :
-        ]  # keep query tokens only
-        graph_feats = self.graph_proj(query_output)  # shape = [B, num_q, D]
+        ]
+        graph_feats = self.graph_proj(query_output)
         text_output = self.Qformer.bert(
             text_tokens.input_ids,
             attention_mask=text_tokens.attention_mask,
             return_dict=True,
-        )  # shape = [B, n_max, D]
+        )
         text_feats = self.text_proj(text_output.last_hidden_state[:, 0, :])
 
         text_feats, graph_feats = F.normalize(text_feats, p=2, dim=-1), F.normalize(
@@ -488,15 +450,13 @@ class Blip2Qformer(Blip2Base):
             text_feats
         ), pl_concat_all_gather(
             graph_feats
-        )  # shape = [B * num_gpus, D]
+        )
         sim_g2t, sim_t2g, loss_gtc = self.contrast_global(
             graph_feats, text_feats, graph_feats_all, text_feats_all, return_sim=True
         )
 
-        ###============== Image-text Matching ===================###
         loss_gtm = 0
         if self.gtm:
-            ## not aggregate global tensor because of their different shapes
             g_emb_world = graph_embeds
             g_mask_world = graph_masks
             text_ids_world = text_tokens.input_ids
@@ -507,7 +467,6 @@ class Blip2Qformer(Blip2Base):
                 weights_g2t = F.softmax(sim_g2t, dim=1) + 1e-4
                 weights_g2t.fill_diagonal_(0)
 
-            # select a negative graph for each text
             graph_embeds_neg = []
             graph_mask_neg = []
             for b in range(batch_size):
@@ -518,7 +477,6 @@ class Blip2Qformer(Blip2Base):
             graph_embeds_neg = torch.stack(graph_embeds_neg, dim=0)
             graph_mask_neg = torch.stack(graph_mask_neg, dim=0)
 
-            # select a negative text for each image
             text_ids_neg = []
             text_atts_neg = []
             for b in range(batch_size):
@@ -531,7 +489,7 @@ class Blip2Qformer(Blip2Base):
 
             text_ids_all = torch.cat(
                 [text_tokens.input_ids, text_tokens.input_ids, text_ids_neg], dim=0
-            )  # pos, pos, neg
+            )
             text_atts_all = torch.cat(
                 [text_tokens.attention_mask, text_tokens.attention_mask, text_atts_neg],
                 dim=0,
@@ -547,7 +505,7 @@ class Blip2Qformer(Blip2Base):
 
             graph_embeds_all = torch.cat(
                 [graph_embeds, graph_embeds_neg, graph_embeds], dim=0
-            )  # pos, neg, pos
+            )
             graph_atts_all = torch.cat(
                 [graph_masks, graph_mask_neg, graph_masks], dim=0
             )
@@ -563,7 +521,7 @@ class Blip2Qformer(Blip2Base):
 
             vl_embeddings = output_itm.last_hidden_state[
                 :, : query_tokens_itm.size(1), :
-            ]  # keep query tokens only
+            ]
             vl_output = self.gtm_head(vl_embeddings)
             logits = vl_output.mean(dim=1)
 
@@ -576,7 +534,6 @@ class Blip2Qformer(Blip2Base):
             ).to(text_tokens.input_ids.device)
             loss_gtm = F.cross_entropy(logits, itm_labels)
 
-        ##================= Image Captioning ========================##
         loss_lm = 0
         if self.lm:
             decoder_input_ids = text_tokens.input_ids.clone()
@@ -618,20 +575,20 @@ class Blip2Qformer(Blip2Base):
         query_output = self.Qformer.bert(
             query_embeds=query_tokens,
             encoder_hidden_states=batch_node,
-            encoder_attention_mask=batch_mask,  # fixme: check whether this mask is correct
+            encoder_attention_mask=batch_mask,
             use_cache=False,
             return_dict=True,
         )
         graph_feats = self.graph_proj(
             query_output.last_hidden_state
-        )  # shape = [B, num_q, D]
+        )
         graph_feats = F.normalize(graph_feats, p=2, dim=-1)
         return graph_feats, batch_node, batch_mask
 
     def text_forward(self, text, mask):
         text_output = self.Qformer.bert(
             text, attention_mask=mask, return_dict=True
-        )  # shape = [B, n_max, D]
+        )
         text_feats = self.text_proj(text_output.last_hidden_state[:, 0, :])
         text_feats = F.normalize(text_feats, dim=-1, p=2)
         return text_feats
@@ -645,13 +602,13 @@ class Blip2Qformer(Blip2Base):
         """
         query_tokens = self.query_tokens.expand(
             batch_node.shape[0], -1, -1
-        )  # shape = [B, Nq, D]
+        )
         query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(
             batch_node.device
-        )  # shape = [B, Nq]
+        )
         attention_mask = torch.cat(
             [query_atts, text_atts], dim=1
-        )  # shape = [B, Nq + N]
+        )
         output_gtm = self.Qformer.bert(
             text_ids,
             query_embeds=query_tokens,
@@ -662,8 +619,7 @@ class Blip2Qformer(Blip2Base):
         )
         gl_embeddings = output_gtm.last_hidden_state[
             :, : query_tokens.size(1), :
-        ]  # shape = [B, Nq, D]
-        gtm_logit = self.gtm_head(gl_embeddings).mean(dim=1)  # shape = [B, Nq, 2]
-        # gtm_logit = F.softmax(gtm_logit, dim=-1)[:, 1] # select the axis of the positive class
-        gtm_logit = gtm_logit[:, 1]  # select the axis of the positive class
+        ]
+        gtm_logit = self.gtm_head(gl_embeddings).mean(dim=1)
+        gtm_logit = gtm_logit[:, 1]
         return gtm_logit

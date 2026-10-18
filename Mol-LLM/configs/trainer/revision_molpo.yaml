@@ -26,8 +26,6 @@ beta: 0.5
 gamma_beta_ratio: 0.5
 sft_reject_weight: 0.25
 answer_correction_weight: 0.25
-answer_correction_beta: 1.0
-answer_correction_scale_policy: unscaled_v1
 molpo_placeholder_tasks:
 - chebi-20-text2mol
 - smol-molecule_generation

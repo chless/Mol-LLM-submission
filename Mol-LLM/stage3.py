@@ -20,16 +20,14 @@ nltk.download("wordnet")
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# for pyg bug
 warnings.filterwarnings(
     "ignore", category=UserWarning, message="TypedStorage is deprecated"
 )
 warnings.filterwarnings("ignore", message=r".*Skipped loading .*")
 warnings.filterwarnings("ignore", message=r".*No normalization for .*")
-# for A5000 gpus
 torch.set_float32_matmul_precision(
     "medium"
-)  # can be medium (bfloat16), high (tensorfloat32), highest (float32)
+)
 
 
 class MyDDPStrategy(strategies.DDPStrategy):
@@ -58,7 +56,6 @@ def main(cfg):
     model = Blip2Stage3(cfg)
     print("total params:", sum(p.numel() for p in model.parameters()))
 
-    # when resuming training, load the current epoch information and argparse to datamodule
     if cfg.ckpt_path is not None:
         ckpt = torch.load(cfg.ckpt_path, map_location="cpu", weights_only=False)
         cfg.current_epoch = ckpt["epoch"]
@@ -66,7 +63,6 @@ def main(cfg):
     else:
         cfg.current_epoch = 0
 
-    # datamodule
     dm = Stage3DM(
         mode=cfg.mode,
         num_workers=cfg.num_workers,
@@ -151,7 +147,6 @@ def main(cfg):
 
     trainer = Trainer(**trainer_args)
 
-    # load pretrained model for model parameter initialization
     if cfg.pretrained_ckpt_path is not None:
         assert cfg.ckpt_path is None, "only one ckpt path should be provided"
         ckpt = torch.load(cfg.pretrained_ckpt_path, map_location="cpu", weights_only=False)
@@ -160,7 +155,6 @@ def main(cfg):
 
     if cfg.mode in {"ft"}:
         trainer.fit(model, datamodule=dm, ckpt_path=cfg.ckpt_path)
-        # outputs = trainer.test(model, datamodule=dm)
         assert "Training done"
     elif cfg.mode == "test":
         ckpt = torch.load(cfg.ckpt_path, map_location="cpu", weights_only=False)
@@ -178,12 +172,10 @@ def main(cfg):
 
 
 def update_result_csv(outputs, logger_dir, task_names=None):
-    # first, read the content in result_csv file
 
     performance_result_path = os.path.join(logger_dir, "benchmark_performance.json")
 
     os.makedirs(os.path.dirname(performance_result_path), exist_ok=True)
-    # task average of output
     final_output = dict()
     tasks = [list(o.keys()) for o in outputs]
     tasks = list(set([item for sublist in tasks for item in sublist]))
@@ -195,7 +187,7 @@ def update_result_csv(outputs, logger_dir, task_names=None):
                 final_output[task].append(output[task])
         final_output[task] = final_output[task][
             0
-        ]  # identical, just replicated 4 dataloader
+        ]
 
     with open(performance_result_path, "w") as f:
         json.dump(final_output, f, indent=4)
@@ -214,7 +206,6 @@ def flatten_dictconfig(config: DictConfig) -> DictConfig:
     - DictConfig: The flattened configuration.
     """
 
-    # only flatten just first level
     items = []
     for k, v in config.items():
         new_key = k

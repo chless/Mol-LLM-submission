@@ -253,13 +253,11 @@ def canonical_mol_representation(value):
     return _MOL_REPR_ALIASES.get(value, value)
 
 def task2id(task):
-    # task name to task id
     task2id = {k: i for i, k in enumerate(tasks)}
     return task2id[task]
 
 
 def id2task(task_id):
-    # task id to task name
     id2task = {i: k for i, k in enumerate(tasks)}
     return id2task[task_id]
 _DUMMY_NODE = [5, 0, 4, 5, 3, 0, 2, 0, 0]
@@ -623,7 +621,7 @@ class DataCollator(DataCollatorForSeq2Seq):
         self._s3off_rows = []
         self._s23off_rows = []
 
-        tasks = [task2id(sample["task"]) for sample in batch]  # task id
+        tasks = [task2id(sample["task"]) for sample in batch]
         task_names = [id2task(task) for task in tasks]
 
 
@@ -647,7 +645,6 @@ class DataCollator(DataCollatorForSeq2Seq):
             )
             for sample in batch
         ]
-        # for reagent prediction
         list_additional_graphs = [
             Data(
                 x=torch.tensor(sample["additional_x"], dtype=torch.int64),
@@ -672,7 +669,6 @@ class DataCollator(DataCollatorForSeq2Seq):
             "graph",
         ]:
             shuffled_idx = []
-            # shuffle the selfies_idx, guarantee that the selfies_idx is not in order
             for i in range(len(list_selfies)):
                 idxs = np.random.choice(
                     range(len(list_selfies)), size=2, replace=False
@@ -848,7 +844,6 @@ class DataCollator(DataCollatorForSeq2Seq):
                     (f"{c}-th_additional_rejected_" if _has_reject_add else "additional_")
                     for c in self._row_cardinals
                 ]
-                # for reagent prediction
                 list_rejected_additional_graphs = [
                     Data(
                         x=torch.tensor(
@@ -890,7 +885,6 @@ class DataCollator(DataCollatorForSeq2Seq):
                     f"{len(list_graphs)}; the two slots must agree or graph injection cannot cat them"
                 )
 
-        # address <mol> token in prompt_text, for the case of using graph modality
         if self.projector_type == "mlp" and "graph" in self.mol_representation:
             for i in range(len(prompt_text)):
                 if task_names[i] in ["reagent_prediction"]:
@@ -918,7 +912,6 @@ class DataCollator(DataCollatorForSeq2Seq):
                         num_additional_nodes_mol, prompt_text[i]
                     )
                 elif task_names[i] in TEXT2MOL_BENCHMARKS:
-                    # there is no input <mol> token
                     pass
                 else:
                     num_nodes_in_graph = list_graphs[i].x.size(0)
@@ -1027,10 +1020,10 @@ class DataCollator(DataCollatorForSeq2Seq):
                 return_tensors=return_tensors,
             )
 
-            features["prompt_input_ids"] = prompt_features.input_ids  # ['input_ids']
+            features["prompt_input_ids"] = prompt_features.input_ids
             features["prompt_attention_mask"] = (
                 prompt_features.attention_mask
-            )  # ['attention_mask']
+            )
 
             self.tokenizer.padding_side = "right"
             gen_features = self.tokenizer.pad(
@@ -1138,7 +1131,6 @@ def random_noise_selfies(selfies, tokenizer, sl_noise_ratio=0.3):
         total_selfies_token_ids, num_ids_to_replace, replace=True
     )
 
-    # replace selfies_ids with randomly selected total_selfies_token_ids as many as num_ids_to_replace
     position_to_replace = np.random.choice(
         len(selfies_ids), num_ids_to_replace, replace=False
     )

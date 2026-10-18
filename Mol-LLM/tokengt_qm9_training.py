@@ -91,8 +91,6 @@ gin_weight_list = [
     "batch_norms.3.bias",
     "batch_norms.4.weight",
     "batch_norms.4.bias",
-    # "blip2model.ln_graph.weight",
-    # "blip2model.ln_graph.bias",
 ]
 
 qformer_weight_list = [
@@ -208,17 +206,11 @@ qformer_weight_list = [
     "bert.encoder.layer.4.output_query.dense.bias",
     "bert.encoder.layer.4.output_query.LayerNorm.weight",
     "bert.encoder.layer.4.output_query.LayerNorm.bias",
-    # "blip2model.opt_proj.weight",
-    # "blip2model.opt_proj.bias",
-    # "blip2model.query_tokens",
 ]
 
 qm9_name2idx = {
     "dipole": 0,
     "isotropic": 1,
-    # "homo": 2,
-    # "lumo": 3,
-    # "gap": 4,
     "electronic": 5,
     "vibrational": 6,
     "internalEnergy0K": 7,
@@ -238,9 +230,6 @@ qm9_name2idx = {
 qm9_idx2name = {
     0: "dipole",
     1: "isotropic",
-    # 2: "homo",
-    # 3: "lumo",
-    # 4: "gap",
     2: "electronic",
     3: "vibrational",
     4: "internalEnergy0K",
@@ -267,78 +256,6 @@ model_settings = {
         "initial_QFormer": None,
         "lr": 1e-4,
     },
-    # "GM_M_-_-": {
-    #     "backbone": "GIN->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": None,
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GM_M_MoleculeSTM_-": {
-    #     "backbone": "GIN->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "MoleculeSTM",
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GM_M_StringGraph_-": {
-    #     "backbone": "GIN->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "StringGraph",
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GM_M_MolPO_-": {
-    #     "backbone": "GIN->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "MolPO",
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GQM_QM_StringGraph_-": {
-    #     "backbone": "GIN->QFormer->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": True,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "StringGraph",
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GQM_QM_MolPO_-": {
-    #     "backbone": "GIN->QFormer->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": True,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "MolPO",
-    #     "initial_QFormer": None,
-    #     "lr": 1e-4,
-    # },
-    # "GQM_M_StringGraph_StringGraph": {
-    #     "backbone": "GIN->QFormer->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "StringGraph",
-    #     "initial_QFormer": "StringGraph",
-    #     "lr": 1e-4,
-    # },
-    # "GQM_M_MolPO_MolPO": {
-    #     "backbone": "GIN->QFormer->MLP",
-    #     "activate_GIN": False,
-    #     "activate_QFormer": False,
-    #     "activate_MLP": True,
-    #     "initial_GIN": "MolPO",
-    #     "initial_QFormer": "MolPO",
-    #     "lr": 1e-4,
-    # },
     }
 
 
@@ -363,11 +280,8 @@ class QM9DataModule(pl.LightningDataModule):
         dataset = QM9(root='./data/qm9')
         smiles_list = dataset.smiles
         graphs = []
-        targets = dataset.data.y # (133885, 19)
-        # Remove indices 2, 3, 4 at dim=1 (homo, lumo, gap) from target
-        # Remove indices
+        targets = dataset.data.y
         targets = torch.cat( (dataset.data.y[:, :2], dataset.data.y[:, 5:16]), dim=1)
-        # Normalization
         self.targets_min = targets.min(dim=0).values
         self.targets_max = targets.max(dim=0).values
         targets_scaled = (targets - self.targets_min) / (self.targets_max - self.targets_min)
@@ -377,18 +291,14 @@ class QM9DataModule(pl.LightningDataModule):
             try:
                 graph_dict = smiles2graph(smiles)
             except:
-                # print(f"Error in smiles: {smiles}")
                 continue
             graph_data = Data(
                 x=torch.tensor(graph_dict['node_feat'], dtype=torch.long),
                 edge_index=torch.tensor(graph_dict['edge_index'], dtype=torch.long),
                 edge_attr=torch.tensor(graph_dict['edge_feat'], dtype=torch.long),
-                # y=targets[i]
                 y=targets_scaled[i]
             )
             graphs.append(graph_data)
-            # if i == 10000:
-            #     break
 
         val_size = 3000
         test_size = 3000
@@ -421,17 +331,10 @@ class QM9Trainer(pl.LightningModule):
         self.gnn = TokenGT(input_feat_dim=9, hidden_dim=1024,
             num_layers=5, num_heads=8, method="laplacian", d_p=64, d_e=64,
             use_graph_token=True)
-        # self.gnn = TokenGT(input_feat_dim=9, hidden_dim=1024,
-        #     num_layers=5, num_heads=8,
-        #     num_classes=3, method="orf", d_p=9, d_e=4,
-        #     use_graph_token=True)
 
         self.ln_graph = LayerNorm(1024)
 
         self.mlp = nn.Sequential(
-            # nn.Linear(1024, 1024),
-            # nn.BatchNorm1d(1024),
-            # nn.ReLU(),
             nn.Linear(1024, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU(),
@@ -441,7 +344,6 @@ class QM9Trainer(pl.LightningModule):
     def forward(self, x, edge_index, edge_attr, batch):
         output, _ = self.gnn(x, edge_index, edge_attr, batch)
         graph_embedding = output[:, :1, :]
-        # node_embedding = output[:, 1:, :]
         graph_embedding = self.ln_graph(graph_embedding)
         pred = self.mlp(graph_embedding.squeeze(1))
 
@@ -510,27 +412,21 @@ class QM9Trainer(pl.LightningModule):
         return torch.optim.AdamW(self.parameters(), lr=self.lr)
 
     def on_train_epoch_start(self):
-        # log gin parameter weights mean
         for name, param in self.gnn.state_dict().items():
             try:
                 self.logger.log_metrics({f"GNN_parameters/{name}_mean": param.mean()}, step=self.current_epoch)
             except:
-                self.logger.log_metrics({f"GNN_parameters/{name}": param}, step=self.current_epoch) # for scalar values such as running_var of BatchNorm
-        # log MLP parameter weights mean
+                self.logger.log_metrics({f"GNN_parameters/{name}": param}, step=self.current_epoch)
         for name, param in self.mlp.state_dict().items():
             try:
                 self.logger.log_metrics({f"MLP_parameters/{name}_mean": param.float().mean()}, step=self.current_epoch)
             except:
                 self.logger.log_metrics({f"MLP_parameters/{name}": param}, step=self.current_epoch)
-        # Log learning rate
         self.logger.log_metrics({'hyperparameters/lr': self.lr}, step=self.current_epoch)
 
 
-# 학습 실행 코드
 if __name__ == '__main__':
 
-    # tasks = list(qm9_name2idx.keys())
-    # model_types = list(model_settings.keys())
     model_type = "GM_GM_-_-"
 
     data_module = QM9DataModule(batch_size=128)
@@ -547,9 +443,7 @@ if __name__ == '__main__':
         max_epochs=1500,
         accelerator='auto',
         devices=[4,5,6,7],
-        # devices=[4],
         default_root_dir=f'./gnn_ablation/all_except_lumo_homo_gap_scaled_tokengt/{model_type}',
-        # default_root_dir=f'./gnn_ablation/debug/{model_type}',
         callbacks=[checkpoint_callback],
         strategy='ddp_find_unused_parameters_true',
         gradient_clip_val=0.5
